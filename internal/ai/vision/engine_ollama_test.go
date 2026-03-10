@@ -11,6 +11,27 @@ import (
 	"github.com/photoprism/photoprism/pkg/http/scheme"
 )
 
+func TestStripThinkTags(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"no tags here", "no tags here"},
+		{"<think>reasoning</think> The caption.", "The caption."},
+		{"<think>\nmultiline\nreasoning\n</think>\nThe caption.", "The caption."},
+		{"<think>unclosed reasoning", ""},
+		{"before<think>mid</think>after", "beforeafter"},
+		{"<think>first</think> middle <think>second</think> end", "middle  end"},
+	}
+
+	for _, tc := range cases {
+		got := stripThinkTags(tc.input)
+		if got != tc.want {
+			t.Errorf("stripThinkTags(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
 func TestRegisterOllamaEngineDefaults(t *testing.T) {
 	original := os.Getenv(ollama.APIKeyEnv)
 	originalCaptionModel := CaptionModel.Clone()
@@ -249,6 +270,51 @@ func TestOllamaParserFallbacks(t *testing.T) {
 		}
 		if resp.Result.Caption.Text != "A tabby cat with a white chest stares upward." {
 			t.Fatalf("expected response field caption, got %q", resp.Result.Caption.Text)
+		}
+	})
+
+	t.Run("CaptionStripsInlineThinkTags", func(t *testing.T) {
+		req := &ApiRequest{}
+		payload := ollama.Response{
+			Response: "<think>\nLet me analyze this image carefully.\n</think>\nA tabby cat rests on a sun-lit windowsill.",
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, 200)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+
+		if resp.Result.Caption == nil {
+			t.Fatal("expected caption result")
+		}
+		if resp.Result.Caption.Text != "A tabby cat rests on a sun-lit windowsill." {
+			t.Fatalf("expected stripped caption, got %q", resp.Result.Caption.Text)
+		}
+	})
+
+	t.Run("CaptionStripsUnclosedThinkTag", func(t *testing.T) {
+		req := &ApiRequest{}
+		payload := ollama.Response{
+			Response: "<think>\nThis is reasoning that was never closed...",
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, 200)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+
+		if resp.Result.Caption != nil {
+			t.Fatalf("expected no caption from unclosed think tag, got %q", resp.Result.Caption.Text)
 		}
 	})
 }
