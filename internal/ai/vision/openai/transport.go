@@ -77,6 +77,7 @@ type Response struct {
 
 // ResponseOutput captures assistant messages within the response.
 type ResponseOutput struct {
+	Type    string            `json:"type"`
 	Role    string            `json:"role"`
 	Content []ResponseContent `json:"content"`
 }
@@ -105,14 +106,25 @@ func (r *Response) FirstJSON() json.RawMessage {
 	return nil
 }
 
-// FirstText returns the first textual payload contained in the response.
+// FirstText returns the first textual payload contained in the response,
+// excluding reasoning and thinking output items and content blocks.
 func (r *Response) FirstText() string {
 	if r == nil {
 		return ""
 	}
 
 	for i := range r.Output {
+		// Skip reasoning summary items returned by OpenAI reasoning models.
+		if r.Output[i].Type == "reasoning" {
+			continue
+		}
+
 		for j := range r.Output[i].Content {
+			// Skip thinking content blocks (e.g. extended thinking via compatible APIs).
+			if r.Output[i].Content[j].Type == "thinking" {
+				continue
+			}
+
 			if text := strings.TrimSpace(r.Output[i].Content[j].Text); text != "" {
 				return text
 			}

@@ -134,6 +134,64 @@ func TestApiRequestJSONForOpenAIDefaultSchemaName(t *testing.T) {
 	assert.Equal(t, schema.JsonSchemaName(req.Schema, openai.DefaultSchemaVersion), decoded.Text.Format.Name)
 }
 
+func TestOpenAIParserSkipsReasoningOutputItem(t *testing.T) {
+	respPayload := `{
+		"id": "resp_456",
+		"model": "o4-mini",
+		"output": [
+			{
+				"type": "reasoning",
+				"id": "rs_001",
+				"summary": [{"type": "summary_text", "text": "I need to describe the image."}]
+			},
+			{
+				"type": "message",
+				"role": "assistant",
+				"content": [{"type": "output_text", "text": "A chameleon clings to a lime-green leaf."}]
+			}
+		]
+	}`
+
+	req := &ApiRequest{
+		Id:             "test",
+		Model:          "o4-mini",
+		ResponseFormat: ApiFormatOpenAI,
+	}
+
+	resp, err := openaiParser{}.Parse(context.Background(), req, []byte(respPayload), http.StatusOK)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Result.Caption)
+	assert.Equal(t, "A chameleon clings to a lime-green leaf.", resp.Result.Caption.Text)
+}
+
+func TestOpenAIParserSkipsThinkingContentBlock(t *testing.T) {
+	respPayload := `{
+		"id": "resp_789",
+		"model": "claude-3-7-sonnet",
+		"output": [{
+			"type": "message",
+			"role": "assistant",
+			"content": [
+				{"type": "thinking", "text": "Let me look at this image carefully..."},
+				{"type": "output_text", "text": "A mountain biker descends a rocky trail."}
+			]
+		}]
+	}`
+
+	req := &ApiRequest{
+		Id:             "test",
+		Model:          "claude-3-7-sonnet",
+		ResponseFormat: ApiFormatOpenAI,
+	}
+
+	resp, err := openaiParser{}.Parse(context.Background(), req, []byte(respPayload), http.StatusOK)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Result.Caption)
+	assert.Equal(t, "A mountain biker descends a rocky trail.", resp.Result.Caption.Text)
+}
+
 func TestOpenAIParserParsesJSONFromTextPayload(t *testing.T) {
 	respPayload := `{
 		"id": "resp_123",

@@ -3,6 +3,7 @@ package vision
 import (
 	"context"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/photoprism/photoprism/internal/ai/vision/ollama"
@@ -10,6 +11,26 @@ import (
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/http/scheme"
 )
+
+// thinkTagRegexp matches complete <think>...</think> blocks, including newlines.
+var thinkTagRegexp = regexp.MustCompile(`(?si)<think>.*?</think>`)
+
+// stripThinkTags removes <think>...</think> blocks from model response text so
+// that inline reasoning tokens do not end up in captions or labels.
+func stripThinkTags(text string) string {
+	if !strings.Contains(text, "<think>") {
+		return text
+	}
+
+	result := thinkTagRegexp.ReplaceAllString(text, "")
+
+	// Remove any unclosed <think> block that reaches the end of the string.
+	if idx := strings.Index(result, "<think>"); idx >= 0 {
+		result = result[:idx]
+	}
+
+	return strings.TrimSpace(result)
+}
 
 type ollamaDefaults struct{}
 
@@ -169,7 +190,9 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 	parsedLabels := len(response.Result.Labels) > 0
 
 	// Qwen3-VL models stream their JSON payload in the "Thinking" field.
-	fallbackResponse := strings.TrimSpace(ollamaResp.Response)
+	// Strip <think>...</think> blocks that some models (e.g. DeepSeek-R1) emit
+	// inline in the Response field so reasoning tokens do not end up in captions.
+	fallbackResponse := stripThinkTags(strings.TrimSpace(ollamaResp.Response))
 	fallbackThinking := strings.TrimSpace(ollamaResp.Thinking)
 
 	fallbackJSON := fallbackResponse
