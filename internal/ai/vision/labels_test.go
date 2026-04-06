@@ -218,3 +218,99 @@ func TestGenerateLabelsRequestShapingForStructuredOutput(t *testing.T) {
 		assert.Equal(t, entity.SrcOpenAI, labels[0].Source)
 	})
 }
+
+func TestLabelsRetryWithoutThinking(t *testing.T) {
+	prevConfig := Config
+	t.Cleanup(func() { Config = prevConfig })
+
+	t.Run("RetriesWhenThinkingExhaustedBudget", func(t *testing.T) {
+		requestCount := 0
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+
+			if requestCount == 1 {
+				// Simulate thinking exhausting the token budget: empty response, no labels.
+				thinkVal, _ := body["think"].(bool)
+				assert.True(t, thinkVal, "first request should have think:true")
+				require.NoError(t, json.NewEncoder(w).Encode(ollama.Response{
+					Model:    "qwen3-vl:8b",
+					Response: "",
+				}))
+			} else {
+				// Retry with think:false should return real labels.
+				thinkVal, _ := body["think"].(bool)
+				assert.False(t, thinkVal, "retry request should have think:false")
+				require.NoError(t, json.NewEncoder(w).Encode(ollama.Response{
+					Model:    "qwen3-vl:8b",
+					Response: `{"labels":[{"name":"cat","confidence":0.9,"topicality":0.85}]}`,
+				}))
+			}
+		}))
+		defer server.Close()
+
+		model := &Model{
+			Type:   ModelTypeLabels,
+			Engine: ollama.EngineName,
+			Service: Service{
+				Uri:            server.URL,
+				Method:         http.MethodPost,
+				RequestFormat:  ApiFormatOllama,
+				ResponseFormat: ApiFormatOllama,
+				FileScheme:     scheme.Base64,
+				Think:          "true",
+			},
+		}
+		model.ApplyEngineDefaults()
+
+		Config = &ConfigValues{
+			Models:     Models{model},
+			Thresholds: DefaultThresholds,
+		}
+
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		assert.Equal(t, "Cat", labels[0].Name)
+		assert.Equal(t, 2, requestCount, "expected two requests: initial with think:true + retry with think:false")
+	})
+
+	t.Run("NoRetryWhenThinkNotSet", func(t *testing.T) {
+		requestCount := 0
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			require.NoError(t, json.NewEncoder(w).Encode(ollama.Response{
+				Model:    "qwen3-vl:8b",
+				Response: "",
+			}))
+		}))
+		defer server.Close()
+
+		model := &Model{
+			Type:   ModelTypeLabels,
+			Engine: ollama.EngineName,
+			Service: Service{
+				Uri:            server.URL,
+				Method:         http.MethodPost,
+				RequestFormat:  ApiFormatOllama,
+				ResponseFormat: ApiFormatOllama,
+				FileScheme:     scheme.Base64,
+			},
+		}
+		model.ApplyEngineDefaults()
+
+		Config = &ConfigValues{
+			Models:     Models{model},
+			Thresholds: DefaultThresholds,
+		}
+
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		require.NoError(t, err)
+		assert.Empty(t, labels, "expected no labels when response is empty and Think is not set")
+		assert.Equal(t, 1, requestCount, "expected only one request when Think is not set")
+	})
+}
