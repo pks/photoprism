@@ -24,6 +24,7 @@ type ModelOptions struct {
 	ThinkBudget      int      `yaml:"ThinkBudget,omitempty" json:"budget_tokens,omitempty"`          // Ollama: max thinking tokens when Think is enabled
 	MaxOutputTokens  int      `yaml:"MaxOutputTokens,omitempty" json:"max_output_tokens,omitempty"`  // Ollama, OpenAI
 	ForceJson        bool     `yaml:"ForceJson,omitempty" json:"force_json,omitempty"`               // Ollama, OpenAI
+	StructuredOutput bool     `yaml:"StructuredOutput,omitempty" json:"structured_output,omitempty"` // Ollama: send schema as format object for constrained generation
 	SchemaVersion    string   `yaml:"SchemaVersion,omitempty" json:"schema_version,omitempty"`       // Ollama, OpenAI
 	CombineOutputs   string   `yaml:"CombineOutputs,omitempty" json:"combine_outputs,omitempty"`     // OpenAI
 	Detail           string   `yaml:"Detail,omitempty" json:"detail,omitempty"`                      // OpenAI

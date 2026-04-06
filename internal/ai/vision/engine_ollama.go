@@ -167,14 +167,17 @@ func (ollamaBuilder) Build(ctx context.Context, model *Model, files Files) (*Api
 		_, req.Model, req.Version = model.GetModel()
 	}
 
-	// Attach the JSON schema for structured output when one is defined.
+	// Attach the JSON schema for constrained generation only when
+	// StructuredOutput is explicitly enabled — not all models support it.
 	// Ollama places the schema in the "format" field as an object; the
 	// ApiRequest.JSON() method handles the serialisation.
-	if schema := strings.TrimSpace(model.SchemaTemplate()); schema != "" {
-		if raw := json.RawMessage(schema); json.Valid(raw) {
-			req.Schema = raw
-		} else {
-			log.Warnf("vision: invalid Ollama schema template (not valid JSON)")
+	if opts := model.GetOptions(); opts != nil && opts.StructuredOutput {
+		if schema := strings.TrimSpace(model.SchemaTemplate()); schema != "" {
+			if raw := json.RawMessage(schema); json.Valid(raw) {
+				req.Schema = raw
+			} else {
+				log.Warnf("vision: invalid Ollama schema template (not valid JSON)")
+			}
 		}
 	}
 
