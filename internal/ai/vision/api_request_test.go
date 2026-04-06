@@ -76,6 +76,55 @@ func TestApiRequestWriteLogRedactsBase64(t *testing.T) {
 	}
 }
 
+func TestApiRequestJSONOllamaStructuredOutput(t *testing.T) {
+	t.Run("SchemaMovedToFormatField", func(t *testing.T) {
+		req := &ApiRequest{
+			Model:          "qwen3-vl:8b",
+			ResponseFormat: ApiFormatOllama,
+			Schema:         json.RawMessage(`{"type":"object","properties":{"labels":{"type":"array"}}}`),
+		}
+
+		data, err := req.JSON()
+		if err != nil {
+			t.Fatalf("json marshal failed: %v", err)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatalf("json unmarshal failed: %v", err)
+		}
+
+		if _, isObj := payload["format"].(map[string]any); !isObj {
+			t.Fatalf("expected format to be a JSON object, got %T: %v", payload["format"], payload["format"])
+		}
+
+		if _, hasSchema := payload["schema"]; hasSchema {
+			t.Fatalf("expected schema field to be removed from payload, got: %s", string(data))
+		}
+	})
+	t.Run("NoSchemaKeepsStringFormat", func(t *testing.T) {
+		req := &ApiRequest{
+			Model:          "qwen3-vl:8b",
+			Format:         FormatJSON,
+			ResponseFormat: ApiFormatOllama,
+		}
+
+		data, err := req.JSON()
+		if err != nil {
+			t.Fatalf("json marshal failed: %v", err)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatalf("json unmarshal failed: %v", err)
+		}
+
+		if got, ok := payload["format"].(string); !ok || got != FormatJSON {
+			t.Fatalf("expected format=%q string, got %#v", FormatJSON, payload["format"])
+		}
+	})
+}
+
 func TestApiRequestJSONThinkOmitempty(t *testing.T) {
 	t.Run("OmitWhenEmpty", func(t *testing.T) {
 		req := &ApiRequest{

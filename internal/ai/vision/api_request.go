@@ -191,7 +191,13 @@ func (r *ApiRequest) JSON() ([]byte, error) {
 	// Normalize "true"/"false" to JSON booleans so Ollama accepts think values
 	// configured as strings while still supporting string levels like "low".
 	normalizedThink, hasThink := normalizeThinkValue(r.Think)
-	if !hasThink {
+
+	// For Ollama structured output the schema goes in the "format" field as an
+	// object rather than the string "json". Detect this case so we can rewrite
+	// the payload below.
+	hasOllamaSchema := r.ResponseFormat == ApiFormatOllama && len(r.Schema) > 0
+
+	if !hasThink && !hasOllamaSchema {
 		return data, nil
 	}
 
@@ -201,7 +207,17 @@ func (r *ApiRequest) JSON() ([]byte, error) {
 		return nil, err
 	}
 
-	payload["think"] = normalizedThink
+	if hasThink {
+		payload["think"] = normalizedThink
+	}
+
+	if hasOllamaSchema {
+		var schemaObj any
+		if jsonErr := json.Unmarshal(r.Schema, &schemaObj); jsonErr == nil {
+			payload["format"] = schemaObj
+		}
+		delete(payload, "schema")
+	}
 
 	return json.Marshal(payload)
 }
