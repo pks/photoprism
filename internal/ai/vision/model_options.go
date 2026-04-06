@@ -21,6 +21,7 @@ type ModelOptions struct {
 	MirostatTau      float64  `yaml:"MirostatTau,omitempty" json:"mirostat_tau,omitempty"`           // Ollama
 	MirostatEta      float64  `yaml:"MirostatEta,omitempty" json:"mirostat_eta,omitempty"`           // Ollama
 	NumPredict       int      `yaml:"NumPredict,omitempty" json:"num_predict,omitempty"`             // Ollama
+	ThinkBudget      int      `yaml:"ThinkBudget,omitempty" json:"budget_tokens,omitempty"`          // Ollama: max thinking tokens when Think is enabled
 	MaxOutputTokens  int      `yaml:"MaxOutputTokens,omitempty" json:"max_output_tokens,omitempty"`  // Ollama, OpenAI
 	ForceJson        bool     `yaml:"ForceJson,omitempty" json:"force_json,omitempty"`               // Ollama, OpenAI
 	SchemaVersion    string   `yaml:"SchemaVersion,omitempty" json:"schema_version,omitempty"`       // Ollama, OpenAI

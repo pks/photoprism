@@ -200,3 +200,18 @@ func TestPhoto_SetCaption(t *testing.T) {
 		assert.Equal(t, "new photo description", m.PhotoCaption)
 	})
 }
+
+func TestPhoto_SetCaptionForce(t *testing.T) {
+	t.Run("OverwritesLowerPriorityCaption", func(t *testing.T) {
+		m := Photo{PhotoCaption: "manual caption", CaptionSrc: SrcManual}
+		m.SetCaptionForce("ai caption", SrcOllama)
+		assert.Equal(t, "ai caption", m.PhotoCaption)
+		assert.Equal(t, SrcOllama, m.CaptionSrc)
+	})
+	t.Run("SkipsEmptyCaption", func(t *testing.T) {
+		m := Photo{PhotoCaption: "existing", CaptionSrc: SrcManual}
+		m.SetCaptionForce("", SrcOllama)
+		assert.Equal(t, "existing", m.PhotoCaption)
+		assert.Equal(t, SrcManual, m.CaptionSrc)
+	})
+}

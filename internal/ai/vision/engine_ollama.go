@@ -189,11 +189,15 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 
 	parsedLabels := len(response.Result.Labels) > 0
 
-	// Qwen3-VL models stream their JSON payload in the "Thinking" field.
 	// Strip <think>...</think> blocks that some models (e.g. DeepSeek-R1) emit
 	// inline in the Response field so reasoning tokens do not end up in captions.
 	fallbackResponse := stripThinkTags(strings.TrimSpace(ollamaResp.Response))
-	fallbackThinking := strings.TrimSpace(ollamaResp.Thinking)
+
+	// Qwen3-VL models stream their JSON labels payload in the Thinking field.
+	// Use it only for the JSON parse path; never as a plain-text caption so that
+	// raw reasoning content from thinking models (gemma4, qwen3.5, etc.) cannot
+	// leak into captions when the Response field is empty.
+	fallbackThinking := stripThinkTags(strings.TrimSpace(ollamaResp.Thinking))
 
 	fallbackJSON := fallbackResponse
 	if fallbackJSON == "" {
@@ -201,9 +205,6 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 	}
 
 	fallbackCaption := fallbackResponse
-	if fallbackCaption == "" {
-		fallbackCaption = fallbackThinking
-	}
 
 	if !parsedLabels && fallbackJSON != "" && (req.Format == FormatJSON || strings.HasPrefix(fallbackJSON, "{")) {
 		if labels, parseErr := parseOllamaLabels(fallbackJSON); parseErr != nil {

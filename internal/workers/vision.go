@@ -251,13 +251,16 @@ func (w *Vision) Start(filter string, count int, models []string, customSrc stri
 			}
 		}
 
-		// Generate a caption if none exists or the force flag is used,
-		// and only if no caption was set or removed by a higher-priority source.
+		// Generate a caption if none exists or the force flag is used.
 		if generateCaptions {
 			if caption, captionErr := file.GenerateCaption(customSrc); captionErr != nil {
 				log.Warnf("vision: %s in %s (generate caption)", clean.Error(captionErr), logName)
 			} else if text := strings.TrimSpace(caption.Text); text != "" {
-				m.SetCaption(text, caption.Source)
+				if force {
+					m.SetCaptionForce(text, caption.Source)
+				} else {
+					m.SetCaption(text, caption.Source)
+				}
 				if updateErr := m.UpdateCaptionLabels(); updateErr != nil {
 					log.Warnf("vision: %s in %s (update caption labels)", clean.Error(updateErr), logName)
 				}

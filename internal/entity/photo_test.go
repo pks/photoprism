@@ -468,8 +468,21 @@ func TestPhoto_ShouldGenerateCaption(t *testing.T) {
 			expect: true,
 		},
 		{
+			name:   "ForceOverridesHigherPriority",
+			photo:  Photo{CaptionSrc: SrcManual, PhotoCaption: "manually set"},
+			source: SrcOllama,
+			force:  true,
+			expect: true,
+		},
+		{
 			name:   "SamePriorityNoForce",
 			photo:  Photo{CaptionSrc: SrcOllama, PhotoCaption: "existing"},
+			source: SrcOllama,
+			expect: false,
+		},
+		{
+			name:   "LowerPriorityNoForce",
+			photo:  Photo{CaptionSrc: SrcManual, PhotoCaption: "manually set"},
 			source: SrcOllama,
 			expect: false,
 		},
