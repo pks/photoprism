@@ -105,6 +105,18 @@ func labelsInternal(images Files, mediaSrc media.Src, labelSrc entity.Src) (resu
 				return result, err
 			}
 
+			// If thinking was enabled, the model may have exhausted the token
+			// budget on reasoning. Retry once with think:false as a fallback.
+			if len(apiResponse.Result.Labels) == 0 {
+				if t := apiRequest.Think; t != "" && !strings.EqualFold(t, "false") {
+					log.Warnf("vision: retrying labels request without thinking (empty response)")
+					apiRequest.Think = "false"
+					if apiResponse, err = PerformApiRequest(apiRequest, uri, method, model.EndpointKey()); err != nil {
+						return result, err
+					}
+				}
+			}
+
 			for _, label := range apiResponse.Result.Labels {
 				result = append(result, label.ToClassify(labelSrc))
 			}
