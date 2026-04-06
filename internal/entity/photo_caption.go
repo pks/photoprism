@@ -20,8 +20,13 @@ func (m *Photo) NoCaption() bool {
 }
 
 // ShouldGenerateCaption checks if a caption should be generated for this model.
+// When force is true, any existing caption is regenerated regardless of the
+// current source priority so that callers can unconditionally refresh captions.
 func (m *Photo) ShouldGenerateCaption(src Src, force bool) bool {
-	return SrcPriority[src] >= SrcPriority[m.CaptionSrc] && (m.NoCaption() || force)
+	if force {
+		return true
+	}
+	return SrcPriority[src] >= SrcPriority[m.CaptionSrc] && m.NoCaption()
 }
 
 // GetCaption returns the photo caption, if any.
@@ -43,6 +48,20 @@ func (m *Photo) SetCaption(caption, source string) {
 	}
 
 	if (SrcPriority[source] < SrcPriority[m.CaptionSrc]) && m.HasCaption() {
+		return
+	}
+
+	m.PhotoCaption = newCaption
+	m.CaptionSrc = source
+}
+
+// SetCaptionForce stores the supplied caption unconditionally, bypassing source
+// priority checks. Use this when the caller has already verified that the
+// overwrite is intentional (e.g. via an explicit --force flag).
+func (m *Photo) SetCaptionForce(caption, source string) {
+	newCaption := txt.Clip(caption, txt.ClipLongText)
+
+	if newCaption == "" {
 		return
 	}
 

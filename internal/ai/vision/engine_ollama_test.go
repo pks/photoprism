@@ -224,7 +224,9 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("expected cat label, got %+v", resp.Result.Labels)
 		}
 	})
-	t.Run("CaptionFromThinkingField", func(t *testing.T) {
+	t.Run("ThinkingFieldAloneProducesNoCaption", func(t *testing.T) {
+		// The Thinking field contains reasoning tokens, not the model's answer.
+		// When Response is empty, no caption should be produced.
 		req := &ApiRequest{}
 		payload := ollama.Response{
 			Response: "",
@@ -241,11 +243,8 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("parse failed: %v", err)
 		}
 
-		if resp.Result.Caption == nil {
-			t.Fatal("expected caption result")
-		}
-		if resp.Result.Caption.Text != "A tabby cat with a white chest stares upward." {
-			t.Fatalf("unexpected caption: %q", resp.Result.Caption.Text)
+		if resp.Result.Caption != nil {
+			t.Fatalf("expected no caption from thinking-only response, got %q", resp.Result.Caption.Text)
 		}
 	})
 	t.Run("CaptionPrefersResponseOverThinking", func(t *testing.T) {
@@ -294,6 +293,29 @@ func TestOllamaParserFallbacks(t *testing.T) {
 		}
 		if resp.Result.Caption.Text != "A tabby cat rests on a sun-lit windowsill." {
 			t.Fatalf("expected stripped caption, got %q", resp.Result.Caption.Text)
+		}
+	})
+
+	t.Run("ThinkTagsInThinkingFieldProduceNoCaption", func(t *testing.T) {
+		// Even after stripping <think> tags, the Thinking field must not become a caption.
+		req := &ApiRequest{}
+		payload := ollama.Response{
+			Response: "",
+			Thinking: "<think>\nLet me analyze this image.\n</think>\nA tabby cat rests on a sun-lit windowsill.",
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, 200)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+
+		if resp.Result.Caption != nil {
+			t.Fatalf("expected no caption from thinking-only response, got %q", resp.Result.Caption.Text)
 		}
 	})
 

@@ -119,7 +119,9 @@ func TestPerformApiRequestOllama(t *testing.T) {
 			assert.Equal(t, "plain text", resp.Result.Caption.Text)
 		}
 	})
-	t.Run("CaptionThinkingFallback", func(t *testing.T) {
+	t.Run("ThinkingOnlyResponseProducesNoCaption", func(t *testing.T) {
+		// The Thinking field is only used for JSON label parsing (Qwen3-VL).
+		// Plain text in a Thinking-only response must not become a caption.
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.NoError(t, json.NewEncoder(w).Encode(ollama.Response{
 				Model:    "qwen3-vl:4b",
@@ -140,9 +142,7 @@ func TestPerformApiRequestOllama(t *testing.T) {
 		resp, err := PerformApiRequest(apiRequest, server.URL, http.MethodPost, "")
 		assert.NoError(t, err)
 		assert.Len(t, resp.Result.Labels, 0)
-		if assert.NotNil(t, resp.Result.Caption) {
-			assert.Equal(t, "A tabby cat with a white chest stares upward.", resp.Result.Caption.Text)
-		}
+		assert.Nil(t, resp.Result.Caption)
 	})
 }
 
