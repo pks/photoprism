@@ -2,6 +2,7 @@ package vision
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"regexp"
 	"strings"
@@ -164,6 +165,17 @@ func (ollamaBuilder) Build(ctx context.Context, model *Model, files Files) (*Api
 		req.Model, _, _ = model.GetModel()
 	} else {
 		_, req.Model, req.Version = model.GetModel()
+	}
+
+	// Attach the JSON schema for structured output when one is defined.
+	// Ollama places the schema in the "format" field as an object; the
+	// ApiRequest.JSON() method handles the serialisation.
+	if schema := strings.TrimSpace(model.SchemaTemplate()); schema != "" {
+		if raw := json.RawMessage(schema); json.Valid(raw) {
+			req.Schema = raw
+		} else {
+			log.Warnf("vision: invalid Ollama schema template (not valid JSON)")
+		}
 	}
 
 	return req, nil

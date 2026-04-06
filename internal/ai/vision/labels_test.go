@@ -74,19 +74,30 @@ func TestGenerateLabels(t *testing.T) {
 	})
 }
 
-func TestGenerateLabelsRequestShapingForStructuredOutputIdea(t *testing.T) {
+func TestGenerateLabelsRequestShapingForStructuredOutput(t *testing.T) {
 	prevConfig := Config
 	t.Cleanup(func() {
 		Config = prevConfig
 	})
-	t.Run("OllamaUsesJsonFormatWithSchemaPromptInstructions", func(t *testing.T) {
+	t.Run("OllamaUsesStructuredOutputSchema", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var req ApiRequest
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			// Decode as a generic map because the "format" field is now a JSON
+			// object (structured output schema), not the string "json".
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 
-			assert.Equal(t, FormatJSON, req.Format)
-			assert.Contains(t, req.Prompt, "Return JSON that matches this schema:")
-			assert.Empty(t, req.Schema, "Ollama structured schema payload is not sent yet")
+			// format must be a JSON object, not the string "json".
+			formatVal, hasFormat := body["format"]
+			require.True(t, hasFormat, "expected format field in request")
+			_, isObject := formatVal.(map[string]any)
+			assert.True(t, isObject, "expected format to be a JSON object (structured output schema)")
+
+			// Schema instructions are still included in the prompt as a hint.
+			prompt, _ := body["prompt"].(string)
+			assert.Contains(t, prompt, "Return JSON that matches this schema:")
+
+			// The raw "schema" field must not appear as a separate key.
+			assert.Empty(t, body["schema"], "schema must be embedded in format, not sent separately")
 
 			require.NoError(t, json.NewEncoder(w).Encode(ollama.Response{
 				Model:    "gemma3:4b",
