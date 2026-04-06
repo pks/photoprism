@@ -110,6 +110,9 @@ func TestGenerateLabelsRequestShapingForStructuredOutput(t *testing.T) {
 			Type:   ModelTypeLabels,
 			Name:   "gemma3:4b",
 			Engine: ollama.EngineName,
+			Options: &ModelOptions{
+				StructuredOutput: true,
+			},
 			Service: Service{
 				Uri:            server.URL,
 				Method:         http.MethodPost,

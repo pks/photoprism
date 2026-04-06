@@ -78,6 +78,9 @@ func TestApiRequestWriteLogRedactsBase64(t *testing.T) {
 
 func TestApiRequestJSONOllamaStructuredOutput(t *testing.T) {
 	t.Run("SchemaMovedToFormatField", func(t *testing.T) {
+		// Schema is only moved to the format field when ResponseFormat is Ollama
+		// and the schema is non-empty; the StructuredOutput flag gates attachment
+		// in the builder, but ApiRequest.JSON handles any non-nil schema.
 		req := &ApiRequest{
 			Model:          "qwen3-vl:8b",
 			ResponseFormat: ApiFormatOllama,
