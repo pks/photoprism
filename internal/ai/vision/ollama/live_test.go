@@ -150,4 +150,3 @@ func TestLiveOllama_CaptionNoThinkTokens(t *testing.T) {
 		}
 	})
 }
-

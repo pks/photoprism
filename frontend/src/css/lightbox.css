@@ -67,6 +67,54 @@
     z-index: 1;
 }
 
+/* Shared dimensions for the document-slide layout: the overlay top inset and the
+   thumbnail-strip width, kept in one place so the viewer and its overlay stay in
+   lock-step. */
+.p-lightbox__content.is-pdf {
+    --pdf-top-inset: 60px; /* clears the PhotoSwipe top bar */
+    --pdf-strip-width: 132px; /* == .p-pdf-viewer__thumbs width */
+}
+
+/* Multi-page PDF viewer overlay. Covers the media area below the PhotoSwipe top
+   bar so the close, menu, and info buttons stay reachable, while the viewer owns
+   its own zoom, page navigation, scrolling, and gesture handling. height:auto so
+   top + bottom define the box (the component's base .p-pdf-viewer sets height:100%).
+   The background stays transparent so the PhotoSwipe lightbox background shows
+   through (the cover image is hidden below), keeping it identical to photo slides. */
+.p-lightbox__container > .p-lightbox__content > .p-lightbox__pdf {
+    position: absolute;
+    top: var(--pdf-top-inset);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: auto;
+    z-index: 1;
+    background-color: transparent;
+}
+
+/* Hide the static cover image of a document slide so it does not show through
+   above or behind the interactive viewer. */
+.p-lightbox__content.is-pdf .pswp__img {
+    visibility: hidden;
+}
+
+/* Hide the PhotoSwipe edge navigation arrows on document slides: the viewer fills
+   the full width for readable pages, and switching documents is handled by the
+   viewer's own overlay arrows (desktop), toolbar buttons and edge-swipe (touch),
+   and the Left/Right keys it captures. */
+.p-lightbox__content.is-pdf .pswp__button--arrow {
+    display: none;
+}
+
+/* Hide the PhotoSwipe caption and counter for document slides: the viewer
+   overlay is transparent, so the caption would show through the page margins
+   while being covered by the pages themselves (half in front, half behind).
+   The document title remains available in the info sidebar. */
+.p-lightbox__content.is-pdf .pswp__dynamic-caption,
+.p-lightbox__content.is-pdf .pswp__counter {
+    display: none;
+}
+
 /* Lightbox Tooltips */
 
 .v-tooltip.v-theme--lightbox > .v-overlay__content {
@@ -245,6 +293,41 @@
 }
 
 .p-lightbox__container > .p-lightbox__sidebar .meta-chip .v-icon:hover {
+    opacity: 1;
+}
+
+/* Lightweight native icon buttons (B1: clickable controls are real buttons
+   for keyboard activation + focus ring + button role) used inside bespoke
+   chrome where Vuetify's <v-btn> box model would fight the compact layout. */
+.p-lightbox__container .meta-icon-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 0;
+    cursor: pointer;
+}
+
+.p-lightbox__container .meta-icon-btn:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    border-radius: 50%;
+}
+
+.p-lightbox__container .meta-icon-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip__remove:hover .v-icon {
     opacity: 1;
 }
 
@@ -784,6 +867,11 @@
     padding-inline-end: 8px;
 }
 
+.p-lightbox__controls .video-btn:hover,
+.p-lightbox__controls .video-btn:focus-visible {
+    color: #ffffff;
+}
+
 .p-lightbox__controls .v-slider .v-slider-thumb {
     color: #ffffff;
 }
@@ -903,4 +991,15 @@
 
 .p-lightbox__container > .p-lightbox__content > .pswp--touch .pswp__button--arrow .pswp__icn {
     display: none;
+}
+
+/* On 360° sphere slides, swipe is captured for panning the sphere instead of switching
+   photos, so the navigation arrows must stay visible on touch devices — where PhotoSwipe
+   hides them with `visibility: hidden` because a swipe normally navigates. The
+   `pswp--sphere` marker is set on the PhotoSwipe root only while a 360° slide is active.
+   Only `visibility` is overridden (not `display`) so disabled arrows at the first/last
+   photo stay hidden via PhotoSwipe's `:disabled { display: none }` rule. */
+
+.pswp--touch.pswp--sphere .pswp__button--arrow {
+    visibility: visible;
 }

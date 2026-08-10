@@ -134,6 +134,22 @@
 
             <v-col cols="12" sm="6" lg="3">
               <v-checkbox
+                v-model="settings.XMPFaces"
+                :disabled="isDemo"
+                class="ma-0 pa-0 input-xmp-faces"
+                density="compact"
+                color="surface-variant"
+                :label="$gettext('Import Faces from XMP')"
+                :hint="$gettext('Read face regions and names from XMP metadata to create people markers.')"
+                prepend-icon="mdi-account-box-outline"
+                persistent-hint
+                @update:model-value="onChange"
+              >
+              </v-checkbox>
+            </v-col>
+
+            <v-col cols="12" sm="6" lg="3">
+              <v-checkbox
                 v-model="settings.DisablePlaces"
                 :disabled="isDemo"
                 class="ma-0 pa-0 input-disable-places"
@@ -234,7 +250,7 @@
               <v-list-subheader class="pa-0">
                 {{ $gettextInterpolate($gettext("Static Size Limit: %{n}px"), { n: parseInt(settings.ThumbSize) }) }}
               </v-list-subheader>
-              <v-slider v-model="settings.ThumbSize" :min="720" :max="7680" :step="4" :disabled="isDemo" hide-details class="ma-0" @end="onChange"></v-slider>
+              <v-slider v-model="settings.ThumbSize" :min="720" :max="15360" :step="4" :disabled="isDemo" hide-details class="ma-0" @end="onChange"></v-slider>
             </v-col>
 
             <v-col cols="12" sm="6" lg="4" class="py-2">
@@ -248,7 +264,7 @@
               <v-slider
                 v-model="settings.ThumbSizeUncached"
                 :min="720"
-                :max="7680"
+                :max="15360"
                 :step="4"
                 :disabled="isDemo"
                 hide-details

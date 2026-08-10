@@ -63,6 +63,7 @@
 
 <script>
 import { Photo } from "model/photo";
+import { $gettext } from "common/gettext";
 import Thumb from "model/thumb";
 import { ACTION_CREATED, ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -80,6 +81,16 @@ const appStorage = getAppStorage();
 // Maximum number of affected entities reloaded in place per event;
 // larger batches set the dirty flag and are refetched lazily instead.
 const maxLiveRefetch = 50;
+
+// Per-photo file headroom for a scoped refetch. The photos search `count` is a
+// FILE limit, not a photo limit, so the budget must exceed the photo count — a
+// photo can own several files (e.g. a vector or PDF with a generated preview),
+// and with a photo-sized budget those extra rows truncate still-visible photos
+// out of the merged result, wrongly dropping them from the selection. Typical
+// stacks hold ~3 files (photo + video + XMP), so 8 leaves ample margin while
+// keeping the count under the API max even at the maxLiveRefetch batch cap;
+// refetchResults' truncation guard backstops the rare deeper stack.
+const maxRefetchFilesPerPhoto = 8;
 
 export default {
   name: "PPagePhotos",
@@ -441,7 +452,7 @@ export default {
       } else if (photo.Country && photo.Country !== "zz") {
         this.$router.push({ name: "places", query: { q: "country:" + photo.Country } });
       } else {
-        this.$notify.warn("unknown location");
+        this.$notify.warn($gettext("Unknown location"));
       }
     },
     editPhoto(index, tab) {
@@ -786,7 +797,7 @@ export default {
         return;
       }
 
-      Photo.search({ uid: affected.join("|"), merged: true, count: affected.length })
+      Photo.search({ uid: affected.join("|"), merged: true, count: affected.length * maxRefetchFilesPerPhoto })
         .then((resp) => {
           const found = new Set();
 
@@ -802,15 +813,21 @@ export default {
             }
           });
 
-          // Rows the scoped search no longer returns are not visible to
-          // this session anymore — drop them like a full refresh would.
-          affected
-            .filter((uid) => !found.has(uid))
-            .forEach((uid) => {
-              this.removeResult(this.results, uid);
-              this.removeResult(this.lightbox.results, uid);
-              this.$clipboard.removeId(uid);
-            });
+          // Rows the scoped search no longer returns are not visible to this
+          // session anymore — drop them like a full refresh would. Skip this
+          // when the response hit the file limit (resp.count >= resp.limit):
+          // a truncated result can omit a still-visible multi-file photo, and
+          // pruning it would wrongly deselect it.
+          const truncated = resp.limit > 0 && resp.count >= resp.limit;
+          if (!truncated) {
+            affected
+              .filter((uid) => !found.has(uid))
+              .forEach((uid) => {
+                this.removeResult(this.results, uid);
+                this.removeResult(this.lightbox.results, uid);
+                this.$clipboard.removeId(uid);
+              });
+          }
         })
         .catch(() => {
           this.dirty = true;

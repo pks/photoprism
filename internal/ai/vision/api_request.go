@@ -16,6 +16,7 @@ import (
 	"github.com/photoprism/photoprism/internal/api/download"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/http/safe"
 	"github.com/photoprism/photoprism/pkg/http/scheme"
 	"github.com/photoprism/photoprism/pkg/media"
 	"github.com/photoprism/photoprism/pkg/rnd"
@@ -47,63 +48,87 @@ type ApiRequest struct {
 	Url            string             `form:"url" yaml:"Url,omitempty" json:"url,omitempty"`
 	Org            string             `form:"org" yaml:"Org,omitempty" json:"org,omitempty"`
 	Project        string             `form:"project" yaml:"Project,omitempty" json:"project,omitempty"`
+	Tier           string             `form:"tier" yaml:"Tier,omitempty" json:"tier,omitempty"`
 	Think          string             `form:"think" yaml:"Think,omitempty" json:"think,omitempty"`
 	Options        *ModelOptions      `form:"options" yaml:"Options,omitempty" json:"options,omitempty"`
 	Context        *ApiRequestContext `form:"context" yaml:"Context,omitempty" json:"context,omitempty"`
 	Stream         bool               `form:"stream" yaml:"Stream,omitempty" json:"stream"`
 	Images         Files              `form:"images" yaml:"Images,omitempty" json:"images,omitempty"`
 	Schema         json.RawMessage    `form:"schema" yaml:"Schema,omitempty" json:"schema,omitempty"`
+	Normalize      NormalizeType      `form:"-" yaml:"-" json:"-"`
 	ResponseFormat ApiFormat          `form:"-" yaml:"-" json:"-"`
 }
 
 // NewApiRequest returns a new service API request with the specified format and payload.
-func NewApiRequest(requestFormat ApiFormat, files Files, fileScheme scheme.Type) (result *ApiRequest, err error) {
+//
+// mediaSrc identifies whether the files originate from local storage (media.SrcLocal, trusted
+// paths supplied by internal workers) or a remote source (media.SrcRemote, caller-supplied URLs).
+// For media.SrcRemote the builders never open a local file — see NewApiRequestImages.
+func NewApiRequest(requestFormat ApiFormat, files Files, fileScheme scheme.Type, mediaSrc media.Src) (result *ApiRequest, err error) {
 	if len(files) == 0 {
 		return result, errors.New("missing files")
 	}
 
 	switch requestFormat {
 	case ApiFormatUrl:
-		return NewApiRequestUrl(files[0], fileScheme)
+		return NewApiRequestUrl(files[0], fileScheme, mediaSrc)
 	case ApiFormatImages, ApiFormatVision:
-		return NewApiRequestImages(files, fileScheme)
+		return NewApiRequestImages(files, fileScheme, mediaSrc)
 	case ApiFormatOllama:
-		return NewApiRequestOllama(files, fileScheme)
+		return NewApiRequestOllama(files, fileScheme, mediaSrc)
 	default:
 		return result, errors.New("invalid request format")
 	}
 }
 
 // NewApiRequestUrl returns a new Vision API request with the specified image Url as payload.
-func NewApiRequestUrl(fileName string, fileScheme scheme.Type) (result *ApiRequest, err error) {
+func NewApiRequestUrl(fileName string, fileScheme scheme.Type, mediaSrc media.Src) (result *ApiRequest, err error) {
 	var imgUrl string
 
-	switch fileScheme {
-	case scheme.Https:
-		// Return if no thumbnail filenames were given.
-		if !fs.FileExistsNotEmpty(fileName) {
-			return result, errors.New("invalid image file name")
-		}
-
-		// Generate a random token for the remote service to download the file.
-		fileUuid := rnd.UUID()
-
-		if err = download.Register(fileUuid, fileName); err != nil {
-			return result, fmt.Errorf("%s (create download url)", err)
-		}
-
-		imgUrl = fmt.Sprintf("%s/%s", DownloadUrl, fileUuid)
-	case scheme.Data:
-		var u *url.URL
-		if u, err = url.Parse(fileName); err != nil {
-			return result, fmt.Errorf("%s (invalid image url)", err)
-		} else if !slices.Contains(scheme.HttpsHttp, u.Scheme) {
-			return nil, fmt.Errorf("unsupported image url scheme %s", clean.Log(u.Scheme))
+	switch mediaSrc {
+	case media.SrcRemote:
+		// A remote reference is either a data URL that inlines the image, or an http(s)
+		// URL the model can fetch. Local file paths and other schemes are rejected, so a
+		// caller-supplied reference can never read a local file.
+		if strings.HasPrefix(strings.TrimSpace(fileName), "data:") {
+			if imgUrl, err = remoteImageDataUrl(fileName); err != nil {
+				return result, err
+			}
+		} else if _, err = safe.URL(fileName); err != nil {
+			return result, err
 		} else {
-			imgUrl = u.String()
+			imgUrl = fileName
+		}
+	case media.SrcLocal:
+		switch fileScheme {
+		case scheme.Https:
+			// Return if no thumbnail filenames were given.
+			if !fs.FileExistsNotEmpty(fileName) {
+				return result, errors.New("invalid image file name")
+			}
+
+			// Generate a random token for the remote service to download the file.
+			fileUuid := rnd.UUID()
+
+			if err = download.Register(fileUuid, fileName); err != nil {
+				return result, fmt.Errorf("%s (create download url)", err)
+			}
+
+			imgUrl = fmt.Sprintf("%s/%s", DownloadUrl, fileUuid)
+		case scheme.Data:
+			var u *url.URL
+			if u, err = url.Parse(fileName); err != nil {
+				return result, fmt.Errorf("%s (invalid image url)", err)
+			} else if !slices.Contains(scheme.HttpsHttp, u.Scheme) {
+				return nil, fmt.Errorf("unsupported image url scheme %s", clean.Log(u.Scheme))
+			} else {
+				imgUrl = u.String()
+			}
+		default:
+			return nil, fmt.Errorf("unsupported file scheme %s", clean.Log(fileScheme))
 		}
 	default:
-		return nil, fmt.Errorf("unsupported file scheme %s", clean.Log(fileScheme))
+		return result, fmt.Errorf("invalid media source %s", clean.Log(mediaSrc))
 	}
 
 	return &ApiRequest{
@@ -115,7 +140,12 @@ func NewApiRequestUrl(fileName string, fileScheme scheme.Type) (result *ApiReque
 }
 
 // NewApiRequestImages returns a new Vision API request with the specified images as payload.
-func NewApiRequestImages(images Files, fileScheme scheme.Type) (*ApiRequest, error) {
+//
+// For media.SrcLocal the images are trusted local file paths that are read directly. For
+// media.SrcRemote the images are caller-supplied and MUST be https/data URLs: they are resolved
+// through remoteImageDataUrl (which rejects local paths and non-images), so a request can never
+// turn a vision call into an arbitrary local-file read.
+func NewApiRequestImages(images Files, fileScheme scheme.Type, mediaSrc media.Src) (*ApiRequest, error) {
 	imageUrls := make(Files, len(images))
 
 	if fileScheme == scheme.Https && !strings.HasPrefix(DownloadUrl, "https://") {
@@ -124,25 +154,36 @@ func NewApiRequestImages(images Files, fileScheme scheme.Type) (*ApiRequest, err
 	}
 
 	for i := range images {
-		switch fileScheme {
-		case scheme.Https:
-			fileUuid := rnd.UUID()
-			if err := download.Register(fileUuid, images[i]); err != nil {
-				return nil, fmt.Errorf("%s (create download url)", err)
-			} else {
-				imageUrls[i] = fmt.Sprintf("%s/%s", DownloadUrl, fileUuid)
-			}
-		case scheme.Data:
-			file, err := os.Open(images[i])
+		switch mediaSrc {
+		case media.SrcRemote:
+			dataUrl, err := remoteImageDataUrl(images[i])
 			if err != nil {
-				return nil, fmt.Errorf("%s (create data url)", err)
+				return nil, err
 			}
-			imageUrls[i] = media.DataUrl(file)
-			if err := file.Close(); err != nil {
-				return nil, fmt.Errorf("%s (close data url)", err)
+			imageUrls[i] = dataUrl
+		case media.SrcLocal:
+			switch fileScheme {
+			case scheme.Https:
+				fileUuid := rnd.UUID()
+				if err := download.Register(fileUuid, images[i]); err != nil {
+					return nil, fmt.Errorf("%s (create download url)", err)
+				} else {
+					imageUrls[i] = fmt.Sprintf("%s/%s", DownloadUrl, fileUuid)
+				}
+			case scheme.Data:
+				file, err := os.Open(images[i])
+				if err != nil {
+					return nil, fmt.Errorf("%s (create data url)", err)
+				}
+				imageUrls[i] = media.DataUrl(file)
+				if err := file.Close(); err != nil {
+					return nil, fmt.Errorf("%s (close data url)", err)
+				}
+			default:
+				return nil, fmt.Errorf("unsupported file scheme %s", clean.Log(fileScheme))
 			}
 		default:
-			return nil, fmt.Errorf("unsupported file scheme %s", clean.Log(fileScheme))
+			return nil, fmt.Errorf("invalid media source %s", clean.Log(mediaSrc))
 		}
 	}
 
@@ -170,6 +211,19 @@ func (r *ApiRequest) GetResponseFormat() ApiFormat {
 	}
 
 	return r.ResponseFormat
+}
+
+// GetNormalize returns the label name normalization requested for this response.
+func (r *ApiRequest) GetNormalize() NormalizeType {
+	if r == nil {
+		return NormalizeWord
+	}
+
+	if t := ParseNormalizeType(r.Normalize); t != NormalizeAuto {
+		return t
+	}
+
+	return NormalizeWord
 }
 
 // JSON returns the request data as JSON-encoded bytes.
@@ -428,6 +482,10 @@ func (r *ApiRequest) openAIJSON() ([]byte, error) {
 		payload.Text = &openai.TextOptions{
 			Format: format,
 		}
+	}
+
+	if tier := strings.TrimSpace(r.Tier); tier != "" {
+		payload.ServiceTier = tier
 	}
 
 	return json.Marshal(payload)

@@ -30,6 +30,13 @@ var (
 	ServiceKey = ""
 	// ServiceTimeout sets the maximum duration for service API requests.
 	ServiceTimeout = 10 * time.Minute
+	// ServiceMaxRetries sets how many times a service request is retried after an
+	// HTTP 429 response, matching the two automatic retries external SDKs default to.
+	ServiceMaxRetries = 2
+	// ServiceRetryDelay sets the initial backoff before the first 429 retry, doubled on each attempt.
+	ServiceRetryDelay = 500 * time.Millisecond
+	// ServiceRetryMaxDelay caps a single 429 backoff wait so retries stay within ServiceTimeout.
+	ServiceRetryMaxDelay = 8 * time.Second
 	// MaxResponseBytes bounds how much of a service response is read so a
 	// malicious or compromised endpoint cannot exhaust memory.
 	MaxResponseBytes int64 = 32 * 1024 * 1024
@@ -104,6 +111,13 @@ func (c *ConfigValues) Load(fileName string) error {
 
 	for _, model := range c.Models {
 		model.ApplyEngineDefaults()
+
+		// Report a misspelled mode once instead of silently normalizing names the other way.
+		if !IsNormalizeType(model.Normalize) {
+			log.Warnf("vision: invalid normalize type %s for model %s, using %s",
+				clean.Log(model.Normalize), clean.Log(model.Name), ReportNormalizeType(NormalizeAuto))
+			model.Normalize = NormalizeAuto
+		}
 	}
 
 	if c.Thresholds.Confidence <= 0 || c.Thresholds.Confidence > 100 {

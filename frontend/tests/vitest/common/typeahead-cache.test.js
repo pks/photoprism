@@ -261,6 +261,149 @@ describe("typeaheadCache.getPeople", () => {
   });
 });
 
+describe("typeaheadCache in-flight eviction (epoch guard)", () => {
+  // A fetch that is still in flight when the slot is evicted must NOT populate
+  // the cache when it later resolves; otherwise a websocket eviction landing
+  // mid-request is silently undone and the next read serves stale data.
+  it("discards a people fetch that resolves after an eviction", async () => {
+    let resolveStale;
+    const spy = vi
+      .spyOn(Subject, "search")
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveStale = resolve)))
+      .mockResolvedValueOnce({ models: [{ Name: "Fresh", UID: "ps-2" }] });
+
+    const inFlight = typeaheadCache.getPeople();
+    typeaheadCache.evictPeople();
+    resolveStale({ models: [{ Name: "Stale", UID: "ps-1" }] });
+    await inFlight;
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "Fresh", UID: "ps-2" }]);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("discards a fetch evicted by a WS event before it resolves", async () => {
+    let resolveStale;
+    const spy = vi
+      .spyOn(Subject, "search")
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveStale = resolve)))
+      .mockResolvedValueOnce({ models: [{ Name: "Renamed", UID: "ps-1" }] });
+
+    const inFlight = typeaheadCache.getPeople();
+    $event.publishSync("subjects.updated", { entities: ["ps-1"] });
+    resolveStale({ models: [{ Name: "Original", UID: "ps-1" }] });
+    await inFlight;
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "Renamed", UID: "ps-1" }]);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("typeaheadCache.upsertPerson", () => {
+  it("adds a saved name to a loaded cache without refetching", async () => {
+    const spy = vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ UID: "ps-2", Name: "Beta" });
+
+    expect(await typeaheadCache.getPeople()).toEqual([
+      { Name: "Alpha", UID: "ps-1" },
+      { UID: "ps-2", Name: "Beta" },
+    ]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates an existing person in place by UID", async () => {
+    vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Old", UID: "ps-1" }] });
+
+    await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ UID: "ps-1", Name: "New" });
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "New", UID: "ps-1" }]);
+  });
+
+  it("de-duplicates by case-insensitive name when no UID is given", async () => {
+    vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ Name: "alpha" });
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "alpha", UID: "ps-1" }]);
+  });
+
+  it("leaves the slot untouched when re-saving an unchanged name (idempotent)", async () => {
+    vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    const before = await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ UID: "ps-1", Name: "Alpha" });
+    const after = await typeaheadCache.getPeople();
+
+    // Same array reference proves the slot was not replaced and the epoch was
+    // not bumped, so a redundant save cannot invalidate a pending fetch.
+    expect(after).toBe(before);
+  });
+
+  it("replaces the slot when a save actually changes the list", async () => {
+    vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    const before = await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ UID: "ps-2", Name: "Beta" });
+    const after = await typeaheadCache.getPeople();
+
+    expect(after).not.toBe(before);
+    expect(after).toContainEqual({ UID: "ps-2", Name: "Beta" });
+  });
+
+  it("is a no-op when the people cache is cold", async () => {
+    const spy = vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    typeaheadCache.upsertPerson({ UID: "ps-2", Name: "Beta" });
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "Alpha", UID: "ps-1" }]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores entries without a usable name", async () => {
+    vi.spyOn(Subject, "search").mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] });
+
+    await typeaheadCache.getPeople();
+    typeaheadCache.upsertPerson({ UID: "ps-2", Name: "   " });
+    typeaheadCache.upsertPerson(null);
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "Alpha", UID: "ps-1" }]);
+  });
+
+  // The reported bug: two names saved in quick succession. The optimistic seed
+  // keeps the second name visible before its WS event arrives, and the eventual
+  // event still refreshes from server truth.
+  it("keeps a quick second save visible before the WS eviction lands", async () => {
+    const spy = vi
+      .spyOn(Subject, "search")
+      .mockResolvedValueOnce({ models: [{ Name: "Alpha", UID: "ps-1" }] })
+      .mockResolvedValueOnce({
+        models: [
+          { Name: "Alpha", UID: "ps-1" },
+          { Name: "Beta", UID: "ps-2" },
+        ],
+      });
+
+    expect(await typeaheadCache.getPeople()).toEqual([{ Name: "Alpha", UID: "ps-1" }]);
+
+    typeaheadCache.upsertPerson({ UID: "ps-2", Name: "Beta" });
+    expect(await typeaheadCache.getPeople()).toEqual([
+      { Name: "Alpha", UID: "ps-1" },
+      { UID: "ps-2", Name: "Beta" },
+    ]);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    $event.publishSync("subjects.created", { entities: [{ UID: "ps-2", Name: "Beta" }] });
+    expect(await typeaheadCache.getPeople()).toEqual([
+      { Name: "Alpha", UID: "ps-1" },
+      { Name: "Beta", UID: "ps-2" },
+    ]);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("typeaheadCache.evict / clear", () => {
   it("evictLabels forces a fresh fetch on the next read", async () => {
     const spy = vi

@@ -13,11 +13,14 @@ import $event, { subscribeEntityActions } from "common/event";
 export const CAP = 5000;
 
 const state = {
-  labels: { data: null, fetch: null },
-  albums: { data: null, fetch: null },
-  people: { data: null, fetch: null },
+  labels: { data: null, fetch: null, epoch: 0 },
+  albums: { data: null, fetch: null, epoch: 0 },
+  people: { data: null, fetch: null, epoch: 0 },
 };
 
+// Bumping the epoch invalidates any fetch that started before this point, so a
+// request still in flight when the slot is evicted (or seeded) cannot resolve
+// later and silently overwrite the slot with stale data. See get().
 function evict(field) {
   const slot = state[field];
   if (!slot) {
@@ -25,6 +28,61 @@ function evict(field) {
   }
   slot.data = null;
   slot.fetch = null;
+  slot.epoch += 1;
+}
+
+// upsertPeople merges saved subjects into a populated people slot so a freshly
+// created or renamed name is suggestible immediately, without waiting for the
+// subjects/people WS event (which can lag a quick re-entry). It only mutates an
+// already-loaded slot; a cold slot is left untouched so the next getPeople()
+// fetches the full, server-ordered list. Entries are matched by UID, falling
+// back to a case-insensitive name match so an existing person is updated rather
+// than duplicated. The merge is idempotent: re-saving an unchanged name leaves
+// the slot and its epoch untouched, so a redundant save cannot invalidate a
+// pending fetch or replace the list with an equivalent copy.
+//
+// Contract: Marker.setName() and Face.setName() seed automatically. Callers that
+// create or rename a person through any other path (e.g. Subject.update() from
+// the recognized-people page) must call upsertPerson() themselves.
+function upsertPeople(items) {
+  const slot = state.people;
+  if (!Array.isArray(slot.data) || !Array.isArray(items)) {
+    return;
+  }
+
+  const next = slot.data.slice();
+  let changed = false;
+
+  for (const raw of items) {
+    const name = (raw?.Name || "").trim();
+    if (!name) {
+      continue;
+    }
+
+    const uid = raw?.UID || "";
+    let idx = uid ? next.findIndex((p) => p && p.UID === uid) : -1;
+    if (idx === -1) {
+      idx = next.findIndex((p) => p && p.Name && p.Name.localeCompare(name, undefined, { sensitivity: "base" }) === 0);
+    }
+
+    if (idx >= 0) {
+      const existing = next[idx];
+      const mergedUid = uid || existing.UID;
+      // Nothing to do when the slot already holds this exact UID and name.
+      if (existing.UID === mergedUid && existing.Name === name) {
+        continue;
+      }
+      next[idx] = { ...existing, UID: mergedUid, Name: name };
+    } else {
+      next.push({ UID: uid, Name: name });
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    slot.data = next;
+    slot.epoch += 1;
+  }
 }
 
 function fetchLabels() {
@@ -65,14 +123,21 @@ function get(field, fetcher) {
   if (slot.fetch) {
     return slot.fetch;
   }
+  // Snapshot the epoch so a fetch that finishes after an evict/upsert (which
+  // bump the epoch) is discarded instead of caching now-stale results.
+  const epoch = slot.epoch;
   slot.fetch = fetcher()
     .then((data) => {
-      slot.data = data;
-      slot.fetch = null;
+      if (slot.epoch === epoch) {
+        slot.data = data;
+        slot.fetch = null;
+      }
       return data;
     })
     .catch((err) => {
-      slot.fetch = null;
+      if (slot.epoch === epoch) {
+        slot.fetch = null;
+      }
       throw err;
     });
   return slot.fetch;
@@ -84,6 +149,7 @@ export const typeaheadCache = {
   getLabels: () => get("labels", fetchLabels),
   getAlbums: () => get("albums", fetchAlbums),
   getPeople: () => get("people", fetchPeople),
+  upsertPerson: (person) => upsertPeople([person]),
   evictLabels: () => evict("labels"),
   evictAlbums: () => evict("albums"),
   evictPeople: () => evict("people"),

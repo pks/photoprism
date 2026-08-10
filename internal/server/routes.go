@@ -50,6 +50,7 @@ func registerRoutes(router *gin.Engine, conf *config.Config) {
 	api.OAuthUserinfo(APIv1)
 	api.OAuthToken(APIv1)
 	api.OAuthRevoke(APIv1)
+	api.OAuthLogout(APIv1)
 
 	// OIDC Client Endpoints.
 	api.OIDCLogin(APIv1)
@@ -125,6 +126,7 @@ func registerRoutes(router *gin.Engine, conf *config.Config) {
 	api.UpdatePhotoLabel(APIv1)
 	api.GetMomentsTime(APIv1)
 	api.GetFile(APIv1)
+	api.GetFileBytes(APIv1)
 	api.DeleteFile(APIv1)
 	api.ChangeFileOrientation(APIv1)
 	api.CreateMarker(APIv1)

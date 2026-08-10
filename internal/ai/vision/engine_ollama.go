@@ -3,6 +3,7 @@ package vision
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/http/scheme"
+	"github.com/photoprism/photoprism/pkg/media"
 )
 
 // thinkTagRegexp matches complete <think>...</think> blocks, including newlines.
@@ -75,6 +77,8 @@ func registerOllamaEngineDefaults() {
 		DefaultModel:      defaultModel,
 		DefaultResolution: ollama.DefaultResolution,
 		DefaultKey:        ollama.APIKeyPlaceholder,
+		DefaultThink:      ollama.DefaultThink,
+		DefaultNormalize:  NormalizeWord,
 	})
 
 	// Keep the default caption model config aligned with the defaults.
@@ -145,12 +149,12 @@ func (ollamaDefaults) Options(model *Model) *ModelOptions {
 }
 
 // Build builds the Ollama service request.
-func (ollamaBuilder) Build(ctx context.Context, model *Model, files Files) (*ApiRequest, error) {
+func (ollamaBuilder) Build(ctx context.Context, model *Model, files Files, mediaSrc media.Src) (*ApiRequest, error) {
 	if model == nil {
 		return nil, ErrInvalidModel
 	}
 
-	req, err := NewApiRequest(model.EndpointRequestFormat(), files, model.EndpointFileScheme())
+	req, err := NewApiRequest(model.EndpointRequestFormat(), files, model.EndpointFileScheme(), mediaSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -192,6 +196,16 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 		return nil, err
 	}
 
+	// Surface upstream failures so they are diagnosable instead of silently yielding no labels or caption.
+	if status >= http.StatusBadRequest {
+		switch status {
+		case http.StatusNotFound, http.StatusGone:
+			log.Warnf("vision: ollama model %s is unavailable (status %d), it may have been retired or renamed", clean.Log(req.Model), status)
+		default:
+			log.Warnf("vision: ollama request for model %s failed (status %d)", clean.Log(req.Model), status)
+		}
+	}
+
 	response := &ApiResponse{
 		Id:    req.GetId(),
 		Code:  status,
@@ -231,6 +245,7 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 	}
 
 	if parsedLabels {
+		normalize := req.GetNormalize()
 		filtered := response.Result.Labels[:0]
 		for i := range response.Result.Labels {
 			if response.Result.Labels[i].Confidence <= 0 {
@@ -242,7 +257,7 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 			}
 
 			// Apply thresholds and canonicalize the name.
-			normalizeLabelResult(&response.Result.Labels[i])
+			normalizeLabelResult(&response.Result.Labels[i], normalize)
 
 			if response.Result.Labels[i].Name == "" {
 				continue

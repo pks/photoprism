@@ -1,17 +1,18 @@
 # Frontend Guidelines
 
-**Last Updated:** June 10, 2026
+**Last Updated:** July 28, 2026
 
 ## Dependencies & Pins
 
 - [`frontend/README.md`](README.md) is the canonical doc for dependency pin rationale, the `overrides` layer, ESM-only upgrade blockers, and the orphan-audit pattern.
-- **Pins are intentional.** When a version has no caret (e.g., `"axios": "1.17.0"`, `"vuetify": "3.12.2"`), check `frontend/README.md` and `git log -p -S "<pkg>" -- frontend/package.json` for the reason before changing it.
+- **Pins are intentional.** When a version has no caret (e.g., `"axios": "1.19.0"`, `"vuetify": "3.12.2"`, `"webpack": "5.107.2"`), check `frontend/README.md` and `git log -p -S "<pkg>" -- frontend/package.json` for the reason before changing it.
 - npm is a workspace; run `npm install --ignore-scripts --no-audit --no-fund --no-update-notifier` from the **repo root** (not `frontend/`) so the root `package-lock.json` updates.
 - After dep changes run `make audit`, `make build-js`, `make test-js`, and `make notice`.
 - Before adding a new dep — and especially before declaring an existing one "unused" — verify with `rg -nF "<pkg>" frontend …` plus `npm ls <pkg> --all` that no consumer or peer-dep needs it.
 
 ## Frontend Linting & Test Entry Points
 
+- Run `make -C frontend help` for an overview of the most common frontend targets, and `make -C frontend list` to see all of them.
 - Use the lint and format scripts declared in `frontend/package.json`; all added JS, Vue, and frontend tests must follow those standards.
 - Frontend unit tests use Vitest. Common entry points are `make test-js`, `make vitest-watch`, and `make vitest-coverage`.
 - New JavaScript functions, including helpers, should be tested whenever practical; update existing tests or add new ones as needed.
@@ -28,13 +29,14 @@
 - When touching frontend session bootstrap, verify that `frontend/src/common/session.js` resolves `storageNamespace` from the real client config shape (`window.__CONFIG__` or `config.values`), not only from simplified mocks. Include a focused test that would fail if restore fell back to `pp:root:`.
 - The loader partial is reused in `pro/assets/templates/index.gohtml`, `plus/assets/templates/index.gohtml`, and `portal/assets/templates/index.gohtml`; whenever you change `app.js.gohtml` or bundle loading, verify those files still include the shared partial.
 - Splash styles live in `frontend/src/css/splash.css`; add new splash elements there so public and private editions stay aligned.
-- Browser baseline: PhotoPrism supports Safari 13 and iOS 13 or current Chrome, Edge, and Firefox. Update the message in `assets/templates/app.js.gohtml` and matching CSS if support changes.
+- Browser baseline: the `browserslist` query in `frontend/package.json` is authoritative — `.babelrc` sets no explicit `targets`, so `@babel/preset-env` compiles to that set. Resolve it with `(cd frontend && npx browserslist)` rather than quoting fixed versions, which go stale as caniuse data updates. Update the message in `assets/templates/app.js.gohtml` and matching CSS if the support matrix changes.
 
 ## Translations
 
 - Translation extraction source of truth is the root `make gettext-extract`, which runs `scripts/gettext-extract.sh` across `frontend/src` and any available `plus`, `pro`, or `portal` overlays.
 - Compatibility targets such as `make -C plus gettext-extract` delegate to the root target.
 - Avoid punctuation-only gettext keys such as `$gettext("—")`; they create noisy entries in `frontend/src/locales/translations.pot`.
+- Case conventions: tooltips, labels, buttons, placeholders, and short imperative phrases use **Title Case** (`Zoom In`, `Toggle Thumbnails`, `Add to Album`); running prose, full sentences, and notifications use **sentence case** (`Failed to save changes`). Lowercase only articles, short conjunctions, and ≤3-letter prepositions when not first. The forced-as-is Vuetify 3 UI messages in `frontend/src/locales.js` are adopted verbatim — exempt, and not a casing reference to copy. Full rules: `specs/frontend/translations.md` §"Case Conventions".
 
 ## Focus Management
 

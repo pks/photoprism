@@ -29,6 +29,7 @@ var (
 	VersionLatest = "latest"
 	VersionMobile = "mobile"
 	Version3B     = "3b"
+	VersionCloud  = "cloud"
 )
 
 // Model represents a computer vision model configuration.
@@ -43,6 +44,7 @@ type Model struct {
 	System        string                `yaml:"System,omitempty" json:"system,omitempty"`
 	Prompt        string                `yaml:"Prompt,omitempty" json:"prompt,omitempty"`
 	Format        string                `yaml:"Format,omitempty" json:"format,omitempty"`
+	Normalize     NormalizeType         `yaml:"Normalize,omitempty" json:"normalize,omitempty"` // "single-word", "phrase", or "false"
 	Schema        string                `yaml:"Schema,omitempty" json:"schema,omitempty"`
 	SchemaFile    string                `yaml:"SchemaFile,omitempty" json:"schemaFile,omitempty"`
 	Resolution    int                   `yaml:"Resolution,omitempty" json:"resolution,omitempty"`
@@ -114,6 +116,31 @@ func (m *Model) GetModel() (model, name, version string) {
 	}
 }
 
+// IsCloud reports whether the model runs as a cloud service rather than on local hardware.
+// Each signal comes from the model, never from an engine-wide default, so a configuration that
+// reaches both a local instance and a cloud service classifies each entry on its own.
+func (m *Model) IsCloud() bool {
+	if m == nil {
+		return false
+	}
+
+	_, name, version := m.GetModel()
+
+	// The "cloud" tag marks a model even when a local instance proxies the request.
+	if version == VersionCloud {
+		return true
+	}
+
+	// OpenAI-compatible local servers run open-weight models under their own names.
+	if m.Engine == openai.EngineName && openai.IsCloudModel(name) {
+		return true
+	}
+
+	uri, _ := m.Endpoint()
+
+	return ollama.IsCloudUrl(uri)
+}
+
 // IsDefault reports whether the model refers to one of the built-in defaults.
 // Nil receivers return false.
 func (m *Model) IsDefault() bool {
@@ -169,6 +196,7 @@ func (m *Model) ApplyService(apiRequest *ApiRequest) {
 	if m.Engine == openai.EngineName {
 		apiRequest.Org = m.Service.EndpointOrg()
 		apiRequest.Project = m.Service.EndpointProject()
+		apiRequest.Tier = m.Service.EndpointTier()
 	}
 
 	if think := m.Service.EndpointThink(); think != "" {
@@ -504,6 +532,10 @@ func (m *Model) ApplyEngineDefaults() {
 
 		if strings.TrimSpace(m.Service.Key) == "" && info.DefaultKey != "" {
 			m.Service.Key = info.DefaultKey
+		}
+
+		if strings.TrimSpace(m.Service.Think) == "" && info.DefaultThink != "" {
+			m.Service.Think = info.DefaultThink
 		}
 	}
 

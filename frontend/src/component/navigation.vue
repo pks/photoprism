@@ -10,7 +10,7 @@
             <span :class="{ clickable: auth }" @click.stop.prevent.self="toggleDrawer">{{ page.title }}</span>
           </v-toolbar-title>
           <v-btn
-            icon="mdi-dots-horizontal"
+            icon="mdi-dots-vertical"
             variant="text"
             class="nav-mobile-menu-trigger elevation-0"
             :ripple="false"
@@ -27,7 +27,7 @@
             {{ page.title }}
           </v-toolbar-title>
           <v-btn
-            icon="mdi-dots-horizontal"
+            icon="mdi-dots-vertical"
             variant="text"
             class="nav-mobile-menu-trigger elevation-0"
             :ripple="false"
@@ -116,6 +116,12 @@
                 <v-list-item :to="{ name: 'browse', query: { q: 'panoramas' } }" :exact="true" variant="text" class="nav-panoramas" @click.stop="">
                   <v-list-item-title :class="`nav-menu-item menu-item`">
                     {{ $gettext(`Panoramas`) }}
+                  </v-list-item-title>
+                </v-list-item>
+
+                <v-list-item :to="{ name: 'browse', query: { q: 'fisheye' } }" :exact="true" variant="text" class="nav-fisheye" @click.stop="">
+                  <v-list-item-title :class="`nav-menu-item menu-item`">
+                    {{ $gettext(`Fisheye`) }}
                   </v-list-item-title>
                 </v-list-item>
 
@@ -550,6 +556,20 @@
                     </v-list-item-title>
                   </v-list-item>
 
+                  <v-list-item
+                    v-if="canManageServices"
+                    :to="{ path: '/settings/services' }"
+                    :exact="false"
+                    variant="text"
+                    class="nav-services"
+                    :ripple="false"
+                    @click.stop=""
+                  >
+                    <v-list-item-title :class="`menu-item`">
+                      {{ $gettext(`Services`) }}
+                    </v-list-item-title>
+                  </v-list-item>
+
                   <v-list-item :to="{ name: 'license' }" :exact="true" variant="text" class="nav-license" :ripple="false" @click.stop="">
                     <v-list-item-title :class="`menu-item`">
                       {{ $gettext(`License`) }}
@@ -651,7 +671,7 @@
                   <p class="text-caption opacity-70">{{ accountInfo }}</p>
                 </div>
                 <div class="text-center">
-                  <v-btn icon="mdi-dots-horizontal" variant="text" :elevation="0"></v-btn>
+                  <v-btn icon="mdi-dots-vertical" variant="text" :elevation="0"></v-btn>
                 </div>
               </template>
             </p-auth-menu>
@@ -808,6 +828,7 @@ export default {
       canManagePhotos: canManagePhotos,
       canManagePeople: this.$config.allow("people", "manage"),
       canManageUsers: (!isPublic || isDemo) && this.$config.allow("users", "access_all"),
+      canManageServices: this.$config.feature("services") && this.$config.allow("services", "manage"),
       appNameSuffix: appNameSuffix,
       appName: this.$config.getName(),
       appAbout: this.$config.getAbout(),

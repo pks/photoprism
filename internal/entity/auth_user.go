@@ -46,46 +46,45 @@ type Users []User
 
 // User represents an account that can authenticate with PhotoPrism.
 type User struct {
-	ID            int           `gorm:"primary_key" json:"ID" yaml:"-"`
-	UUID          string        `gorm:"type:VARBINARY(64);column:user_uuid;index;" json:"UUID,omitempty" yaml:"UUID,omitempty"`
-	UserUID       string        `gorm:"type:VARBINARY(42);column:user_uid;unique_index;" json:"UID" yaml:"UID"`
-	AuthProvider  string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
-	AuthMethod    string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
-	AuthIssuer    string        `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
-	AuthID        string        `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
-	UserName      string        `gorm:"size:200;index;" json:"Name" yaml:"Name,omitempty"`
-	DisplayName   string        `gorm:"size:200;" json:"DisplayName" yaml:"DisplayName,omitempty"`
-	UserEmail     string        `gorm:"size:255;index;" json:"Email" yaml:"Email,omitempty"`
-	BackupEmail   string        `gorm:"size:255;" json:"BackupEmail,omitempty" yaml:"BackupEmail,omitempty"`
-	UserRole      string        `gorm:"size:64;default:'';" json:"Role" yaml:"Role,omitempty"`
-	UserScope     string        `gorm:"size:1024;default:'*';" json:"Scope" yaml:"Scope,omitempty"`
-	UserAttr      string        `gorm:"size:1024;default:'';" json:"Attr" yaml:"Attr,omitempty"`
-	SuperAdmin    bool          `json:"SuperAdmin" yaml:"SuperAdmin,omitempty"`
-	CanLogin      bool          `json:"CanLogin" yaml:"CanLogin,omitempty"`
-	LoginAt       *time.Time    `json:"LoginAt" yaml:"LoginAt,omitempty"`
-	ExpiresAt     *time.Time    `sql:"index" json:"ExpiresAt,omitempty" yaml:"ExpiresAt,omitempty"`
-	WebDAV        bool          `gorm:"column:webdav;" json:"WebDAV" yaml:"WebDAV,omitempty"`
-	BasePath      string        `gorm:"type:VARBINARY(1024);" json:"BasePath" yaml:"BasePath,omitempty"`
-	UploadPath    string        `gorm:"type:VARBINARY(1024);" json:"UploadPath" yaml:"UploadPath,omitempty"`
-	CanInvite     bool          `json:"CanInvite" yaml:"CanInvite,omitempty"`
-	InviteToken   string        `gorm:"type:VARBINARY(64);index;" json:"-" yaml:"-"`
-	InvitedBy     string        `gorm:"size:64;" json:"-" yaml:"-"`
-	VerifyToken   string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
-	VerifiedAt    *time.Time    `json:"VerifiedAt,omitempty" yaml:"VerifiedAt,omitempty"`
-	ConsentAt     *time.Time    `json:"ConsentAt,omitempty" yaml:"ConsentAt,omitempty"`
-	BornAt        *time.Time    `sql:"index" json:"BornAt,omitempty" yaml:"BornAt,omitempty"`
-	UserDetails   *UserDetails  `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Details,omitempty" yaml:"Details,omitempty"`
-	UserSettings  *UserSettings `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Settings,omitempty" yaml:"Settings,omitempty"`
-	UserShares    UserShares    `gorm:"-" json:"Shares,omitempty" yaml:"Shares,omitempty"`
-	ResetToken    string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
-	PreviewToken  string        `gorm:"type:VARBINARY(64);column:preview_token;" json:"-" yaml:"-"`
-	DownloadToken string        `gorm:"type:VARBINARY(64);column:download_token;" json:"-" yaml:"-"`
-	Thumb         string        `gorm:"type:VARBINARY(128);index;default:'';" json:"Thumb" yaml:"Thumb,omitempty"`
-	ThumbSrc      string        `gorm:"type:VARBINARY(8);default:'';" json:"ThumbSrc" yaml:"ThumbSrc,omitempty"`
-	RefID         string        `gorm:"type:VARBINARY(16);" json:"-" yaml:"-"`
-	CreatedAt     time.Time     `json:"CreatedAt" yaml:"-"`
-	UpdatedAt     time.Time     `json:"UpdatedAt" yaml:"-"`
-	DeletedAt     *time.Time    `sql:"index" json:"DeletedAt,omitempty" yaml:"-"`
+	ID           int           `gorm:"primary_key" json:"ID" yaml:"-"`
+	UUID         string        `gorm:"type:VARBINARY(64);column:user_uuid;index;" json:"UUID,omitempty" yaml:"UUID,omitempty"`
+	UserUID      string        `gorm:"type:VARBINARY(42);column:user_uid;unique_index;" json:"UID" yaml:"UID"`
+	AuthProvider string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
+	AuthMethod   string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
+	AuthIssuer   string        `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
+	AuthID       string        `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
+	UserName     string        `gorm:"size:200;index;" json:"Name" yaml:"Name,omitempty"`
+	DisplayName  string        `gorm:"size:200;" json:"DisplayName" yaml:"DisplayName,omitempty"`
+	UserEmail    string        `gorm:"size:255;index;" json:"Email" yaml:"Email,omitempty"`
+	BackupEmail  string        `gorm:"size:255;" json:"BackupEmail,omitempty" yaml:"BackupEmail,omitempty"`
+	UserRole     string        `gorm:"size:64;default:'';" json:"Role" yaml:"Role,omitempty"`
+	UserScope    string        `gorm:"size:1024;default:'*';" json:"Scope" yaml:"Scope,omitempty"`
+	UserAttr     string        `gorm:"size:1024;default:'';" json:"Attr" yaml:"Attr,omitempty"`
+	SuperAdmin   bool          `json:"SuperAdmin" yaml:"SuperAdmin,omitempty"`
+	CanLogin     bool          `json:"CanLogin" yaml:"CanLogin,omitempty"`
+	LoginAt      *time.Time    `json:"LoginAt" yaml:"LoginAt,omitempty"`
+	ExpiresAt    *time.Time    `sql:"index" json:"ExpiresAt,omitempty" yaml:"ExpiresAt,omitempty"`
+	WebDAV       bool          `gorm:"column:webdav;" json:"WebDAV" yaml:"WebDAV,omitempty"`
+	BasePath     string        `gorm:"type:VARBINARY(1024);" json:"BasePath" yaml:"BasePath,omitempty"`
+	UploadPath   string        `gorm:"type:VARBINARY(1024);" json:"UploadPath" yaml:"UploadPath,omitempty"`
+	CanInvite    bool          `json:"CanInvite" yaml:"CanInvite,omitempty"`
+	InviteToken  string        `gorm:"type:VARBINARY(64);index;" json:"-" yaml:"-"`
+	InvitedBy    string        `gorm:"size:64;" json:"-" yaml:"-"`
+	VerifyToken  string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
+	VerifiedAt   *time.Time    `json:"VerifiedAt,omitempty" yaml:"VerifiedAt,omitempty"`
+	ConsentAt    *time.Time    `json:"ConsentAt,omitempty" yaml:"ConsentAt,omitempty"`
+	BornAt       *time.Time    `sql:"index" json:"BornAt,omitempty" yaml:"BornAt,omitempty"`
+	UserDetails  *UserDetails  `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Details,omitempty" yaml:"Details,omitempty"`
+	UserSettings *UserSettings `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Settings,omitempty" yaml:"Settings,omitempty"`
+	UserShares   UserShares    `gorm:"-" json:"Shares,omitempty" yaml:"Shares,omitempty"`
+	ResetToken   string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
+	PreviewToken string        `gorm:"type:VARBINARY(64);column:preview_token;" json:"-" yaml:"-"`
+	Thumb        string        `gorm:"type:VARBINARY(128);index;default:'';" json:"Thumb" yaml:"Thumb,omitempty"`
+	ThumbSrc     string        `gorm:"type:VARBINARY(8);default:'';" json:"ThumbSrc" yaml:"ThumbSrc,omitempty"`
+	RefID        string        `gorm:"type:VARBINARY(16);" json:"-" yaml:"-"`
+	CreatedAt    time.Time     `json:"CreatedAt" yaml:"-"`
+	UpdatedAt    time.Time     `json:"UpdatedAt" yaml:"-"`
+	DeletedAt    *time.Time    `sql:"index" json:"DeletedAt,omitempty" yaml:"-"`
 }
 
 // TableName returns the entity table name.
@@ -98,12 +97,11 @@ func NewUser() (m *User) {
 	uid := rnd.GenerateUID(UserUID)
 
 	return &User{
-		UserUID:       uid,
-		UserDetails:   NewUserDetails(uid),
-		UserSettings:  NewUserSettings(uid),
-		PreviewToken:  GenerateToken(),
-		DownloadToken: GenerateToken(),
-		RefID:         rnd.RefID(UserPrefix),
+		UserUID:      uid,
+		UserDetails:  NewUserDetails(uid),
+		UserSettings: NewUserSettings(uid),
+		PreviewToken: GenerateToken(),
+		RefID:        rnd.RefID(UserPrefix),
 	}
 }
 
@@ -272,6 +270,15 @@ func (m *User) InvalidUID() bool {
 	return !m.HasUID()
 }
 
+// IsSystemOrInvalid checks whether the user is a system user or has an invalid ID.
+func (m *User) IsSystemOrInvalid() bool {
+	if m == nil {
+		return true
+	}
+
+	return m.ID <= 0 || m.InvalidUID()
+}
+
 // SameUID checks if the given uid matches the own uid.
 func (m *User) SameUID(uid string) bool {
 	if m == nil {
@@ -283,14 +290,17 @@ func (m *User) SameUID(uid string) bool {
 	return m.UserUID == uid
 }
 
-// InitAccount sets the name and password of the initial admin account.
+// InitAccount sets the name and password of the initial super admin account.
 func (m *User) InitAccount(initName, initPasswd, scope string) (updated bool) {
 	// User must exist and the password must not be empty.
 	initPasswd = strings.TrimSpace(initPasswd)
-	if rnd.InvalidUID(m.UserUID, UserUID) || initPasswd == "" {
+	if m.InvalidUID() || initPasswd == "" {
+		return false
+	} else if m.IsDeleted() || m.HasProvider(authn.ProviderNone) {
+		event.SystemDebug([]string{"config", "init", "admin account", status.Disabled})
 		return false
 	} else if !m.CanLogIn() {
-		log.Warnf("users: %s account is not allowed to log in", m.String())
+		event.SystemWarn([]string{"config", "init", "admin account", status.Disabled})
 	}
 
 	// Abort if user has a password.
@@ -352,7 +362,7 @@ func (m *User) Save() (err error) {
 
 // Delete marks the entity as deleted.
 func (m *User) Delete() (err error) {
-	if m.ID <= 1 {
+	if m.IsSystemOrInvalid() {
 		return fmt.Errorf("cannot delete system user")
 	} else if m.UserUID == "" {
 		return fmt.Errorf("uid is required to delete user")
@@ -371,7 +381,9 @@ func (m *User) Delete() (err error) {
 
 // IsDeleted checks if the user account has been deleted.
 func (m *User) IsDeleted() bool {
-	if m.DeletedAt == nil {
+	if m == nil {
+		return true
+	} else if m.DeletedAt == nil {
 		return false
 	}
 
@@ -475,13 +487,13 @@ func (m *User) UpdateLoginTime() *time.Time {
 	return timeStamp
 }
 
-// CanLogIn checks if the user is allowed to log in and use the web UI.
+// CanLogIn checks if the user is allowed to log in and use the Web UI/API.
 func (m *User) CanLogIn() bool {
 	if m == nil {
 		return false
-	} else if m.IsDeleted() || m.HasProvider(authn.ProviderNone) {
+	} else if m.IsSystemOrInvalid() || m.IsDeleted() || m.HasProvider(authn.ProviderNone) {
 		return false
-	} else if !m.CanLogin && !m.SuperAdmin || m.ID <= 0 || m.UserName == "" {
+	} else if !m.CanLogin && !m.SuperAdmin || m.UserName == "" {
 		return false
 	} else if m.IsDisabled() || m.IsUnknown() || !m.IsRegistered() {
 		return false
@@ -490,12 +502,17 @@ func (m *User) CanLogIn() bool {
 	}
 }
 
+// DenyLogIn checks if the user should be denied access to the web UI/API
+func (m *User) DenyLogIn() bool {
+	return !m.CanLogIn()
+}
+
 // CanUseWebDAV checks whether the user is allowed to use WebDAV to synchronize files.
 func (m *User) CanUseWebDAV() bool {
 	if m == nil {
 		// Abort check if user is nil for any reason.
 		return false
-	} else if !m.WebDAV || m.ID <= 0 || m.IsDisabled() || m.IsUnknown() || !m.IsRegistered() || m.HasProvider(authn.ProviderNone) {
+	} else if !m.WebDAV || m.IsSystemOrInvalid() || m.IsDisabled() || m.IsUnknown() || !m.IsRegistered() || m.HasProvider(authn.ProviderNone) {
 		// Deny WebDAV access if WebDAV is disabled, the user does not have a
 		// regular, registered account, or the account has been deactivated.
 		return false
@@ -998,26 +1015,39 @@ func (m *User) IsUnknown() bool {
 	return m.InvalidUID() || m.ID == UnknownUser.ID || m.UserUID == UnknownUser.UserUID || m.HasRole(acl.RoleNone)
 }
 
-// DeleteSessions deletes all active user sessions except those passed as argument.
-func (m *User) DeleteSessions(omit []string) (deleted int) {
+// RevokeDerivedSessions deletes user login sessions, including those created using app passwords.
+func (m *User) RevokeDerivedSessions(omit []string) (deleted int) {
+	return m.RevokeSessions(omit, authn.RevokeDerivedSessions)
+}
+
+// RevokeSessions deletes all user sessions depending on the scope, except for the ones specified to omit.
+func (m *User) RevokeSessions(omit []string, scope authn.SessionScope) (deleted int) {
 	if m.UserUID == "" {
 		return 0
 	}
 
-	// Compose update statement.
-	stmt := Db()
+	// Limit deletion to the user's own sessions, excluding the ids passed as argument.
+	stmt := Db().Where("user_uid = ?", m.UserUID)
 
-	// Find all user sessions except the session ids passed as argument.
-	if len(omit) == 0 {
-		stmt = stmt.Where("user_uid = ?", m.UserUID)
-	} else {
-		stmt = stmt.Where("user_uid = ? AND id NOT IN (?)", m.UserUID, omit)
+	if len(omit) > 0 {
+		stmt = stmt.Where("id NOT IN (?)", omit)
 	}
 
-	// Exclude client access tokens.
-	stmt = stmt.Where("auth_provider NOT IN (?)", authn.ClientProviders)
+	// Restrict the session types removed based on the revocation scope.
+	switch scope {
+	case authn.RevokeLoginSessions:
+		// Keep app passwords, client access tokens, and sessions derived from app passwords.
+		stmt = stmt.Where("auth_provider NOT IN (?)", authn.ClientProviders)
+	case authn.RevokeDerivedSessions:
+		// Keep app passwords and client access tokens, but delete regular
+		// login sessions and those derived from app passwords.
+		stmt = stmt.Where("auth_provider NOT IN (?) OR auth_method = ?",
+			authn.ClientProviders, authn.MethodSession.String())
+	case authn.RevokeAllSessions:
+		// Remove all sessions, including app passwords, client access tokens, and derived sessions.
+	}
 
-	// Fetch sessions from database.
+	// Fetch matching sessions from the database.
 	sess := Sessions{}
 
 	if err := stmt.Find(&sess).Error; err != nil {
@@ -1272,7 +1302,7 @@ func (m *User) SetFormValues(frm form.User) *User {
 	return m
 }
 
-// GenerateTokens generates preview and download tokens as needed.
+// GenerateTokens generates the preview token as needed.
 func (m *User) GenerateTokens(force bool) *User {
 	if m.ID < 0 {
 		return m
@@ -1282,22 +1312,38 @@ func (m *User) GenerateTokens(force bool) *User {
 		m.PreviewToken = GenerateToken()
 	}
 
-	if m.DownloadToken == "" || force {
-		m.DownloadToken = GenerateToken()
-	}
-
 	return m
 }
 
-// RegenerateTokens replaces the existing preview and download tokens.
+// RegenerateTokens replaces the existing preview token.
 func (m *User) RegenerateTokens() error {
 	if m.ID < 0 {
 		return nil
 	}
 
+	// Remember the current token so its cached entry can be released once the new one is stored.
+	oldPreviewToken := m.PreviewToken
+
 	m.GenerateTokens(true)
 
-	return m.Updates(Values{"preview_token": m.PreviewToken, "download_token": m.DownloadToken})
+	if err := m.Updates(Values{"preview_token": m.PreviewToken}); err != nil {
+		return err
+	}
+
+	// Drop the replaced token from the in-memory cache and rewrite the denormalized copy on the user's
+	// sessions that still hold it, so a surviving session (e.g. an app password) cannot re-register the
+	// revoked token from its stale column on reload.
+	if oldPreviewToken != "" && oldPreviewToken != m.PreviewToken {
+		PreviewToken.UnsetValue(oldPreviewToken)
+
+		if err := Db().Model(&Session{}).
+			Where("user_uid = ? AND preview_token = ?", m.UserUID, oldPreviewToken).
+			Update("preview_token", m.PreviewToken).Error; err != nil {
+			event.AuditWarn([]string{"user %s", "failed to update session preview token", status.Error(err)}, m.RefID)
+		}
+	}
+
+	return nil
 }
 
 // RefreshShares updates the list of shares.
@@ -1404,12 +1450,12 @@ func (m *User) PrivilegeLevelChange(frm form.User) bool {
 }
 
 // SaveForm updates the entity using form data and stores it in the database.
-// Privilege-level fields (role, login, WebDAV, paths) are applied only when
-// byAdmin is true. The caller decides this: a regular admin actor, or a trusted
-// cluster service principal that has no end-user identity of its own and so
-// cannot satisfy u.IsAdmin() despite being authorized for user management.
-func (m *User) SaveForm(frm form.User, u *User, byAdmin bool) error {
-	if m.UserName == "" || m.ID <= 0 {
+// Privilege-level fields (role, login, WebDAV, paths) are applied only when byAdmin;
+// the most sensitive ones (super-admin status, auth provider/method such as 2FA,
+// external identity) also require bySuperAdmin. The caller passes both explicitly so a
+// user-less cluster service principal can act despite failing u.IsAdmin()/IsSuperAdmin().
+func (m *User) SaveForm(frm form.User, u *User, byAdmin, bySuperAdmin bool) error {
+	if m.UserName == "" || m.IsSystemOrInvalid() {
 		return fmt.Errorf("system users cannot be modified")
 	} else if frm.SuperAdmin && !acl.IsAdminRole(acl.Role(frm.Role())) {
 		// Super admins must keep an admin-level role. cluster_admin is the
@@ -1472,8 +1518,9 @@ func (m *User) SaveForm(frm form.User, u *User, byAdmin bool) error {
 		m.WebDAV = frm.WebDAV
 		m.UserAttr = frm.Attr()
 
-		// Only allow super admins to change the authentication method and make other users super admins.
-		if u.IsSuperAdmin() {
+		// Only super-admin-level authority may change the auth method or grant super admin:
+		// an actual super admin, or bySuperAdmin (the trusted cluster service principal).
+		if u.IsSuperAdmin() || bySuperAdmin {
 			if !u.Equal(m) {
 				m.SuperAdmin = frm.SuperAdmin
 			}
@@ -1552,7 +1599,7 @@ func (m *User) HasAvatar() bool {
 
 // SetAvatar updates the user avatar image.
 func (m *User) SetAvatar(thumb, thumbSrc string) error {
-	if m.UserName == "" || m.ID <= 0 {
+	if m.UserName == "" || m.IsSystemOrInvalid() {
 		return fmt.Errorf("system user avatars cannot be changed")
 	}
 

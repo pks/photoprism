@@ -3,6 +3,7 @@ package vision
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -38,6 +39,7 @@ func TestRegisterOllamaEngineDefaults(t *testing.T) {
 	testCaptionModel := CaptionModel.Clone()
 	testCaptionModel.Model = ""
 	testCaptionModel.Service.Uri = ""
+	testCaptionModel.Service.Think = ""
 	cloudToken := "moo9yaiS4ShoKiojiathie2vuejiec2X.Mahl7ewaej4ebi7afq8f_vwe" //nolint:gosec
 
 	t.Cleanup(func() {
@@ -52,7 +54,8 @@ func TestRegisterOllamaEngineDefaults(t *testing.T) {
 	t.Run("SelfHosted", func(t *testing.T) {
 		ensureEnvOnce = sync.Once{}
 		CaptionModel = testCaptionModel.Clone()
-		_ = os.Unsetenv(ollama.APIKeyEnv)
+		t.Setenv(ollama.APIKeyEnv, "")
+		t.Setenv(ollama.BaseUrlEnv, ollama.DefaultBaseUrl)
 
 		registerOllamaEngineDefaults()
 
@@ -75,6 +78,10 @@ func TestRegisterOllamaEngineDefaults(t *testing.T) {
 
 		if CaptionModel.Service.Uri != ollama.DefaultUri {
 			t.Fatalf("expected caption model uri %s, got %s", ollama.DefaultUri, CaptionModel.Service.Uri)
+		}
+
+		if CaptionModel.Service.Think != ollama.DefaultThink {
+			t.Fatalf("expected caption model think %s, got %s", ollama.DefaultThink, CaptionModel.Service.Think)
 		}
 	})
 	t.Run("Cloud", func(t *testing.T) {
@@ -104,11 +111,16 @@ func TestRegisterOllamaEngineDefaults(t *testing.T) {
 		if CaptionModel.Service.Uri != ollama.DefaultUri {
 			t.Fatalf("expected caption model uri %s, got %s", ollama.DefaultUri, CaptionModel.Service.Uri)
 		}
+
+		if CaptionModel.Service.Think != ollama.DefaultThink {
+			t.Fatalf("expected caption model think %s, got %s", ollama.DefaultThink, CaptionModel.Service.Think)
+		}
 	})
 	t.Run("ApiKeyAloneKeepsLocalDefaults", func(t *testing.T) {
 		ensureEnvOnce = sync.Once{}
 		CaptionModel = testCaptionModel.Clone()
 		t.Setenv(ollama.APIKeyEnv, cloudToken)
+		t.Setenv(ollama.BaseUrlEnv, ollama.DefaultBaseUrl)
 
 		registerOllamaEngineDefaults()
 
@@ -149,6 +161,10 @@ func TestRegisterOllamaEngineDefaults(t *testing.T) {
 
 		if model.Resolution != ollama.DefaultResolution {
 			t.Fatalf("expected resolution %d, got %d", ollama.DefaultResolution, model.Resolution)
+		}
+
+		if model.Service.Think != ollama.DefaultThink {
+			t.Fatalf("expected service think %s, got %s", ollama.DefaultThink, model.Service.Think)
 		}
 	})
 }
@@ -271,7 +287,6 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("expected response field caption, got %q", resp.Result.Caption.Text)
 		}
 	})
-
 	t.Run("CaptionStripsInlineThinkTags", func(t *testing.T) {
 		req := &ApiRequest{}
 		payload := ollama.Response{
@@ -295,7 +310,29 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("expected stripped caption, got %q", resp.Result.Caption.Text)
 		}
 	})
+	t.Run("StripsLeadingReasoningBlock", func(t *testing.T) {
+		req := &ApiRequest{}
+		payload := ollama.Response{
+			Response: "<think>The user wants a concise caption.</think>A tabby cat stares upward.",
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
 
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, 200)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+
+		if resp.Result.Caption == nil {
+			t.Fatal("expected caption result")
+		}
+		if resp.Result.Caption.Text != "A tabby cat stares upward." {
+			t.Fatalf("expected reasoning block to be stripped, got %q", resp.Result.Caption.Text)
+		}
+	})
 	t.Run("ThinkTagsInThinkingFieldProduceNoCaption", func(t *testing.T) {
 		// Even after stripping <think> tags, the Thinking field must not become a caption.
 		req := &ApiRequest{}
@@ -318,7 +355,6 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("expected no caption from thinking-only response, got %q", resp.Result.Caption.Text)
 		}
 	})
-
 	t.Run("CaptionStripsUnclosedThinkTag", func(t *testing.T) {
 		req := &ApiRequest{}
 		payload := ollama.Response{
@@ -339,4 +375,117 @@ func TestOllamaParserFallbacks(t *testing.T) {
 			t.Fatalf("expected no caption from unclosed think tag, got %q", resp.Result.Caption.Text)
 		}
 	})
+}
+
+func TestOllamaParserUnavailableStatus(t *testing.T) {
+	t.Run("Gone", func(t *testing.T) {
+		req := &ApiRequest{Model: ollama.CloudModel}
+		payload := ollama.Response{}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, http.StatusGone)
+		if err != nil {
+			t.Fatalf("parse should not error on upstream status, got %v", err)
+		}
+
+		if resp.Code != http.StatusGone {
+			t.Fatalf("expected code %d, got %d", http.StatusGone, resp.Code)
+		}
+		if len(resp.Result.Labels) != 0 || resp.Result.Caption != nil {
+			t.Fatalf("expected empty result, got %+v", resp.Result)
+		}
+	})
+}
+
+func TestOllamaParserNormalizeModes(t *testing.T) {
+	const payload = `{"labels":[{"name":"ferris wheel","confidence":0.92,"topicality":0.88}]}`
+
+	parse := func(t *testing.T, mode NormalizeType, body []byte) []LabelResult {
+		t.Helper()
+
+		req := &ApiRequest{Model: "gemma4:latest", Normalize: mode}
+		resp, err := ollamaParser{}.Parse(context.Background(), req, body, http.StatusOK)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		return resp.Result.Labels
+	}
+
+	response := func(t *testing.T, field, value string) []byte {
+		t.Helper()
+
+		body, err := json.Marshal(map[string]string{"model": "gemma4:latest", field: value})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		return body
+	}
+
+	cases := []struct {
+		name string
+		mode NormalizeType
+		want string
+	}{
+		{name: "Default", mode: "", want: "Ferris"},
+		{name: "SingleWord", mode: NormalizeWord, want: "Ferris"},
+		{name: "Phrase", mode: NormalizePhrase, want: "Ferris Wheel"},
+		{name: "False", mode: NormalizeFalse, want: "Ferris Wheel"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := parse(t, tc.mode, response(t, "response", payload))
+
+			if len(labels) != 1 || labels[0].Name != tc.want {
+				t.Fatalf("expected a single %q label, got %+v", tc.want, labels)
+			}
+		})
+	}
+	t.Run("ThinkingFallbackPayload", func(t *testing.T) {
+		labels := parse(t, NormalizePhrase, response(t, "thinking", payload))
+
+		if len(labels) != 1 || labels[0].Name != "Ferris Wheel" {
+			t.Fatalf("expected the mode to apply to the fallback payload, got %+v", labels)
+		}
+	})
+}
+
+func TestRegisterOllamaEngineDefaultsNormalize(t *testing.T) {
+	t.Cleanup(func() {
+		ensureEnvOnce = sync.Once{}
+		registerOllamaEngineDefaults()
+	})
+
+	// A model that inherits the engine URI is classified by the endpoint it resolves to,
+	// so the same configuration follows the base URL without an engine-wide default.
+	cases := []struct {
+		name    string
+		baseUrl string
+		want    NormalizeType
+	}{
+		{name: "SelfHosted", baseUrl: ollama.DefaultBaseUrl, want: NormalizeWord},
+		{name: "Cloud", baseUrl: ollama.CloudBaseUrl, want: NormalizePhrase},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(ollama.BaseUrlEnv, tc.baseUrl)
+			ensureEnvOnce = sync.Once{}
+			registerOllamaEngineDefaults()
+
+			model := &Model{Type: ModelTypeLabels, Engine: ollama.EngineName}
+			model.ApplyEngineDefaults()
+
+			if got := model.GetNormalize(); got != tc.want {
+				t.Fatalf("expected %q for %s, got %q", tc.want, tc.baseUrl, got)
+			}
+		})
+	}
 }

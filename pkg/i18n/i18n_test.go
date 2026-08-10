@@ -8,12 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestMain executes runTestMain returning it's results.  It is done this way so that defer can be used to cleanup.
 func TestMain(m *testing.M) {
+	os.Exit(runTestMain(m))
+}
+
+func runTestMain(m *testing.M) int {
 	gotext.Configure(localeDir, string(locale), "default")
 
-	code := m.Run()
-
-	os.Exit(code)
+	return m.Run()
 }
 
 func TestMsg(t *testing.T) {
@@ -24,6 +27,11 @@ func TestMsg(t *testing.T) {
 	t.Run("UnexpectedError", func(t *testing.T) {
 		msg := Msg(ErrUnexpected, "A cat")
 		assert.Equal(t, "Something went wrong, try again", msg)
+	})
+	t.Run("UploadToServiceFailed", func(t *testing.T) {
+		msg := Msg(ErrUploadToServiceFailed, "My NAS")
+		assert.Equal(t, "Upload to My NAS failed", msg)
+		assert.Equal(t, "Upload to %s failed", Source(ErrUploadToServiceFailed))
 	})
 	t.Run("AlreadyExistsGerman", func(t *testing.T) {
 		SetLocale("de")
@@ -84,5 +92,24 @@ func TestLower(t *testing.T) {
 	t.Run("ErrForbidden", func(t *testing.T) {
 		msg := Lower(ErrForbidden, "A cat")
 		assert.Equal(t, "permission denied", msg)
+	})
+}
+
+func TestSource(t *testing.T) {
+	t.Run("WithPlaceholder", func(t *testing.T) {
+		assert.Equal(t, "%s already exists", Source(ErrAlreadyExists))
+	})
+	t.Run("WithoutPlaceholder", func(t *testing.T) {
+		assert.Equal(t, "Permission denied", Source(ErrForbidden))
+	})
+	t.Run("AuthErrorMessages", func(t *testing.T) {
+		assert.Equal(t, "Registration disabled", Source(ErrRegistrationDisabled))
+		assert.Equal(t, "Verified email required", Source(ErrVerifiedEmailRequired))
+	})
+	t.Run("UntranslatedAfterSetLocale", func(t *testing.T) {
+		SetLocale("de")
+		assert.Equal(t, "%s already exists", Source(ErrAlreadyExists))
+		SetLocale("")
+		assert.Equal(t, "%s already exists", Source(ErrAlreadyExists))
 	})
 }

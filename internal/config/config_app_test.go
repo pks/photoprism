@@ -65,10 +65,37 @@ func TestConfig_AppIcon(t *testing.T) {
 	assert.Equal(t, "flower", c.AppIcon())
 	c.options.AppIcon = "ring"
 	assert.Equal(t, "ring", c.AppIcon())
-	c.options.AppIcon = "shutter"
-	assert.Equal(t, "shutter", c.AppIcon())
+	c.options.AppIcon = "rainbow"
+	assert.Equal(t, "rainbow", c.AppIcon())
 	c.options.AppIcon = "logo"
 	assert.Equal(t, "logo", c.AppIcon())
+}
+
+func TestConfig_AppTouchIcon(t *testing.T) {
+	c := NewConfig(CliTestContext())
+
+	// Every built-in set (default, round, and squircle) resolves to its full-bleed touch variant.
+	assert.Equal(t, "logo/touch", c.AppTouchIcon())
+	c.options.AppIcon = "foo"
+	assert.Equal(t, "logo/touch", c.AppTouchIcon())
+	c.options.AppIcon = "logo"
+	assert.Equal(t, "logo/touch", c.AppTouchIcon())
+	c.options.AppIcon = "neon"
+	assert.Equal(t, "neon/touch", c.AppTouchIcon())
+	c.options.AppIcon = "crisp"
+	assert.Equal(t, "crisp/touch", c.AppTouchIcon())
+	c.options.AppIcon = "glass"
+	assert.Equal(t, "glass/touch", c.AppTouchIcon())
+	c.options.AppIcon = "app"
+	assert.Equal(t, "app/touch", c.AppTouchIcon())
+	c.options.AppIcon = "rainbow"
+	assert.Equal(t, "rainbow/touch", c.AppTouchIcon())
+	// Custom theme/URL icons have no touch variant, so they fall back to the "app" touch squircle
+	// instead of producing broken apple-touch-icon links.
+	c.options.AppIcon = "/custom/logo.png"
+	assert.Equal(t, "app/touch", c.AppTouchIcon())
+	c.options.AppIcon = "https://cdn.example.com/logo.png"
+	assert.Equal(t, "app/touch", c.AppTouchIcon())
 }
 
 func TestConfig_AppColor(t *testing.T) {
@@ -126,9 +153,12 @@ func TestConfig_AppManifest(t *testing.T) {
 		assert.Equal(t, appConf.Description, result.Description)
 		assert.Equal(t, appConf.BaseUri, result.Scope)
 		assert.Equal(t, pwa.StartUrl(appConf.BaseUri, appConf.FrontendUri), result.StartUrl)
-		assert.Len(t, result.Icons, len(pwa.IconSizes))
+		assert.Len(t, result.Icons, len(pwa.IconSizes)+len(pwa.MaskableIconSizes))
 		assert.Len(t, result.Categories, len(pwa.Categories))
 		assert.Len(t, result.Permissions, len(pwa.Permissions))
+		assert.NotEmpty(t, result.Lang)
+		assert.NotEmpty(t, result.Dir)
+		assert.Len(t, result.Screenshots, 2)
 
 		cached := c.AppManifest()
 		assert.NotEmpty(t, cached)
@@ -137,7 +167,7 @@ func TestConfig_AppManifest(t *testing.T) {
 		assert.Equal(t, appConf.Description, cached.Description)
 		assert.Equal(t, appConf.BaseUri, cached.Scope)
 		assert.Equal(t, pwa.StartUrl(appConf.BaseUri, appConf.FrontendUri), cached.StartUrl)
-		assert.Len(t, cached.Icons, len(pwa.IconSizes))
+		assert.Len(t, cached.Icons, len(pwa.IconSizes)+len(pwa.MaskableIconSizes))
 		assert.Len(t, cached.Categories, len(pwa.Categories))
 		assert.Len(t, cached.Permissions, len(pwa.Permissions))
 	})

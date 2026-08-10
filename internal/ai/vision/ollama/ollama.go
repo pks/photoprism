@@ -15,7 +15,7 @@ Copyright (c) 2018 - 2026 PhotoPrism UG. All rights reserved.
 
 	The AGPL is supplemented by our Trademark and Brand Guidelines,
 	which describe how our Brand Assets may be used:
-	<https://www.photoprism.app/trademark>
+	<https://www.photoprism.app/trademark/>
 
 Feel free to send an email to hello@photoprism.app if you have questions,
 want to support our work, or just want to say hello.
@@ -24,3 +24,29 @@ Additional information can be found in our Developer Guide:
 <https://docs.photoprism.app/developer-guide/>
 */
 package ollama
+
+import (
+	"net/url"
+	"strings"
+)
+
+// IsCloudUrl reports whether the URL points at the Ollama Cloud service.
+func IsCloudUrl(rawUrl string) bool {
+	if rawUrl = strings.TrimSpace(rawUrl); rawUrl == "" {
+		return false
+	}
+
+	u, err := url.Parse(rawUrl)
+
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	cloud, err := url.Parse(CloudBaseUrl)
+
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(u.Hostname(), cloud.Hostname())
+}

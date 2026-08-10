@@ -91,6 +91,12 @@ var Flags = CliFlags{
 			EnvVars: EnvVars("OIDC_SCOPES"),
 		}}, {
 		Flag: &cli.StringFlag{
+			Name:    "oidc-prompt",
+			Usage:   "authorization `PROMPT` for single sign-on via OpenID Connect (login, select_account, consent)",
+			Value:   "",
+			EnvVars: EnvVars("OIDC_PROMPT"),
+		}}, {
+		Flag: &cli.StringFlag{
 			Name:    "oidc-provider",
 			Usage:   "custom identity provider `NAME`, e.g. Google",
 			Value:   "",
@@ -111,6 +117,11 @@ var Flags = CliFlags{
 			Name:    "oidc-register",
 			Usage:   "allows new users to create an account when they sign in with OpenID Connect",
 			EnvVars: EnvVars("OIDC_REGISTER"),
+		}}, {
+		Flag: &cli.BoolFlag{
+			Name:    "oidc-logout",
+			Usage:   "ends the provider session on sign-out via OpenID Connect RP-initiated logout",
+			EnvVars: EnvVars("OIDC_LOGOUT"),
 		}}, {
 		Flag: &cli.StringFlag{
 			Name:    "oidc-username",
@@ -133,7 +144,7 @@ var Flags = CliFlags{
 		}}, {
 		Flag: &cli.StringSliceFlag{
 			Name:    "oidc-group-role",
-			Usage:   "map `GROUP=ROLE`; repeat to add more (roles: " + acl.UserRoles.CliUsageString() + ")",
+			Usage:   "map `GROUP=ROLE`; repeat to add more (roles: " + acl.ClusterInstanceRolesCliUsageString() + ")",
 			EnvVars: EnvVars("OIDC_GROUP_ROLE"),
 			Hidden:  true,
 		}}, {
@@ -165,6 +176,22 @@ var Flags = CliFlags{
 			Usage:   "session cache duration in `SECONDS` (60-3600)",
 			EnvVars: EnvVars("SESSION_CACHE"),
 		}}, {
+		Flag: &cli.StringFlag{
+			Name:    "download-token",
+			Usage:   "shared static `TOKEN` accepted for permanent download URLs without identifying a session (leave blank to accept signed tokens only)",
+			EnvVars: EnvVars("DOWNLOAD_TOKEN"),
+		}, Secret: true}, {
+		Flag: &cli.Int64Flag{
+			Name:    "download-token-maxage",
+			Value:   int64(ttl.DownloadTokenDefaultAge),
+			Usage:   fmt.Sprintf("signed download token lifetime in `SECONDS` (minimum %d)", ttl.DownloadTokenMinAge.Int()),
+			EnvVars: EnvVars("DOWNLOAD_TOKEN_MAXAGE"),
+		}}, {
+		Flag: &cli.StringFlag{
+			Name:    "preview-token",
+			Usage:   "shared static `TOKEN` for thumbnail and video streaming URLs (leave blank for an automatic value)",
+			EnvVars: EnvVars("PREVIEW_TOKEN"),
+		}, Secret: true}, {
 		Flag: &cli.StringFlag{
 			Name:    "log-level",
 			Aliases: []string{"l"},
@@ -593,7 +620,7 @@ var Flags = CliFlags{
 		}}, {
 		Flag: &cli.StringFlag{
 			Name:    "app-icon",
-			Usage:   "home screen app `ICON` (logo, app, crisp, mint, bold, square, bloom, flower, ring, shutter)",
+			Usage:   "home screen app `ICON` (logo, app, crisp, mint, bold, square, bloom, flower, ring, glass, neon, rainbow)",
 			EnvVars: EnvVars("APP_ICON"),
 		}}, {
 		Flag: &cli.StringFlag{
@@ -737,7 +764,7 @@ var Flags = CliFlags{
 		}}, {
 		Flag: &cli.StringSliceFlag{
 			Name:    "cluster-allow-group-roles",
-			Usage:   "map `GROUP=ROLE` for Portal admission (roles: " + acl.UserRoles.CliUsageString() + ")",
+			Usage:   "map `GROUP=ROLE` for Portal admission (roles: " + acl.ClusterInstanceRolesCliUsageString() + ")",
 			EnvVars: EnvVars("CLUSTER_ALLOW_GROUP_ROLES"),
 			Hidden:  true,
 		}}, {
@@ -1073,7 +1100,7 @@ var Flags = CliFlags{
 		}}, {
 		Flag: &cli.IntFlag{
 			Name:    "ffmpeg-size",
-			Usage:   "encoding resolution limit in `PIXELS` (720-7680)",
+			Usage:   "encoding resolution limit in `PIXELS` (720-15360)",
 			Value:   thumb.Sizes[thumb.Fit4096].Width,
 			EnvVars: EnvVars("FFMPEG_SIZE"),
 		}}, {
@@ -1088,6 +1115,12 @@ var Flags = CliFlags{
 			Usage:   fmt.Sprintf("bitrate `LIMIT` in Mbps for forced transcoding of non-AVC videos (%d-%d; %d to disable)", encode.MinBitrateLimit, encode.MaxBitrateLimit, encode.NoBitrateLimit),
 			Value:   encode.DefaultBitrateLimit,
 			EnvVars: EnvVars("FFMPEG_BITRATE"),
+		}}, {
+		Flag: &cli.IntFlag{
+			Name:    "ffmpeg-fisheye-fov",
+			Usage:   fmt.Sprintf("field of view in `DEGREES` for dewarping fisheye 360° originals (%d-%d)", encode.MinFisheyeFov, encode.MaxFisheyeFov),
+			Value:   encode.DefaultFisheyeFov,
+			EnvVars: EnvVars("FFMPEG_FISHEYE_FOV"),
 		}}, {
 		Flag: &cli.StringFlag{
 			Name:    "ffmpeg-preset",
@@ -1200,16 +1233,6 @@ var Flags = CliFlags{
 			EnvVars: EnvVars("HEIFCONVERT_ORIENTATION"),
 		}}, {
 		Flag: &cli.StringFlag{
-			Name:    "download-token",
-			Usage:   "`DEFAULT` download URL token for originals (leave blank for a random value)",
-			EnvVars: EnvVars("DOWNLOAD_TOKEN"),
-		}, Secret: true}, {
-		Flag: &cli.StringFlag{
-			Name:    "preview-token",
-			Usage:   "`DEFAULT` thumbnail and video streaming URL token (leave blank for a random value)",
-			EnvVars: EnvVars("PREVIEW_TOKEN"),
-		}, Secret: true}, {
-		Flag: &cli.StringFlag{
 			Name:    "thumb-library",
 			Aliases: []string{"thumbs"},
 			Usage:   "image processing `LIBRARY` to be used for generating thumbnails (auto, vips)",
@@ -1224,13 +1247,13 @@ var Flags = CliFlags{
 		}}, {
 		Flag: &cli.IntFlag{
 			Name:    "thumb-size",
-			Usage:   "maximum size of pre-generated thumbnails in `PIXELS` (720-7680)",
+			Usage:   "maximum size of pre-generated thumbnails in `PIXELS` (720-15360)",
 			Value:   thumb.SizeCached,
 			EnvVars: EnvVars("THUMB_SIZE"),
 		}}, {
 		Flag: &cli.IntFlag{
 			Name:    "thumb-size-uncached",
-			Usage:   "maximum size of thumbnails generated on demand in `PIXELS` (720-7680)",
+			Usage:   "maximum size of thumbnails generated on demand in `PIXELS` (720-15360)",
 			Value:   thumb.SizeOnDemand,
 			EnvVars: EnvVars("THUMB_SIZE_UNCACHED"),
 		}}, {
@@ -1250,13 +1273,13 @@ var Flags = CliFlags{
 		Flag: &cli.IntFlag{
 			Name:    "jpeg-size",
 			Usage:   "maximum size of generated JPEG images in `PIXELS` (720-30000)",
-			Value:   7680,
+			Value:   15360,
 			EnvVars: EnvVars("JPEG_SIZE"),
 		}}, {
 		Flag: &cli.IntFlag{
 			Name:    "png-size",
 			Usage:   "maximum size of generated PNG images in `PIXELS` (720-30000)",
-			Value:   7680,
+			Value:   15360,
 			EnvVars: EnvVars("PNG_SIZE"),
 		}}, {
 		Flag: &cli.StringFlag{
@@ -1298,6 +1321,11 @@ var Flags = CliFlags{
 			Name:    "detect-nsfw",
 			Usage:   "flags newly added pictures as private if they might be offensive (uses the configured NSFW model; built-in TensorFlow by default)",
 			EnvVars: EnvVars("DETECT_NSFW"),
+		}}, {
+		Flag: &cli.BoolFlag{
+			Name:    "xmp-faces",
+			Usage:   "imports face regions and names from XMP metadata as people markers",
+			EnvVars: EnvVars("XMP_FACES"),
 		}}, {
 		Flag: &cli.StringFlag{
 			Name:    "face-engine",

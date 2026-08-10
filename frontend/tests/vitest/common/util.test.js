@@ -402,4 +402,38 @@ describe("common/util", () => {
       expect($util.shouldOpenOnHover()).toBe(false);
     });
   });
+
+  describe("pdfUrl", () => {
+    const hash = "bfdcf45e58b1978af66bbf6212c195851dc65814";
+    it("builds the inline PDF URL from the file hash", () => {
+      expect($util.pdfUrl(hash)).toBe(`${$config.apiUri}/files/${hash}/file.pdf`);
+      // No preview token in the path: the request is authenticated by header.
+      expect($util.pdfUrl(hash)).toBe("/api/v1/files/bfdcf45e58b1978af66bbf6212c195851dc65814/file.pdf");
+    });
+    it("returns an empty string without a hash", () => {
+      expect($util.pdfUrl("")).toBe("");
+      expect($util.pdfUrl(undefined)).toBe("");
+    });
+  });
+
+  describe("mapAnimateDuration", () => {
+    it("returns the global Maps.Animate duration by default", () => {
+      expect($util.mapAnimateDuration({ maps: { animate: 400 } })).toBe(400);
+    });
+    it("prefers a non-negative override over the global setting", () => {
+      expect($util.mapAnimateDuration({ maps: { animate: 400 } }, 0)).toBe(0);
+      expect($util.mapAnimateDuration({ maps: { animate: 400 } }, 250)).toBe(250);
+    });
+    it("ignores a negative override and falls back to the global setting", () => {
+      expect($util.mapAnimateDuration({ maps: { animate: 400 } }, -1)).toBe(400);
+    });
+    it("forces 0 when Reduce Motion is enabled, overriding both sources", () => {
+      expect($util.mapAnimateDuration({ ui: { reduceMotion: true }, maps: { animate: 400 } })).toBe(0);
+      expect($util.mapAnimateDuration({ ui: { reduceMotion: true }, maps: { animate: 400 } }, 250)).toBe(0);
+    });
+    it("returns 0 when no settings or animation value is available", () => {
+      expect($util.mapAnimateDuration(undefined)).toBe(0);
+      expect($util.mapAnimateDuration({})).toBe(0);
+    });
+  });
 });

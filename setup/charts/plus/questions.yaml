@@ -206,6 +206,10 @@ questions:
         description: "Space-delimited scopes requested from the provider."
         type: string
         default: "openid email profile"
+      - variable: oidc.PHOTOPRISM_OIDC_PROMPT
+        label: "OIDC Authorization Prompt"
+        description: "Optional prompt forcing re-authentication or account selection: login, select_account, or consent."
+        type: string
       - variable: oidc.PHOTOPRISM_OIDC_REGISTER
         label: "Auto Register Users"
         description: "Automatically create PhotoPrism accounts after successful OIDC login."
@@ -261,7 +265,17 @@ questions:
   - variable: database.password
     group: "Database"
     label: "Database Password"
-    description: "Optional password stored in the chart-managed secret."
+    description: "Optional password stored in the chart-managed secret. Ignored when an external secret is referenced."
+    type: string
+  - variable: database.passwordSecretName
+    group: "Database"
+    label: "Password Secret Name"
+    description: "Reference an existing Kubernetes Secret for the password instead of the chart-managed secret."
+    type: string
+  - variable: database.passwordSecretKey
+    group: "Database"
+    label: "Password Secret Key"
+    description: "Key within the referenced secret (defaults to PHOTOPRISM_DATABASE_PASSWORD)."
     type: string
   - variable: database.timeout
     group: "Database"

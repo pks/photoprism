@@ -5,6 +5,15 @@ import { getAppSessionStorage, getAppStorage } from "common/storage";
 const TouchStartEvent = "touchstart";
 const TouchMoveEvent = "touchmove";
 
+// Selector for the document's viewport meta tag.
+const ViewportMetaSelector = 'meta[name="viewport"]';
+
+// Viewport content that disables the browser's native pinch-zoom of the whole page.
+const ViewportNoZoom = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
+
+// Token in a viewport content string indicating native zoom is already disabled.
+const ViewportNoZoomToken = "user-scalable=no";
+
 // True if debug and/or trace logs should be recorded.
 const debug = window.__CONFIG__?.debug;
 const trace = window.__CONFIG__?.trace;
@@ -366,7 +375,9 @@ function isInteractiveTarget(target) {
 
 // preventNavigationTouchEvent suppresses iOS swipe-back, browser pull-to-refresh, and
 // accidental horizontal navigation while the lightbox is active. Scoped to edge bands
-// only — inner-area touches and taps on interactive widgets pass through.
+// only — inner-area touches and taps on interactive widgets pass through. Runs in the
+// capture phase (see _preventNavOptions) so overlays that stopPropagation to own their
+// gestures, like the PDF viewer, can't defeat it.
 export function preventNavigationTouchEvent(ev) {
   if (!(ev instanceof TouchEvent) || !ev.cancelable) {
     return;
@@ -405,6 +416,7 @@ export class View {
     this.scopes = [];
     this.hideScrollbar = false;
     this.preventNavigation = false;
+    this.savedViewportContent = "";
     this.focusScopes = new Map();
 
     // Tracks the most recent history position and derived navigation direction so components can
@@ -424,9 +436,10 @@ export class View {
     this._onFocusOutListener = this.onDocumentFocusOut.bind(this);
     document.addEventListener("focusout", this._onFocusOutListener);
 
-    // Options used when preventing navigation touch gestures; keep a stable
-    // object reference so add/removeEventListener calls can match on all browsers.
-    this._preventNavOptions = { passive: false };
+    // Guard listener options; a stable reference lets add/removeEventListener match.
+    // capture:true so a descendant that stops touch propagation (e.g. the PDF viewer's
+    // @touchstart.stop) can't defeat the window-level guard.
+    this._preventNavOptions = { passive: false, capture: true };
 
     if (trace) {
       // Store trace handlers so they can be removed later if needed.
@@ -555,6 +568,7 @@ export class View {
     let hideScrollbar = this.len() > 2 ? this.hideScrollbar : false;
     let disableScrolling = false;
     let disableNavigationGestures = false;
+    let disableViewportZoom = false;
     let preventNavigation = uid > 0 && !name.startsWith("PPage");
 
     switch (name) {
@@ -582,6 +596,7 @@ export class View {
         hideScrollbar = true;
         disableScrolling = true;
         disableNavigationGestures = true;
+        disableViewportZoom = true;
         preventNavigation = true;
         break;
     }
@@ -659,6 +674,14 @@ export class View {
       if (debug) {
         console.log(`view: re-enabled touch navigation gestures`);
       }
+    }
+
+    // Lock native pinch-zoom while a flagged overlay is active, restore it otherwise.
+    // Both helpers are idempotent, so re-applying the same state is a no-op.
+    if (disableViewportZoom) {
+      this.disableNativeZoom();
+    } else {
+      this.restoreNativeZoom();
     }
 
     if (debug) {
@@ -816,6 +839,47 @@ export class View {
   // Gives focus to the specified HTML element, or the first element that matches the specified selector string.
   focus(el, selector, scroll) {
     return setFocus(el, selector, scroll);
+  }
+
+  // disableNativeZoom locks the viewport so the browser can't pinch-zoom the whole page
+  // while an overlay (e.g. the lightbox) handles zoom itself; restoreNativeZoom restores
+  // the saved content. Idempotent; assumes one active overlay (savedViewportContent is
+  // app-global), which View.apply() upholds by locking only for the top-of-stack view.
+  disableNativeZoom() {
+    if (this.savedViewportContent) {
+      return;
+    }
+
+    const viewport = document.querySelector(ViewportMetaSelector);
+
+    if (!viewport) {
+      return;
+    }
+
+    const content = viewport.getAttribute("content") || "";
+
+    // Nothing to restore if the base viewport already blocks zoom (e.g. the Zoom setting is off).
+    if (content.includes(ViewportNoZoomToken)) {
+      return;
+    }
+
+    this.savedViewportContent = content;
+    viewport.setAttribute("content", ViewportNoZoom);
+  }
+
+  // restoreNativeZoom restores the viewport content saved by disableNativeZoom, if any.
+  restoreNativeZoom() {
+    if (!this.savedViewportContent) {
+      return;
+    }
+
+    const viewport = document.querySelector(ViewportMetaSelector);
+
+    if (viewport) {
+      viewport.setAttribute("content", this.savedViewportContent);
+    }
+
+    this.savedViewportContent = "";
   }
 
   // Navigates to the specified URL, optionally with a delay set in milliseconds and a blocked user interface.

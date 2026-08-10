@@ -11,16 +11,19 @@ import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/media/projection"
 	"github.com/photoprism/photoprism/pkg/media/video"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
 // Photo represents a photo search result row joined with its primary file and
 // related metadata that we surface in the UI and API responses.
+//
+// The XMP DocumentID and camera serial are deliberately absent, so this path withholds the same
+// identifying metadata that Photo.RedactForSession removes from the by-UID read.
 type Photo struct {
 	ID               uint          `json:"-" select:"photos.id"`
 	CompositeID      string        `json:"ID" select:"files.photo_id AS composite_id"`
-	UUID             string        `json:"DocumentID,omitempty" select:"photos.uuid"`
 	PhotoUID         string        `json:"UID" select:"photos.photo_uid"`
 	PhotoType        string        `json:"Type" select:"photos.photo_type"`
 	TypeSrc          string        `json:"TypeSrc" select:"photos.taken_src"`
@@ -52,7 +55,6 @@ type Photo struct {
 	PhotoPanorama    bool          `json:"Panorama" select:"photos.photo_panorama"`
 	CameraID         uint          `json:"CameraID" select:"photos.camera_id"` // Camera
 	CameraSrc        string        `json:"CameraSrc,omitempty" select:"photos.camera_src"`
-	CameraSerial     string        `json:"CameraSerial,omitempty" select:"photos.camera_serial"`
 	CameraMake       string        `json:"CameraMake,omitempty" select:"cameras.camera_make"`
 	CameraModel      string        `json:"CameraModel,omitempty" select:"cameras.camera_model"`
 	CameraType       string        `json:"CameraType,omitempty" select:"cameras.camera_type"`
@@ -70,7 +72,6 @@ type Photo struct {
 	PlaceCity        string        `json:"PlaceCity" select:"places.place_city"`
 	PlaceState       string        `json:"PlaceState" select:"places.place_state"`
 	PlaceCountry     string        `json:"PlaceCountry" select:"places.place_country"`
-	InstanceID       string        `json:"InstanceID" select:"files.instance_id"`
 	FileID           uint          `json:"-" select:"files.id AS file_id"` // File
 	FileUID          string        `json:"FileUID" select:"files.file_uid"`
 	FileRoot         string        `json:"FileRoot" select:"files.file_root"`
@@ -94,7 +95,7 @@ type Photo struct {
 	FileMime         string        `json:"-" select:"files.file_mime"`
 	FileSize         int64         `json:"-" select:"files.file_size"`
 	FileOrientation  int           `json:"-" select:"files.file_orientation"`
-	FileProjection   string        `json:"-" select:"files.file_projection"`
+	FileProjection   string        `json:"Projection,omitempty" select:"files.file_projection"`
 	FileAspectRatio  float32       `json:"-" select:"files.file_aspect_ratio"`
 	FileColors       string        `json:"-" select:"files.file_colors"`
 	FileDiff         int           `json:"-" select:"files.file_diff"`
@@ -219,6 +220,15 @@ func (m *Photo) IsPlayable() bool {
 func (m *Photo) MediaInfo() (mediaHash, mediaCodec, mediaMime string, width, height int) {
 	switch m.PhotoType {
 	case entity.MediaVideo, entity.MediaLive:
+		// Prefer a generated equirectangular AVC so dimensions, codec, and projection describe the
+		// media the sphere viewer actually plays rather than either square lens original.
+		if m.HasFisheyeOriginal() {
+			for _, f := range m.Files {
+				if f.FileVideo && f.FileHash != "" && projection.Type(f.FileProjection).Equal(projection.Equirectangular.String()) {
+					return f.FileHash, f.FileCodec, video.ContentType(f.FileMime, f.FileType, f.FileCodec, f.IsHDR()), f.FileWidth, f.FileHeight
+				}
+			}
+		}
 		for _, f := range m.Files {
 			if f.FileVideo && f.FileHash != "" {
 				return f.FileHash, f.FileCodec, video.ContentType(f.FileMime, f.FileType, f.FileCodec, f.IsHDR()), f.FileWidth, f.FileHeight
@@ -258,6 +268,72 @@ func (m *Photo) MediaInfo() (mediaHash, mediaCodec, mediaMime string, width, hei
 	}
 
 	return m.FileHash, "", m.FileMime, m.FileWidth, m.FileHeight
+}
+
+// MediaProjection returns the projection of the media the viewer actually shows, preferring an
+// equirectangular derivative over the video or primary file's own projection.
+// Raw fisheye-family values are never reported, since those originals are not viewable as spheres.
+func (m *Photo) MediaProjection() string {
+	// A dewarp derivative holds the corrected pixels, so it wins over the raw fisheye source.
+	// Only substituted when a fisheye original is present, so that a stack which merely contains
+	// some 360° file does not turn an unrelated primary picture into a sphere.
+	if m.HasFisheyeOriginal() {
+		for _, f := range m.Files {
+			if projection.Type(f.FileProjection).Equal(projection.Equirectangular.String()) {
+				return projection.Equirectangular.String()
+			}
+		}
+	}
+
+	switch m.PhotoType {
+	case entity.MediaVideo, entity.MediaLive:
+		// The primary row is usually a poster JPEG carrying no projection, so the video file's
+		// projection is used instead. Fisheye values are skipped because the playable media is the
+		// transcode, which the viewer routes via its 2:1 aspect ratio and the panorama flag.
+		for _, f := range m.Files {
+			if f.FileVideo && f.FileProjection != "" && !projection.Type(f.FileProjection).Fisheye() {
+				return f.FileProjection
+			}
+		}
+	}
+
+	// A fisheye/dual-fisheye original without an equirectangular derivative is not directly viewable,
+	// so report no projection rather than the raw fisheye value.
+	return sphereProjection(m.FileProjection)
+}
+
+// HasFisheyeOriginal reports whether the photo has a fisheye-family file that needs a dewarp
+// derivative to stand in for it, checking the primary row as well as the merged files.
+func (m *Photo) HasFisheyeOriginal() bool {
+	if projection.Type(m.FileProjection).Fisheye() {
+		return true
+	}
+
+	for _, f := range m.Files {
+		if projection.Type(f.FileProjection).Fisheye() {
+			return true
+		}
+	}
+
+	return false
+}
+
+// sphereProjection redacts raw fisheye-family projections, which the sphere viewer cannot display
+// directly, so only an equirectangular derivative ever routes a photo to it.
+func sphereProjection(proj string) string {
+	if projection.Type(proj).Fisheye() {
+		return ""
+	}
+
+	return proj
+}
+
+// fisheyePhotoFilter restricts the query to photos that have a live fisheye-family original file.
+// The primary file is the equirectangular dewarp derivative, so the subquery scans all files; it
+// mirrors the base query's `media_id IS NOT NULL` scope to exclude missing/soft-deleted files.
+func fisheyePhotoFilter(s *gorm.DB) *gorm.DB {
+	return s.Where("photos.id IN (SELECT photo_id FROM files WHERE media_id IS NOT NULL AND file_projection IN (?))",
+		[]string{projection.Fisheye.String(), projection.DualFisheye.String()})
 }
 
 // ShareBase returns a deterministic, human friendly file name stem for sharing

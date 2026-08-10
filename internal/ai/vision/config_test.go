@@ -3,10 +3,13 @@ package vision
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/photoprism/photoprism/internal/ai/vision/ollama"
 	"github.com/photoprism/photoprism/pkg/fs"
 )
 
@@ -15,6 +18,23 @@ func TestOptions(t *testing.T) {
 	var configFile = filepath.Join(configPath, "vision.yml")
 
 	t.Run("Save", func(t *testing.T) {
+		// Regenerate the committed fixture deterministically, independent of any ambient
+		// OLLAMA_* env, so it always reflects the self-hosted defaults (gemma4 + Think: "false").
+		origModel := CaptionModel.Model
+		origService := CaptionModel.Service
+		t.Cleanup(func() {
+			CaptionModel.Model = origModel
+			CaptionModel.Service = origService
+			ensureEnvOnce = sync.Once{}
+			registerOllamaEngineDefaults()
+		})
+		t.Setenv(ollama.APIKeyEnv, "")
+		t.Setenv(ollama.BaseUrlEnv, ollama.DefaultBaseUrl)
+		ensureEnvOnce = sync.Once{}
+		CaptionModel.Model = ""
+		CaptionModel.Service = Service{}
+		registerOllamaEngineDefaults()
+
 		_ = os.Remove(configFile)
 		options := NewConfig()
 		err := options.Save(configFile)
@@ -120,6 +140,77 @@ func TestConfigValues_Load(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, DefaultThresholds, cfg.Thresholds)
+	})
+	t.Run("NormalizePreserved", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "vision.yml")
+
+		configYml := "Models:\n- Type: labels\n  Name: custom\n  Engine: ollama\n  Normalize: phrase\n"
+
+		err := os.WriteFile(configFile, []byte(configYml), fs.ModeConfigFile)
+		assert.NoError(t, err)
+
+		cfg := NewConfig()
+		err = cfg.Load(configFile)
+		assert.NoError(t, err)
+
+		m := cfg.Model(ModelTypeLabels)
+		require.NotNil(t, m)
+		assert.Equal(t, NormalizePhrase, m.Normalize)
+		assert.Equal(t, NormalizePhrase, m.GetNormalize())
+	})
+	t.Run("NormalizeUnquotedFalse", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "vision.yml")
+
+		// YAML parses a bare "false" as a boolean, which must still reach the string field.
+		configYml := "Models:\n- Type: labels\n  Name: custom\n  Engine: ollama\n  Normalize: false\n"
+
+		err := os.WriteFile(configFile, []byte(configYml), fs.ModeConfigFile)
+		assert.NoError(t, err)
+
+		cfg := NewConfig()
+		err = cfg.Load(configFile)
+		assert.NoError(t, err)
+
+		m := cfg.Model(ModelTypeLabels)
+		require.NotNil(t, m)
+		assert.Equal(t, NormalizeFalse, m.GetNormalize())
+	})
+	t.Run("NormalizeSurvivesSave", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "vision.yml")
+
+		cfg := NewConfig()
+		cfg.Models = Models{{Type: ModelTypeLabels, Name: "custom", Engine: "ollama", Normalize: NormalizePhrase}}
+		assert.NoError(t, cfg.Save(configFile))
+
+		reloaded := NewConfig()
+		assert.NoError(t, reloaded.Load(configFile))
+
+		m := reloaded.Model(ModelTypeLabels)
+		require.NotNil(t, m)
+		assert.Equal(t, NormalizePhrase, m.Normalize)
+	})
+	t.Run("NormalizeInvalidCleared", func(t *testing.T) {
+		useSelfHostedOllamaDefaults(t)
+
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "vision.yml")
+
+		configYml := "Models:\n- Type: labels\n  Name: custom\n  Engine: ollama\n  Normalize: bogus\n"
+
+		err := os.WriteFile(configFile, []byte(configYml), fs.ModeConfigFile)
+		assert.NoError(t, err)
+
+		cfg := NewConfig()
+		err = cfg.Load(configFile)
+		assert.NoError(t, err)
+
+		m := cfg.Model(ModelTypeLabels)
+		require.NotNil(t, m)
+		assert.Equal(t, NormalizeAuto, m.Normalize)
+		assert.Equal(t, NormalizeWord, m.GetNormalize())
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/photoprism/photoprism/internal/api/download"
 	"github.com/photoprism/photoprism/internal/config/customize"
 	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/internal/entity/search"
 	"github.com/photoprism/photoprism/internal/photoprism"
 	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
@@ -64,16 +65,28 @@ func GetDownload(router *gin.RouterGroup) {
 			return
 		}
 
-		// If the file is identified by its hash, a valid download token is required.
-		if InvalidDownloadToken(c) {
+		// If the file is identified by its hash, the request must be authorized: a valid "?t=" download
+		// token, or a Portal JWT in the request header.
+		sess, valid := AuthDownload(c)
+		if !valid {
 			c.Data(http.StatusForbidden, "image/svg+xml", brokenIconSvg)
+			return
+		}
+
+		// Withhold files the session may not see, checked before the file is resolved so a not-visible
+		// hash and an unknown hash return the identical 404 — a token holder cannot probe which files
+		// exist by hash. FileDownloadable scopes an identified session and limits a coarse token to public.
+		if visible, vErr := search.FileDownloadable(id, sess); vErr != nil || !visible {
+			c.Data(http.StatusNotFound, "image/svg+xml", brokenIconSvg)
 			return
 		}
 
 		f, err := query.FileByHash(id)
 
+		// Every negative path returns the identical SVG 404 so an unknown hash is indistinguishable
+		// from one hidden or missing (no existence disclosure to a valid token holder).
 		if err != nil {
-			c.AbortWithStatusJSON(404, gin.H{"error": err.Error()})
+			c.Data(http.StatusNotFound, "image/svg+xml", brokenIconSvg)
 			return
 		}
 

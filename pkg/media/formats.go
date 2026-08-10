@@ -1,6 +1,10 @@
 package media
 
-import "github.com/photoprism/photoprism/pkg/fs"
+import (
+	"sort"
+
+	"github.com/photoprism/photoprism/pkg/fs"
+)
 
 // Formats maps file formats to general media types.
 var Formats = map[fs.Type]Type{
@@ -21,6 +25,7 @@ var Formats = map[fs.Type]Type{
 	fs.ImageHeic:       Image,
 	fs.ImageHeicS:      Image,
 	fs.ImageWebp:       Image,
+	fs.ImageInsp:       Image,
 	fs.ImageRaw:        Raw,
 	fs.ImageDng:        Raw,
 	fs.SidecarXMP:      Sidecar,
@@ -62,5 +67,34 @@ var Formats = map[fs.Type]Type{
 	fs.VideoASF:        Video,
 	fs.VideoWMV:        Video,
 	fs.VideoDV:         Video,
+	fs.VideoInsv:       Video,
 	fs.TypeUnknown:     Sidecar,
+}
+
+// FileTypes returns the file types that belong to the specified media type, sorted by name.
+// A media type groups several file types, so Raw covers both fs.ImageRaw and fs.ImageDng.
+func FileTypes(t Type) []fs.Type {
+	result := make([]fs.Type, 0, len(Formats))
+
+	for fileType, mediaType := range Formats {
+		if mediaType == t {
+			result = append(result, fileType)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+
+	return result
+}
+
+// FileTypeStrings returns the file types that belong to the specified media type as strings.
+func FileTypeStrings(t Type) []string {
+	fileTypes := FileTypes(t)
+	result := make([]string, 0, len(fileTypes))
+
+	for _, fileType := range fileTypes {
+		result = append(result, string(fileType))
+	}
+
+	return result
 }

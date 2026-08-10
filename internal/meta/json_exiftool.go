@@ -17,7 +17,6 @@ import (
 	"github.com/photoprism/photoprism/pkg/media/projection"
 	"github.com/photoprism/photoprism/pkg/media/video"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/time/tz"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
@@ -26,6 +25,291 @@ const (
 	MimeVideoMp4  = "video/mp4"
 	MimeQuicktime = "video/quicktime"
 )
+
+// jsonFaceName resolves the person name for a single ExifTool face region from
+// its already index-aligned per-region values, falling back to a unique global
+// PersonInImage entry referenced via rdfs:seeAlso.
+func jsonFaceName(j gjson.Result, name, title, extension, reference string) string {
+	switch {
+	case name != "":
+		return name
+	case title != "":
+		return title
+	case extension != "":
+		return extension
+	}
+
+	if reference != "Iptc4xmpExt:PersonInImage" {
+		return ""
+	}
+
+	people := j.Get("PersonInImage").Array()
+	unique := make([]string, 0, len(people))
+	for _, result := range people {
+		if v := strings.TrimSpace(result.String()); v != "" {
+			unique = append(unique, v)
+		}
+	}
+	if unique = txt.UniqueNames(unique); len(unique) == 1 {
+		return unique[0]
+	}
+
+	return ""
+}
+
+// jsonArrayFit classifies an optional per-region ExifTool array against a region
+// count of n. ExifTool omits absent struct members instead of padding them, so
+// only len == n is safe to zip; an empty array means the member is absent for
+// every region, and any other length means positional indexing would misassign.
+func jsonArrayFit(arr []gjson.Result, n int) (aligned, sparse bool) {
+	switch {
+	case len(arr) == n:
+		return true, false
+	case len(arr) == 0:
+		return false, false
+	default:
+		return false, true
+	}
+}
+
+// parseExiftoolFaces extracts supported XMP face regions from ExifTool JSON.
+// FaceRegions.Partial reports that ExifTool compacted a non-parallel set, such
+// as mixed circle and rectangle shapes, so some regions could not be resolved.
+func parseExiftoolFaces(j gjson.Result, options FaceOptions) FaceRegions {
+	var faces []Face
+	var tally regionTally
+
+	partial := false
+	// MWG-RS regions (XMP-mwg-rs): index-parallel arrays keyed by region index,
+	// with absent optional members compacted out of their arrays.
+	names := j.Get("RegionName").Array()
+	titles := j.Get("RegionTitle").Array()
+	extensions := j.Get("RegionPersonInImage").Array()
+	references := j.Get("RegionSeeAlso").Array()
+	types := j.Get("RegionType").Array()
+	xs := j.Get("RegionAreaX").Array()
+	ys := j.Get("RegionAreaY").Array()
+	ws := j.Get("RegionAreaW").Array()
+	hs := j.Get("RegionAreaH").Array()
+	ds := j.Get("RegionAreaD").Array()
+	units := j.Get("RegionAreaUnit").Array()
+	rotations := j.Get("RegionRotation").Array()
+
+	appliedW := int(j.Get("RegionAppliedToDimensionsW").Int())
+	appliedH := int(j.Get("RegionAppliedToDimensionsH").Int())
+	if appliedW <= 0 || appliedH <= 0 {
+		appliedW, appliedH = options.Width, options.Height
+	}
+
+	// Every region carries a center, so RegionAreaX and RegionAreaY are always
+	// index-parallel and define how many regions exist.
+	n := len(xs)
+	if len(ys) < n {
+		n = len(ys)
+	}
+
+	// recordFit reports whether arr can be indexed positionally, flagging the
+	// parse partial when ExifTool compacted a sparse optional member.
+	recordFit := func(arr []gjson.Result, count int) bool {
+		aligned, sparse := jsonArrayFit(arr, count)
+		if sparse {
+			partial = true
+		}
+		return aligned
+	}
+
+	typesAligned := recordFit(types, n)
+	namesAligned := recordFit(names, n)
+	titlesAligned := recordFit(titles, n)
+	extensionsAligned := recordFit(extensions, n)
+	referencesAligned := recordFit(references, n)
+	unitsAligned := recordFit(units, n)
+	rotationsAligned := recordFit(rotations, n)
+
+	// Shape resolves only when every region is a rectangle (parallel w and h) or
+	// every region is a circle (parallel d); a mixed set leaves the shape arrays
+	// compacted and unassignable, so it is reported partial rather than mis-sized.
+	wAligned := recordFit(ws, n)
+	hAligned := recordFit(hs, n)
+	dAligned := recordFit(ds, n)
+	rectMode := wAligned && hAligned
+	circleMode := dAligned && !rectMode
+
+	for i := 0; i < n; i++ {
+		// Filter by type only when the array is index-aligned: mwg-rs:Type is
+		// optional, so an entirely absent one is accepted as a face, while a
+		// sparse one was flagged partial above and is skipped, not mislabeled.
+		if typesAligned && !strings.EqualFold(types[i].String(), "Face") {
+			continue
+		} else if !typesAligned && len(types) > 0 {
+			continue
+		}
+
+		tally.declare()
+
+		var w, h, d float32
+		switch {
+		case rectMode:
+			w, h = float32(ws[i].Float()), float32(hs[i].Float())
+		case circleMode:
+			d = float32(ds[i].Float())
+		default:
+			// Shape unresolvable for this set (already flagged partial above).
+			continue
+		}
+
+		name := ""
+		if namesAligned || titlesAligned || extensionsAligned || referencesAligned {
+			nm, ti, ex, rf := "", "", "", ""
+			if namesAligned {
+				nm = names[i].String()
+			}
+			if titlesAligned {
+				ti = titles[i].String()
+			}
+			if extensionsAligned {
+				ex = extensions[i].String()
+			}
+			if referencesAligned {
+				rf = references[i].String()
+			}
+			name = jsonFaceName(j, nm, ti, ex, rf)
+		}
+
+		unit := ""
+		if unitsAligned {
+			unit = units[i].String()
+		}
+		var rotation float32
+		if rotationsAligned {
+			rotation = float32(rotations[i].Float())
+		}
+
+		if f, ok := normalizeRegionMWG(
+			name,
+			float32(xs[i].Float()), float32(ys[i].Float()),
+			w, h, d, unit, rotation,
+			appliedW, appliedH, options.Orientation,
+		); ok {
+			faces = append(faces, f)
+			tally.resolve()
+		}
+	}
+
+	// Microsoft MP:RegionInfo (XMP-MP): a self-contained rectangle string per
+	// region plus an optional display name.
+	mpNames := j.Get("RegionPersonDisplayName").Array()
+	mpRects := j.Get("RegionRectangle").Array()
+	mpNamesAligned := recordFit(mpNames, len(mpRects))
+
+	for i := 0; i < len(mpRects); i++ {
+		rect := mpRects[i].String()
+		if rect == "" {
+			continue
+		}
+
+		tally.declare()
+
+		name := ""
+		if mpNamesAligned {
+			name = mpNames[i].String()
+		}
+		if f, ok := normalizeRegionMP(name, rect, options.Orientation); ok {
+			faces = append(faces, f)
+			tally.resolve()
+		}
+	}
+
+	// ACDSee regions: DLYArea is the user-adjusted rectangle and takes
+	// precedence over the automatic ALGArea.
+	acdNames := j.Get("ACDSeeRegionName").Array()
+	acdTypes := j.Get("ACDSeeRegionType").Array()
+	dlyXs := j.Get("ACDSeeRegionDLYAreaX").Array()
+	dlyYs := j.Get("ACDSeeRegionDLYAreaY").Array()
+	dlyWs := j.Get("ACDSeeRegionDLYAreaW").Array()
+	dlyHs := j.Get("ACDSeeRegionDLYAreaH").Array()
+	dlyUnits := j.Get("ACDSeeRegionDLYAreaUnit").Array()
+	algXs := j.Get("ACDSeeRegionALGAreaX").Array()
+	algYs := j.Get("ACDSeeRegionALGAreaY").Array()
+	algWs := j.Get("ACDSeeRegionALGAreaW").Array()
+	algHs := j.Get("ACDSeeRegionALGAreaH").Array()
+	algUnits := j.Get("ACDSeeRegionALGAreaUnit").Array()
+
+	acdW := int(j.Get("ACDSeeRegionAppliedToDimensionsW").Int())
+	acdH := int(j.Get("ACDSeeRegionAppliedToDimensionsH").Int())
+	if acdW <= 0 || acdH <= 0 {
+		acdW, acdH = options.Width, options.Height
+	}
+
+	// ACDSeeRegionType is optional, so the region count comes from the coordinate
+	// arrays as well: deriving it from the type array alone would silently report
+	// zero regions for a writer that omits the type.
+	nAcd := max(len(acdTypes), len(dlyXs), len(algXs))
+	acdTypesAligned := recordFit(acdTypes, nAcd)
+	acdNamesAligned := recordFit(acdNames, nAcd)
+
+	// Evaluate every recordFit before combining: && short-circuits and would skip
+	// the partial bookkeeping for the remaining arrays.
+	dlyXAligned, dlyYAligned := recordFit(dlyXs, nAcd), recordFit(dlyYs, nAcd)
+	dlyWAligned, dlyHAligned := recordFit(dlyWs, nAcd), recordFit(dlyHs, nAcd)
+	algXAligned, algYAligned := recordFit(algXs, nAcd), recordFit(algYs, nAcd)
+	algWAligned, algHAligned := recordFit(algWs, nAcd), recordFit(algHs, nAcd)
+	dlyAligned := dlyXAligned && dlyYAligned && dlyWAligned && dlyHAligned
+	algAligned := algXAligned && algYAligned && algWAligned && algHAligned
+	dlyUnitsAligned := recordFit(dlyUnits, nAcd)
+	algUnitsAligned := recordFit(algUnits, nAcd)
+
+	for i := 0; i < nAcd; i++ {
+		if acdTypesAligned && !strings.EqualFold(acdTypes[i].String(), "Face") {
+			continue
+		} else if !acdTypesAligned && len(acdTypes) > 0 {
+			continue
+		}
+
+		tally.declare()
+
+		var xr, yr, wr, hr gjson.Result
+		unit := ""
+		switch {
+		case dlyAligned:
+			xr, yr, wr, hr = dlyXs[i], dlyYs[i], dlyWs[i], dlyHs[i]
+			if dlyUnitsAligned {
+				unit = dlyUnits[i].String()
+			}
+		case algAligned:
+			xr, yr, wr, hr = algXs[i], algYs[i], algWs[i], algHs[i]
+			if algUnitsAligned {
+				unit = algUnits[i].String()
+			}
+		default:
+			partial = true
+			continue
+		}
+
+		name := ""
+		if acdNamesAligned {
+			name = acdNames[i].String()
+		}
+		if f, ok := normalizeRegionMWG(
+			name,
+			float32(xr.Float()), float32(yr.Float()),
+			float32(wr.Float()), float32(hr.Float()), 0,
+			unit, 0, acdW, acdH, options.Orientation,
+		); ok {
+			faces = append(faces, f)
+			tally.resolve()
+		}
+	}
+
+	// ExifTool flattens the region containers away, so an empty region list is
+	// indistinguishable from a file that carries none. Declaring only a non-empty
+	// set keeps markers from being deleted on evidence this projection lacks.
+	return FaceRegions{
+		Faces:    DedupFaces(faces),
+		Declared: n > 0 || len(mpRects) > 0 || nAcd > 0,
+		Partial:  partial || tally.partial(),
+	}
+}
 
 // Exiftool parses JSON sidecar data as created by Exiftool.
 func (data *Data) Exiftool(jsonData []byte, originalName string) (err error) {
@@ -208,110 +492,10 @@ func (data *Data) Exiftool(jsonData []byte, originalName string) (err error) {
 		}
 	}
 
-	hasTimeOffset := false
-
-	// Has Media Create Date?
-	if !data.CreatedAt.IsZero() {
-		data.TakenAt = data.CreatedAt
-	}
-
-	// Fallback to GPS UTC Time?
-	if data.TakenAt.IsZero() && data.TakenAtLocal.IsZero() && !data.TakenGps.IsZero() {
-		data.TimeZone = tz.UTC
-		data.TakenAt = data.TakenGps.UTC()
-		data.TakenAtLocal = time.Time{}
-	}
-
-	// Check plausibility of the local <> UTC time difference.
-	if !data.TakenAt.IsZero() && !data.TakenAtLocal.IsZero() {
-		if d := data.TakenAt.Sub(data.TakenAtLocal).Abs(); d > time.Hour*27 {
-			log.Infof("metadata: %s has an invalid local time offset (%s)", logName, d.String())
-			log.Debugf("metadata: %s was taken at %s, local time %s, create time %s, time zone %s", logName, clean.Log(data.TakenAt.UTC().String()), clean.Log(data.TakenAtLocal.String()), clean.Log(data.CreatedAt.String()), clean.Log(data.TimeZone))
-			data.TakenAtLocal = data.TakenAt
-			data.TakenAt = data.TakenAt.UTC()
-		}
-	}
-
-	// Has time zone offset?
-	if _, offset := data.TakenAtLocal.Zone(); offset != 0 && !data.TakenAtLocal.IsZero() {
-		hasTimeOffset = true
-	} else if mt, ok := data.json["MIMEType"]; ok && data.TakenAtLocal.IsZero() && (mt == MimeVideoMp4 || mt == MimeQuicktime) {
-		// Assume default time zone for MP4 & Quicktime videos is UTC.
-		// see https://exiftool.org/TagNames/QuickTime.html
-		log.Tracef("metadata: default time zone for %s is UTC (%s)", logName, clean.Log(mt))
-		data.TimeZone = tz.UTC
-		data.TakenAt = data.TakenAt.UTC()
-		data.TakenAtLocal = time.Time{}
-	}
-
-	// Set time zone and calculate UTC time.
-	if data.Lat != 0 && data.Lng != 0 {
-		if zone := tz.Position(data.Lat, data.Lng); zone != "" {
-			data.TimeZone = zone
-		}
-
-		if loc := tz.Find(data.TimeZone); !data.TakenAtLocal.IsZero() {
-			if tl, parseErr := time.ParseInLocation("2006:01:02 15:04:05", data.TakenAtLocal.Format("2006:01:02 15:04:05"), loc); parseErr == nil {
-				data.TakenAtLocal = tz.Strip(data.TakenAtLocal)
-				data.TakenAt = tl.Truncate(time.Second).UTC()
-			} else {
-				log.Errorf("metadata: %s (exiftool)", clean.Error(parseErr)) // this should never happen
-			}
-		} else if !data.TakenAt.IsZero() {
-			if localUtc, parseErr := time.ParseInLocation("2006:01:02 15:04:05", data.TakenAt.In(loc).Format("2006:01:02 15:04:05"), time.UTC); parseErr == nil {
-				data.TakenAtLocal = localUtc
-				data.TakenAt = data.TakenAt.UTC()
-			} else {
-				log.Errorf("metadata: %s (exiftool)", clean.Error(parseErr)) // this should never happen
-			}
-		}
-	} else if hasTimeOffset {
-		if localUtc, parseErr := time.ParseInLocation("2006:01:02 15:04:05", data.TakenAtLocal.Format("2006:01:02 15:04:05"), time.UTC); parseErr == nil {
-			data.TakenAtLocal = localUtc.Truncate(time.Second).UTC()
-		}
-
-		data.TakenAt = data.TakenAt.Truncate(time.Second).UTC()
-	}
-
-	// Set UTC offset as time zone?
-	if data.TimeZone != "" && data.TimeZone != tz.Local && data.TimeZone != tz.UTC || data.TakenAt.IsZero() {
-		// Don't change existing time zone.
-	} else if utcOffset := tz.UtcOffset(data.TakenAt, data.TakenAtLocal, data.TimeOffset); utcOffset != "" {
-		data.TimeZone = utcOffset
-
-		if data.TakenAtLocal.IsZero() {
-			data.TakenAtLocal = tz.Strip(data.TakenAt)
-		}
-
-		data.TakenAt = data.TakenAt.UTC()
-		log.Infof("metadata: %s has time offset %s (exiftool)", logName, clean.Log(utcOffset))
-	} else if data.TimeOffset != "" {
-		log.Infof("metadata: %s has invalid time offset %s (exiftool)", logName, clean.Log(data.TimeOffset))
-	}
-
-	// Normalize time zone name.
-	data.TimeZone = tz.Name(data.TimeZone)
-
-	// Set local time based on UTC time if empty.
-	if data.TakenAtLocal.IsZero() && !data.TakenAt.IsZero() {
-		if loc := tz.Find(data.TimeZone); loc.String() == tz.Local {
-			data.TakenAtLocal = tz.Strip(data.TakenAt)
-			data.TakenAt = data.TakenAt.UTC()
-		} else if localUtc, parseErr := time.ParseInLocation("2006:01:02 15:04:05", data.TakenAt.In(loc).Format("2006:01:02 15:04:05"), time.UTC); parseErr == nil {
-			data.TakenAtLocal = localUtc
-			data.TakenAt = data.TakenAt.UTC()
-		} else {
-			log.Errorf("metadata: %s (exiftool)", clean.Error(parseErr)) // this should never happen
-		}
-	}
-
-	// Add nanoseconds to the calculated UTC and local time.
-	if data.TakenAt.Nanosecond() == 0 {
-		if ns := time.Duration(data.TakenNs); ns > 0 && ns <= time.Second {
-			data.TakenAt = data.TakenAt.Truncate(time.Second).UTC().Add(ns)
-			data.TakenAtLocal = data.TakenAtLocal.Truncate(time.Second).Add(ns)
-		}
-	}
+	// Normalize capture time, local time, and time zone using the shared
+	// resolver so the ExifTool JSON path and the XMP sidecar path produce
+	// identical entity state for the same metadata.
+	data.ResolveTimeZone(logName)
 
 	// Use actual image width and height if available, see issue #2447.
 	if jsonValues["ImageWidth"].Exists() && jsonValues["ImageHeight"].Exists() {
@@ -360,6 +544,14 @@ func (data *Data) Exiftool(jsonData []byte, originalName string) (err error) {
 		}
 	}
 
+	// Parse MWG-RS and Microsoft MP:RegionInfo face regions (people markers)
+	// from the embedded XMP so the indexer can reconcile them onto markers.
+	if regions := parseExiftoolFaces(j, FaceOptions{Orientation: data.Orientation, Width: data.Width, Height: data.Height}); regions.Declared || len(regions.Faces) > 0 {
+		data.Faces = regions.Faces
+		data.FacesDeclared = regions.Declared
+		data.FacesPartial = regions.Partial
+	}
+
 	// Normalize codec name.
 	data.Codec = strings.ToLower(data.Codec)
 	if strings.Contains(data.Codec, CodecJpeg) { // JPEG Image?
@@ -378,6 +570,13 @@ func (data *Data) Exiftool(jsonData []byte, originalName string) (err error) {
 	// Validate and normalize optional InstanceID.
 	if data.InstanceID != "" {
 		data.InstanceID = rnd.SanitizeUUID(data.InstanceID)
+	}
+
+	// Promote GPano-style markers to equirectangular when ProjectionType is absent.
+	if data.Projection == "" {
+		if data.json["UsePanoramaViewer"] == "true" || data.json["IsPhotosphere"] == "true" {
+			data.Projection = projection.Equirectangular.String()
+		}
 	}
 
 	if projection.Equirectangular.Equal(data.Projection) {

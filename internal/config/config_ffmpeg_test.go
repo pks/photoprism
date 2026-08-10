@@ -51,6 +51,23 @@ func TestConfig_FFmpegBitrate(t *testing.T) {
 	assert.Equal(t, 800, c.FFmpegBitrate())
 }
 
+func TestConfig_FFmpegFisheyeFov(t *testing.T) {
+	c := NewConfig(CliTestContext())
+	assert.Equal(t, encode.DefaultFisheyeFov, c.FFmpegFisheyeFov())
+
+	c.options.FFmpegFisheyeFov = 0
+	assert.Equal(t, encode.DefaultFisheyeFov, c.FFmpegFisheyeFov())
+
+	c.options.FFmpegFisheyeFov = 10
+	assert.Equal(t, encode.MinFisheyeFov, c.FFmpegFisheyeFov())
+
+	c.options.FFmpegFisheyeFov = 500
+	assert.Equal(t, encode.MaxFisheyeFov, c.FFmpegFisheyeFov())
+
+	c.options.FFmpegFisheyeFov = 190
+	assert.Equal(t, 190, c.FFmpegFisheyeFov())
+}
+
 func TestConfig_FFmpegSize(t *testing.T) {
 	c := NewConfig(CliTestContext())
 	assert.Equal(t, 4096, c.FFmpegSize())
@@ -59,7 +76,7 @@ func TestConfig_FFmpegSize(t *testing.T) {
 	assert.Equal(t, 4096, c.FFmpegSize())
 
 	c.options.FFmpegSize = -1
-	assert.Equal(t, 7680, c.FFmpegSize())
+	assert.Equal(t, 15360, c.FFmpegSize())
 
 	c.options.FFmpegSize = 10
 	assert.Equal(t, 720, c.FFmpegSize())
@@ -75,6 +92,9 @@ func TestConfig_FFmpegSize(t *testing.T) {
 
 	c.options.FFmpegSize = 8640
 	assert.Equal(t, thumb.Sizes[thumb.Fit7680].Width, c.FFmpegSize())
+
+	c.options.FFmpegSize = 15360
+	assert.Equal(t, thumb.Sizes[thumb.Fit15360].Width, c.FFmpegSize())
 }
 
 func TestConfig_FFmpegQuality(t *testing.T) {

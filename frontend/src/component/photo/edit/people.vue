@@ -79,6 +79,7 @@
                 prepend-inner-icon="mdi-account-plus"
                 density="comfortable"
                 class="input-name pa-0 ma-0 text-selectable"
+                @focus="loadPeople"
                 @update:model-value="(person) => onSetPerson(m, person)"
                 @blur="(ev) => onSetName(m, ev)"
                 @keyup.enter="(ev) => onSetName(m, ev)"
@@ -201,16 +202,6 @@ export default {
 
       return people.find((person) => person.UID === uid) || null;
     },
-    // updatePersonList refreshes the name suggestions after a subject is assigned
-    // or changed; the people cache is evicted so the reload reflects the change.
-    updatePersonList(subject) {
-      if (!subject) {
-        return;
-      }
-
-      typeaheadCache.evictPeople();
-      return this.loadPeople();
-    },
     hasFaceMenu(marker) {
       return this.getFaceActions(marker).some((action) => action.visible);
     },
@@ -257,7 +248,6 @@ export default {
             this.$notify.error(this.$gettext("Person not found"));
             return null;
           }
-          this.updatePersonList(subject);
           return subject;
         });
 
@@ -302,8 +292,7 @@ export default {
           }
           return subject.setCover(marker.Thumb);
         })
-        .then((updated) => {
-          this.updatePersonList(updated);
+        .then(() => {
           this.$notify.success(this.$gettext("Person cover updated"));
         })
         .catch((err) => {
@@ -412,6 +401,8 @@ export default {
       this.busy = true;
       this.$notify.blockUI("busy");
 
+      // Marker.setName() seeds the shared people cache, and the name combobox
+      // reloads suggestions on focus, so no explicit refresh is needed here.
       return model.setName().finally(() => {
         this.$notify.unblockUI();
         this.busy = false;

@@ -46,7 +46,7 @@ func (c *Config) FFmpegEncoder() encode.Encoder {
 	return encode.FindEncoder(c.options.FFmpegEncoder)
 }
 
-// FFmpegSize returns the maximum ffmpeg video encoding size in pixels (720-7680).
+// FFmpegSize returns the maximum ffmpeg video encoding size in pixels (720-15360).
 func (c *Config) FFmpegSize() int {
 	return thumb.VideoSize(c.options.FFmpegSize).Width
 }
@@ -80,6 +80,21 @@ func (c *Config) FFmpegBitrate() int {
 		return encode.MaxBitrateLimit
 	default:
 		return c.options.FFmpegBitrate
+	}
+}
+
+// FFmpegFisheyeFov returns the clamped field of view in degrees for the v360 dewarp filter.
+// Cameras recognized by entity.CameraFisheyeFov use their own angle instead of this value.
+func (c *Config) FFmpegFisheyeFov() int {
+	switch {
+	case c.options.FFmpegFisheyeFov <= 0:
+		return encode.DefaultFisheyeFov
+	case c.options.FFmpegFisheyeFov < encode.MinFisheyeFov:
+		return encode.MinFisheyeFov
+	case c.options.FFmpegFisheyeFov > encode.MaxFisheyeFov:
+		return encode.MaxFisheyeFov
+	default:
+		return c.options.FFmpegFisheyeFov
 	}
 }
 

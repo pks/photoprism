@@ -43,6 +43,9 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 		return GeoResults{}, ErrBadRequest
 	}
 
+	// Position of the picture referenced by "near", used to sort results by distance to it.
+	var nearLat, nearLng float64
+
 	// Find photos near another?
 	if txt.NotEmpty(frm.Near) {
 		photo := Photo{}
@@ -55,6 +58,9 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 
 		// Set the S2 Cell ID to search for.
 		frm.S2 = photo.CellID
+
+		// Remember the picture's position so results can be ordered by distance to it.
+		nearLat, nearLng = photo.PhotoLat, photo.PhotoLng
 
 		// Set the search distance if unspecified.
 		if frm.Dist <= 0 {
@@ -156,12 +162,14 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 		}
 	}
 
-	// Set sort order.
-	if frm.Near == "" {
+	// Sort results by time, unless the "Near" filter is used together with "nearLat" and "nearLng".
+	if frm.Near == "" || nearLat == 0 || nearLng == 0 {
 		s = s.Order("taken_at, photos.photo_uid")
 	} else {
-		// Sort by distance to UID.
-		s = s.Order(gorm.Expr("(photos.photo_uid = ?) DESC, ABS(? - photos.photo_lat)+ABS(? - photos.photo_lng)", frm.Near, frm.Lat, frm.Lng))
+		// Sort by distance to the picture referenced by "near", placing it first. Its position
+		// is used here rather than frm.Lat/Lng (which the near lookup leaves unset) so the order
+		// reflects proximity to that picture instead of distance from the (0,0) origin.
+		s = s.Order(gorm.Expr("(photos.photo_uid = ?) DESC, ABS(? - photos.photo_lat)+ABS(? - photos.photo_lng)", frm.Near, nearLat, nearLng))
 	}
 
 	// Find specific UIDs only.
@@ -286,6 +294,9 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 		case terms["panoramas"]:
 			frm.Query = strings.ReplaceAll(frm.Query, "panoramas", "")
 			frm.Panorama = true
+		case terms["fisheye"]:
+			frm.Query = strings.ReplaceAll(frm.Query, "fisheye", "")
+			frm.Fisheye = true
 		case terms["scans"]:
 			frm.Query = strings.ReplaceAll(frm.Query, "scans", "")
 			frm.Scan = "true"
@@ -389,7 +400,9 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 			s = s.Where("photos.photo_uid NOT IN (SELECT photo_uid FROM photos_albums pa JOIN albums a ON a.album_uid = pa.album_uid WHERE pa.hidden = 0 AND a.deleted_at IS NULL)")
 		} else if txt.NotEmpty(frm.Album) {
 			v := strings.Trim(frm.Album, "*%") + "%"
-			s = s.Where("photos.photo_uid IN (SELECT pa.photo_uid FROM photos_albums pa JOIN albums a ON a.album_uid = pa.album_uid AND pa.hidden = 0 WHERE (a.album_title LIKE ? OR a.album_slug LIKE ?))", v, v)
+			// Slugs are stored as lowercase binary strings, so the value must be
+			// folded to match on MySQL/MariaDB as well.
+			s = s.Where("photos.photo_uid IN (SELECT pa.photo_uid FROM photos_albums pa JOIN albums a ON a.album_uid = pa.album_uid AND pa.hidden = 0 WHERE (a.album_title LIKE ? OR a.album_slug LIKE ?))", v, strings.ToLower(v))
 		} else if txt.NotEmpty(frm.Albums) {
 			wheres, values := LikeAnyWord("a.album_title", frm.Albums)
 			for i, where := range wheres {
@@ -449,6 +462,11 @@ func UserPhotosGeo(frm form.SearchPhotosGeo, sess *entity.Session) (results GeoR
 	// Find panoramic pictures only.
 	if frm.Panorama {
 		s = s.Where("photos.photo_panorama = 1")
+	}
+
+	// Find fisheye 360° originals only.
+	if frm.Fisheye {
+		s = fisheyePhotoFilter(s)
 	}
 
 	// Find portrait/landscape/square pictures only.

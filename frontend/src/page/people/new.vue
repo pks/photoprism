@@ -76,6 +76,7 @@
                   autocomplete="off"
                   density="comfortable"
                   class="input-name pa-0 ma-0 text-selectable"
+                  @focus="loadPeople"
                   @update:model-value="(person) => onSetPerson(m, person)"
                   @blur="() => onSetName(m)"
                   @keyup.enter="() => onSetName(m)"
@@ -669,6 +670,8 @@ export default {
       this.busy = true;
       this.$notify.blockUI("busy");
 
+      // Face.setName() seeds the shared people cache, and the name combobox
+      // reloads suggestions on focus, so no explicit refresh is needed here.
       return model.setName(trimmed).finally(() => {
         this.$notify.unblockUI();
         this.busy = false;

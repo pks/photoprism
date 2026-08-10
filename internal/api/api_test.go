@@ -20,7 +20,12 @@ import (
 	"github.com/photoprism/photoprism/pkg/http/header"
 )
 
+// TestMain executes runTestMain returning it's results.  It is done this way so that defer can be used to cleanup.
 func TestMain(m *testing.M) {
+	os.Exit(runTestMain(m))
+}
+
+func runTestMain(m *testing.M) int {
 	// Init test logger.
 	log = logrus.StandardLogger()
 	log.SetLevel(logrus.TraceLevel)
@@ -31,22 +36,24 @@ func TestMain(m *testing.M) {
 
 	// Init test config.
 	c := config.TestConfig()
+	defer c.CleanupTestFolder()
+	defer func() {
+		if err := c.CloseDb(); err != nil {
+			log.Warnf("close db: %v", err)
+		}
+		// Remove temporary SQLite files after running the tests.
+		fs.PurgeTestDbFiles(".", false)
+	}()
+
 	get.SetConfig(c)
 
-	// Increase login rate limit for testing.
+	// Increase the login and authentication rate limits for testing so the many
+	// failed-auth cases across the suite don't exhaust the shared per-IP buckets.
 	limiter.Login = limiter.NewLimit(1, 10000)
+	limiter.Auth = limiter.NewLimit(1, 10000)
 
 	// Run unit tests.
-	code := m.Run()
-
-	if err := c.CloseDb(); err != nil {
-		log.Warnf("close db: %v", err)
-	}
-
-	// Remove temporary SQLite files after running the tests.
-	fs.PurgeTestDbFiles(".", false)
-
-	os.Exit(code)
+	return m.Run()
 }
 
 type CloseableResponseRecorder struct {

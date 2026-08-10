@@ -54,7 +54,7 @@ export default {
     },
     buttonIcon: {
       type: String,
-      default: "mdi-dots-horizontal",
+      default: "mdi-dots-vertical",
     },
   },
   emits: ["show", "hide"],
@@ -63,8 +63,14 @@ export default {
     return {
       visible: false,
       actions: [],
-      openOnHover: this.$util.shouldOpenOnHover(),
     };
+  },
+  computed: {
+    // openOnHover reactively reflects the user's menu open-on-hover preference so a settings
+    // change applies without a page reload (persistent menus keep no mount-time snapshot).
+    openOnHover() {
+      return this.$util.shouldOpenOnHover();
+    },
   },
   methods: {
     show() {
