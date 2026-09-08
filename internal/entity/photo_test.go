@@ -865,6 +865,7 @@ func TestPhoto_String(t *testing.T) {
 				var p *Photo
 				assert.Equal(t, tc.want, p.String())
 				if tc.checkFmt {
+					//nolint:staticcheck // the point is that fmt reaches String(), which calling it cannot show.
 					assert.Equal(t, tc.want, fmt.Sprintf("%s", p))
 				}
 				return
@@ -872,6 +873,7 @@ func TestPhoto_String(t *testing.T) {
 
 			assert.Equal(t, tc.want, tc.photo.String())
 			if tc.checkFmt {
+				//nolint:staticcheck // the point is that fmt reaches String(), which calling it cannot show.
 				assert.Equal(t, tc.want, fmt.Sprintf("%s", tc.photo))
 			}
 		})

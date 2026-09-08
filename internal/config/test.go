@@ -233,6 +233,27 @@ func TestConfig() *Config {
 	return testConfig
 }
 
+// RestoreDBFromCache will restore an SQLite database from a cache.
+// Only works if the target database does not exist.
+func RestoreDBFromCache(c *Config) (cachedDB bool) {
+	cachedDB = false
+	// Try to restore test db from cache.
+	if len(testDbCache) > 0 && c.DatabaseDriver() == dsn.DriverSQLite3 && !fs.FileExists(c.DatabaseFile()) {
+		if err := os.WriteFile(c.DatabaseFile(), testDbCache, fs.ModeFile); err != nil {
+			log.Warnf("config: %s (restore test database)", err)
+		} else {
+			log.Infof("config: restored %s from cache", c.DatabaseFile())
+			cachedDB = true
+		}
+
+		// Open the database
+		c.RegisterDb()
+	} else {
+		log.Infof("config: cache was not used for %s", c.DatabaseFile())
+	}
+	return cachedDB
+}
+
 // OnceTestConfig attempts to set testConfig if it hasn't already been done.
 func OnceTestConfig(c *Config) {
 	// If this is the 1st call to NewTestConfig, then cache it.
@@ -244,7 +265,10 @@ func OnceTestConfig(c *Config) {
 //
 // Not suitable for tests requiring a database or pre-created storage directories.
 func NewMinimalTestConfig(dataPath string) *Config {
-	return NewIsolatedTestConfig("", dataPath, false)
+	// Name the database even though this config never connects to one: an empty name
+	// resolves to the shared SQLite test DSN and deletes that file, which would drop the
+	// schema out from under a suite whose TestMain already opened it via TestConfig().
+	return NewIsolatedTestConfig("minimal", dataPath, false)
 }
 
 var testDbCache []byte
@@ -382,6 +406,7 @@ func NewTestConfig(dbName string) *Config {
 
 	thumb.SizeCached = c.ThumbSizePrecached()
 	thumb.SizeOnDemand = c.ThumbSizeUncached()
+	thumb.SizeFace = c.ThumbSizeFace()
 	thumb.Filter = c.ThumbFilter()
 	thumb.JpegQualityDefault = c.JpegQuality()
 

@@ -88,6 +88,7 @@ Development Environment (run on the host):
 
 Dependencies (run in the development container):
   dep                      Install the TensorFlow, ONNX, and NPM dependencies
+  dep-models               Install the TensorFlow and ONNX models only
   dep-js                   Install the NPM dependencies only
   upgrade                  Upgrade the Go and NPM dependencies
   tidy                     Add missing and remove unused Go modules
@@ -136,23 +137,23 @@ export HELP_TEXT
 
 # Declare "make" targets.
 all: dep build-js
-dep: dep-tensorflow dep-onnx dep-js
+dep: dep-models dep-js
 biuld: build
 build: build-go
 watch: watch-js
 build-all: build-go build-js
 pull: docker-pull
 test: test-js test-go
-test-go: run-test-go
+test-go: dep-models run-test-go
 test-hub: run-test-hub
 test-pkg: run-test-pkg
-test-ai: run-test-ai
+test-ai: dep-models run-test-ai
 test-api: run-test-api
 test-video: run-test-video
 test-entity: run-test-entity
 test-commands: run-test-commands
 test-photoprism: run-test-photoprism
-test-short: run-test-short
+test-short: dep-models run-test-short
 test-mariadb: reset-acceptance run-test-mariadb
 acceptance-run-chromium: storage/acceptance acceptance-sqlite-restart-1 wait-1 acceptance-api acceptance-sqlite-stop-1 acceptance-auth-sqlite-restart wait-2 acceptance-auth acceptance-auth-sqlite-stop acceptance-sqlite-restart-3 wait-3 acceptance acceptance-sqlite-stop-3
 acceptance-run-chromium-short: storage/acceptance acceptance-auth-sqlite-restart wait-1 acceptance-auth-short acceptance-auth-sqlite-stop acceptance-sqlite-restart-2 wait-2 acceptance-short acceptance-sqlite-stop-2
@@ -385,7 +386,20 @@ npm-update:
 	npm update --save --package-lock --ignore-scripts --no-audit --no-fund --no-update-notifier
 npm-audit:
 	npm audit --ignore-scripts --no-fund --no-update-notifier
-tools: gh claude codex
+tools: tools-mcp gh claude codex
+tools-mcp:
+	@if [ -e ".mcp.json" ]; then \
+	  echo "Keeping the existing .mcp.json."; \
+	elif [ -f "specs/.mcp.json" ]; then \
+	  ln -sfn "specs/.mcp.json" ".mcp.json"; \
+	  echo "Linked .mcp.json to specs/.mcp.json (remove it to opt out)."; \
+	elif [ ! -f ".mcp.json.example" ]; then \
+	  echo "No .mcp.json.example found, skipping."; \
+	else \
+	  rm -f ".mcp.json"; \
+	  cp -- ".mcp.json.example" ".mcp.json"; \
+	  echo "Copied .mcp.json from .mcp.json.example (remove it to opt out)."; \
+	fi
 codex: dep-codex codex-version codex-skills
 codex-version:
 	@echo "🤖 Installed $$(codex --version)."
@@ -403,6 +417,16 @@ codex-skills:
 	@if [ -d "specs/.agents/skills" ]; then \
 	  echo "Linking Codex skills from specs/.agents/skills..."; \
 	  install -d -m 755 -- ".agents/skills"; \
+	  for link in .agents/skills/*; do \
+	    [ -L "$$link" ] || continue; \
+	    target=$$(readlink "$$link"); \
+	    case "$$target" in \
+	      ../../specs/.agents/skills/*) \
+	        name=$$(basename "$$link"); \
+	        [ -d "specs/.agents/skills/$$name" ] || rm -- "$$link"; \
+	        ;; \
+	    esac; \
+	  done; \
 	  for src in specs/.agents/skills/*/; do \
 	    [ -d "$$src" ] || continue; \
 	    name=$$(basename "$$src"); \
@@ -464,6 +488,40 @@ claude-skills:
 	else \
 	  echo "No specs/.claude/skills directory found, skipping."; \
 	fi
+	@if [ -d "specs/.claude/agents" ]; then \
+	  echo "Linking Claude Code subagents from specs/.claude/agents..."; \
+	  install -d -m 755 -- ".claude/agents"; \
+	  for src in specs/.claude/agents/*.md; do \
+	    [ -f "$$src" ] || continue; \
+	    name=$$(basename "$$src"); \
+	    link=".claude/agents/$$name"; \
+	    target="../../specs/.claude/agents/$$name"; \
+	    if [ -L "$$link" ] || [ ! -e "$$link" ]; then \
+	      ln -sfn "$$target" "$$link"; \
+	    else \
+	      echo "WARNING: $$link exists and is not a symlink, skipping"; \
+	    fi; \
+	  done; \
+	else \
+	  echo "No specs/.claude/agents directory found, skipping."; \
+	fi
+	@if [ -d "specs/.claude/output-styles" ]; then \
+	  echo "Linking Claude Code output styles from specs/.claude/output-styles..."; \
+	  install -d -m 755 -- ".claude/output-styles"; \
+	  for src in specs/.claude/output-styles/*.md; do \
+	    [ -f "$$src" ] || continue; \
+	    name=$$(basename "$$src"); \
+	    link=".claude/output-styles/$$name"; \
+	    target="../../specs/.claude/output-styles/$$name"; \
+	    if [ -L "$$link" ] || [ ! -e "$$link" ]; then \
+	      ln -sfn "$$target" "$$link"; \
+	    else \
+	      echo "WARNING: $$link exists and is not a symlink, skipping"; \
+	    fi; \
+	  done; \
+	else \
+	  echo "No specs/.claude/output-styles directory found, skipping."; \
+	fi
 dep-go:
 	go build -v ./...
 dep-upgrade:
@@ -471,12 +529,11 @@ dep-upgrade:
 frontend-update:
 	make -C frontend update
 dep-upgrade-js: frontend-update
-dep-tensorflow:
-	scripts/download-facenet.sh
-	scripts/download-nasnet.sh
-	scripts/download-nsfw.sh
-dep-onnx:
-	scripts/download-scrfd.sh
+# Installs every model a development build runs or ships.
+dep-models:
+	scripts/dist/download-models.sh facenet nasnet nsfw sface yunet
+dep-tensorflow: dep-models
+dep-onnx: dep-models
 dep-acceptance: storage/acceptance
 storage/acceptance:
 	[ -f "./storage/acceptance/index.db" ] || (cd storage && rm -rf acceptance && wget -c https://dl.photoprism.app/qa/acceptance.tar.gz -O - | tar -xz)
@@ -598,9 +655,12 @@ vitest-component:
 reset-mariadb:
 	$(info Resetting photoprism database...)
 	$(MARIADB) < scripts/sql/reset-photoprism.sql
+# Interim: the Go unit test databases still carry the acceptance_ prefix, so this drops
+# them alongside testdb until they are renamed (see PR #4831).
 reset-mariadb-testdb:
 	$(info Resetting testdb database...)
 	$(MARIADB) < scripts/sql/reset-testdb.sql
+	$(MARIADB) -N -B -e "SELECT CONCAT('DROP DATABASE ', schema_name, ';') FROM information_schema.schemata WHERE schema_name LIKE 'acceptance\_%'" | $(MARIADB)
 reset-mariadb-local:
 	$(info Resetting local database...)
 	$(MARIADB) < scripts/sql/reset-local.sql
@@ -613,7 +673,13 @@ reset-testdb: reset-sqlite reset-mariadb-testdb
 reset-acceptance: reset-mariadb-acceptance
 reset-sqlite:
 	$(info Removing test database files...)
-	find ./internal -type f \( -iname '.*.db' -o -iname '.*.db-journal' -o -iname '.test.*' \) -delete
+	find ./internal -type f \( \
+		-iname '.*.db' \
+		-o -iname '.*.db-journal' \
+		-o -iname '.*.db-wal' \
+		-o -iname '.*.db-shm' \
+		-o -iname '.test.*' \
+	\) -delete
 run-test-short:
 	$(info Running short Go tests in parallel mode...)
 	$(GOTEST) -parallel 2 -count 1 -cpu 2 -short -timeout 5m ./pkg/... ./internal/... ./.../internal/...
@@ -1183,8 +1249,8 @@ docker-dummy-oidc:
 	docker pull --platform=arm64 golang:1
 	scripts/docker/buildx-multi.sh dummy-oidc linux/amd64,linux/arm64 $(BUILD_DATE)
 packer-digitalocean:
-	$(info Buildinng DigitalOcean marketplace image...)
-	(cd ./setup/docker/cloud && packer build digitalocean.json)
+	$(info Building DigitalOcean marketplace image...)
+	(cd ./setup/cloud/digitalocean && packer init digitalocean.pkr.hcl && packer build digitalocean.pkr.hcl)
 lint: lint-js lint-go check-api-request-limits check-make-help
 lint-js:
 	$(info Linting JS code...)
