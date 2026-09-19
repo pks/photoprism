@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jinzhu/gorm"
 	gc "github.com/patrickmn/go-cache"
 	"github.com/urfave/cli/v2"
 
@@ -273,6 +274,16 @@ func NewMinimalTestConfig(dataPath string) *Config {
 
 var testDbCache []byte
 var testDbMutex sync.Mutex
+
+// OpenTestDb opens a test connection without publishing it as the entity provider.
+// Configure callbacks before Init or RegisterDb makes the connection available to workers.
+func (c *Config) OpenTestDb() (*gorm.DB, error) {
+	if err := c.connectDb(); err != nil {
+		return nil, err
+	}
+
+	return c.db, nil
+}
 
 // NewMinimalTestConfigWithDb creates a lightweight test Config (minimal filesystem).
 //
@@ -685,7 +696,7 @@ func (c *Config) CleanupTestFolder() {
 
 	if filepath.Base(td) == fs.TestdataDir && strings.HasPrefix(filepath.Base(parent), "test-photoprism") {
 		if err := os.RemoveAll(parent); err != nil {
-			event.SystemWarn([]string{"config", "test", "cleanup %s", "%s"}, parent, clean.Error(err))
+			event.SystemWarn([]string{"config", "test", "cleanup %s", "%s"}, parent, clean.ErrorFull(err))
 			return
 		}
 		event.SystemDebug([]string{"config", "test", "cleanup %s", status.Succeeded}, parent)

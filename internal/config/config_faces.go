@@ -597,7 +597,7 @@ func (c *Config) initFaceModel() {
 
 			if err := c.SetFaceModel(c.faceModel); err != nil {
 				// The value applies to this process either way, and the next start detects again.
-				log.Warnf("config: %s", err)
+				log.Warnf("config: %s", clean.Error(err))
 			}
 		}
 	}
@@ -628,7 +628,7 @@ func (c *Config) SetFaceModel(name face.ModelName) error {
 	c.PropagateFaceModel()
 
 	if _, err := c.SaveOptionsPatch(Values{"FaceModel": name}); err != nil {
-		return fmt.Errorf("failed saving face model %s (%s)", clean.Log(name), err)
+		return fmt.Errorf("failed saving face model %s: %w", clean.Log(name), err)
 	}
 
 	return nil
