@@ -356,3 +356,42 @@ func TestPerformApiRequestResponseLimit(t *testing.T) {
 	assert.Nil(t, resp)
 	assert.Contains(t, err.Error(), "exceeds the maximum size")
 }
+
+func TestParseOllamaLabels(t *testing.T) {
+	t.Run("Object", func(t *testing.T) {
+		labels, err := parseOllamaLabels(`{"labels":[{"name":"cat","confidence":0.9,"topicality":0.8}]}`)
+		assert.NoError(t, err)
+		if assert.Len(t, labels, 1) {
+			assert.Equal(t, "cat", labels[0].Name)
+		}
+	})
+	t.Run("Empty", func(t *testing.T) {
+		labels, err := parseOllamaLabels("")
+		assert.NoError(t, err)
+		assert.Empty(t, labels)
+	})
+	t.Run("BareNumber", func(t *testing.T) {
+		// Some models emit a bare number instead of the expected labels object;
+		// this must not surface as an unmarshal error or noisy warn.
+		labels, err := parseOllamaLabels("0.8")
+		assert.NoError(t, err)
+		assert.Empty(t, labels)
+	})
+	t.Run("BareInteger", func(t *testing.T) {
+		labels, err := parseOllamaLabels("5")
+		assert.NoError(t, err)
+		assert.Empty(t, labels)
+	})
+	t.Run("Boolean", func(t *testing.T) {
+		labels, err := parseOllamaLabels("true")
+		assert.NoError(t, err)
+		assert.Empty(t, labels)
+	})
+	t.Run("MarkdownFencedObject", func(t *testing.T) {
+		labels, err := parseOllamaLabels("```json\n{\"labels\":[{\"name\":\"dog\",\"confidence\":0.7,\"topicality\":0.6}]}\n```")
+		assert.NoError(t, err)
+		if assert.Len(t, labels, 1) {
+			assert.Equal(t, "dog", labels[0].Name)
+		}
+	})
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -152,6 +153,13 @@ func decodeOllamaResponse(data []byte) (*ollama.Response, error) {
 func parseOllamaLabels(raw string) ([]LabelResult, error) {
 	cleaned := clean.JSON(raw)
 	if cleaned == "" {
+		return nil, nil
+	}
+
+	// The labels payload must be a JSON object. Some models emit a bare
+	// number, boolean, or string when asked for JSON even though the schema
+	// requires an object; treat those as "no labels" instead of failing.
+	if !strings.HasPrefix(cleaned, "{") {
 		return nil, nil
 	}
 
