@@ -30,9 +30,51 @@ func TestRelName(t *testing.T) {
 	t.Run("EmptyDir", func(t *testing.T) {
 		assert.Equal(t, "/some/path/foo/bar.baz", RelName("/some/path/foo/bar.baz", ""))
 	})
+	t.Run("SiblingPrefix", func(t *testing.T) {
+		assert.Equal(t, "/data/photos2/2024/IMG_1.heic", RelName("/data/photos2/2024/IMG_1.heic", "/data/photos"))
+		assert.Equal(t, "/data/photos-import/2024", RelName("/data/photos-import/2024", "/data/photos"))
+		assert.Equal(t, "2024/IMG_1.heic", RelName("/data/photos/2024/IMG_1.heic", "/data/photos"))
+	})
+	t.Run("Relative", func(t *testing.T) {
+		assert.Equal(t, "Test.jpg", RelName("testdata/Test.jpg", "testdata"))
+		assert.Equal(t, "testdata2/Test.jpg", RelName("testdata2/Test.jpg", "testdata"))
+	})
+	t.Run("RootDir", func(t *testing.T) {
+		assert.Equal(t, "some/path", RelName("/some/path", "/"))
+	})
+}
+
+func TestInDir(t *testing.T) {
+	t.Run("Below", func(t *testing.T) {
+		assert.True(t, InDir("/data/photos/2024/IMG_1.heic", "/data/photos"))
+		assert.True(t, InDir("/data/photos/2024/IMG_1.heic", "/data/photos/"))
+		assert.True(t, InDir("testdata/Test.jpg", "testdata"))
+		assert.True(t, InDir("/some/path", "/"))
+	})
+	t.Run("Same", func(t *testing.T) {
+		assert.True(t, InDir("/data/photos", "/data/photos"))
+	})
+	t.Run("SiblingPrefix", func(t *testing.T) {
+		assert.False(t, InDir("/data/photos2/2024/IMG_1.heic", "/data/photos"))
+		assert.False(t, InDir("/data/photos-import", "/data/photos"))
+		assert.False(t, InDir("/data/photo", "/data/photos"))
+	})
+	t.Run("Empty", func(t *testing.T) {
+		assert.False(t, InDir("", "/data/photos"))
+		assert.False(t, InDir("/data/photos/a.jpg", ""))
+	})
 }
 
 func TestFileName(t *testing.T) {
+	t.Run("CreatesFolder", func(t *testing.T) {
+		baseDir := t.TempDir()
+		sidecar := filepath.Join(t.TempDir(), "sidecar")
+
+		result, err := FileName(filepath.Join(baseDir, "2026", "clip.avi"), sidecar, baseDir, ExtAvc)
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(sidecar, "2026", "clip.avi.avc"), result)
+		assert.DirExists(t, filepath.Join(sidecar, "2026"))
+	})
 	t.Run("TestCopyThreeJpg", func(t *testing.T) {
 		result, err := FileName("testdata/Test (4).jpg", ".photoprism", Abs("testdata"), ".xmp")
 		assert.NoError(t, err)
@@ -58,6 +100,33 @@ func TestFileName(t *testing.T) {
 		result, err := FileName("testdata/FOO.XMP", "", Abs("testdata"), ".jpeg")
 		assert.NoError(t, err)
 		assert.Equal(t, "testdata/FOO.XMP.jpeg", result)
+	})
+}
+
+func TestFilePath(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		baseDir := t.TempDir()
+		sidecar := filepath.Join(t.TempDir(), "sidecar")
+
+		result, err := FilePath(filepath.Join(baseDir, "2026", "clip.avi"), sidecar, baseDir, ExtAvc)
+		assert.NoError(t, err)
+		assert.Equal(t, filepath.Join(sidecar, "2026", "clip.avi.avc"), result)
+
+		// Unlike FileName, it does not create the folder.
+		assert.NoDirExists(t, filepath.Join(sidecar, "2026"))
+	})
+	t.Run("SameDir", func(t *testing.T) {
+		result, err := FilePath("testdata/clip.avi", "", "", ExtAvc)
+		assert.NoError(t, err)
+		assert.Equal(t, "testdata/clip.avi.avc", result)
+	})
+	t.Run("EmptyName", func(t *testing.T) {
+		_, err := FilePath("", ".photoprism", "", ExtAvc)
+		assert.Error(t, err)
+	})
+	t.Run("EmptyExt", func(t *testing.T) {
+		_, err := FilePath("testdata/clip.avi", ".photoprism", "", "")
+		assert.Error(t, err)
 	})
 }
 
@@ -93,5 +162,25 @@ func TestFileNameHidden(t *testing.T) {
 	})
 	t.Run("Empty", func(t *testing.T) {
 		assert.False(t, FileNameHidden(""))
+	})
+}
+
+// TestFilePath_InSearchDir verifies that a file in the sidecar folder outside the base folder gets its sidecar
+// next to it, while other files keep their names below the sidecar folder.
+func TestFilePath_InSearchDir(t *testing.T) {
+	t.Run("FileInSidecar", func(t *testing.T) {
+		result, err := FilePath("/storage/sidecar/2024/x.mp4", "/storage/sidecar", "/originals", ".jpg")
+		assert.NoError(t, err)
+		assert.Equal(t, "/storage/sidecar/2024/x.mp4.jpg", result)
+	})
+	t.Run("FileOutsideBaseDir", func(t *testing.T) {
+		result, err := FilePath("/samples/x.mp4", "/storage/sidecar", "/originals", ".jpg")
+		assert.NoError(t, err)
+		assert.Equal(t, "/storage/sidecar/samples/x.mp4.jpg", result)
+	})
+	t.Run("SidecarInOriginals", func(t *testing.T) {
+		result, err := FilePath("/originals/.photoprism/sidecar/2024/x.mp4", "/originals/.photoprism/sidecar", "/originals", ".jpg")
+		assert.NoError(t, err)
+		assert.Equal(t, "/originals/.photoprism/sidecar/.photoprism/sidecar/2024/x.mp4.jpg", result)
 	})
 }

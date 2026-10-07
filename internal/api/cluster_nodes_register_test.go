@@ -15,9 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/gjson"
+	"golang.org/x/time/rate"
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/server/limiter"
 	"github.com/photoprism/photoprism/internal/service/cluster"
 	"github.com/photoprism/photoprism/internal/service/cluster/provisioner"
 	reg "github.com/photoprism/photoprism/internal/service/cluster/registry"
@@ -105,12 +107,26 @@ func TestClusterNodesRegister(t *testing.T) {
 		t.Cleanup(func() {
 			conf.Options().ClusterCIDR = prevClusterCIDR
 		})
-		conf.Options().ClusterCIDR = "192.0.2.0/24"
+		conf.Options().ClusterCIDR = "198.51.100.0/24, 192.0.2.0/24"
 		ClusterNodesRegister(router)
 
 		r := AuthenticatedRequestWithBodyAndIP(app, http.MethodPost, "/api/v1/cluster/nodes/register", `{"NodeName":"pp-node-cidr-allowed"}`, cluster.ExampleJoinToken, "192.0.2.42")
 		assert.Equal(t, http.StatusCreated, r.Code)
 		cleanupRegisterProvisioning(t, conf, r)
+	})
+	t.Run("ClusterCIDRInvalidListFailsClosed", func(t *testing.T) {
+		app, router, conf := NewApiTest()
+		enablePortalAPIs(t, conf)
+		conf.Options().JoinToken = cluster.ExampleJoinToken
+		prevClusterCIDR := conf.Options().ClusterCIDR
+		t.Cleanup(func() {
+			conf.Options().ClusterCIDR = prevClusterCIDR
+		})
+		conf.Options().ClusterCIDR = "192.0.2.0/24,garbage"
+		ClusterNodesRegister(router)
+
+		r := AuthenticatedRequestWithBodyAndIP(app, http.MethodPost, "/api/v1/cluster/nodes/register", `{"NodeName":"pp-node-cidr-invalid"}`, cluster.ExampleJoinToken, "192.0.2.42")
+		assert.Equal(t, http.StatusUnauthorized, r.Code)
 	})
 	t.Run("ForbiddenFromCDN", func(t *testing.T) {
 		app, router, conf := NewApiTest()
@@ -309,6 +325,60 @@ func TestClusterNodesRegister(t *testing.T) {
 		if assert.NotNil(t, got) {
 			assert.Equal(t, "pp-uuid-joined", got.Name)
 			assert.Equal(t, n.ClientID, got.ClientID)
+		}
+	})
+	t.Run("JoinWithRetiredNodeUUID", func(t *testing.T) {
+		app, router, conf := NewApiTest()
+		enablePortalAPIs(t, conf)
+		conf.Options().JoinToken = cluster.ExampleJoinToken
+		ClusterNodesRegister(router)
+
+		regy, err := reg.NewClientRegistryWithConfig(conf)
+		assert.NoError(t, err)
+		n := &reg.Node{Node: cluster.Node{UUID: rnd.UUIDv7(), Name: "pp-uuid-retired", Role: cluster.RoleInstance}}
+		assert.NoError(t, regy.Put(n))
+		assert.NoError(t, regy.DeleteAllByUUID(n.UUID))
+
+		// A removed registration retires its UUID rather than releasing it, so a later
+		// join may not claim that identifier.
+		body := `{"NodeName":"pp-uuid-successor","NodeUUID":"` + n.UUID + `"}`
+		r := AuthenticatedRequestWithBody(app, http.MethodPost, "/api/v1/cluster/nodes/register", body, cluster.ExampleJoinToken)
+		assert.Equal(t, http.StatusConflict, r.Code, "body=%s", r.Body.String())
+		assert.Contains(t, r.Body.String(), "already registered")
+
+		// The retired node is not resurrected by the refused request.
+		_, err = regy.FindByNodeUUID(n.UUID)
+		assert.Error(t, err)
+	})
+	t.Run("NodeUUIDRetiredByAnotherNode", func(t *testing.T) {
+		app, router, conf := NewApiTest()
+		enablePortalAPIs(t, conf)
+		conf.Options().JoinToken = cluster.ExampleJoinToken
+		ClusterNodesRegister(router)
+
+		regy, err := reg.NewClientRegistryWithConfig(conf)
+		assert.NoError(t, err)
+
+		other := &reg.Node{Node: cluster.Node{UUID: rnd.UUIDv7(), Name: "pp-retired-other", Role: cluster.RoleInstance}}
+		assert.NoError(t, regy.Put(other))
+		assert.NoError(t, regy.DeleteAllByUUID(other.UUID))
+
+		own := &reg.Node{Node: cluster.Node{UUID: rnd.UUIDv7(), Name: "pp-retired-own", Role: cluster.RoleInstance}}
+		assert.NoError(t, regy.Put(own))
+		nr, err := regy.RotateSecret(own.UUID)
+		assert.NoError(t, err)
+
+		// A live node may not move onto a retired UUID either.
+		token := oauthNodeAccessToken(t, app, router, conf, nr.ClientID, nr.ClientSecret)
+		body := `{"NodeName":"pp-retired-own","NodeUUID":"` + other.UUID + `","RotateSecret":true}`
+		r := AuthenticatedRequestWithBody(app, http.MethodPost, "/api/v1/cluster/nodes/register", body, token)
+		assert.Equal(t, http.StatusForbidden, r.Code, "body=%s", r.Body.String())
+
+		// Its own registration keeps the UUID it already held.
+		got, err := regy.FindByNodeUUID(own.UUID)
+		assert.NoError(t, err)
+		if assert.NotNil(t, got) {
+			assert.Equal(t, own.ClientID, got.ClientID)
 		}
 	})
 	t.Run("OwnNodeUUIDAccepted", func(t *testing.T) {
@@ -746,6 +816,25 @@ func oauthNodeAccessTokenWithScope(t testing.TB, app http.Handler, router *gin.R
 	return gjson.Get(w.Body.String(), "access_token").String()
 }
 
+// TestClusterNodesRegister_RateLimit checks that each request takes one token and the limit applies once they are used.
+func TestClusterNodesRegister_RateLimit(t *testing.T) {
+	app, router, conf := NewApiTest()
+	enablePortalAPIs(t, conf)
+	ClusterNodesRegister(router)
+
+	origLimit := limiter.Auth
+	t.Cleanup(func() { limiter.Auth = origLimit })
+	limiter.Auth = limiter.NewLimit(rate.Every(24*time.Hour), 3)
+
+	for range 3 {
+		r := PerformRequestWithBody(app, http.MethodPost, "/api/v1/cluster/nodes/register", `{"NodeName":""}`)
+		assert.Equal(t, http.StatusBadRequest, r.Code)
+	}
+
+	r := PerformRequestWithBody(app, http.MethodPost, "/api/v1/cluster/nodes/register", `{"NodeName":""}`)
+	assert.Equal(t, http.StatusTooManyRequests, r.Code)
+}
+
 // TestBuildPortalLoginURL covers the browser-facing Portal login URL reported
 // to nodes at registration: SiteUrl origin + login route, with an absolute
 // custom LoginUri returned as-is.
@@ -817,6 +906,19 @@ func TestNodeUUIDClaimedBy(t *testing.T) {
 	})
 	t.Run("Empty", func(t *testing.T) {
 		assert.False(t, nodeUUIDClaimedBy("", ""))
+	})
+	t.Run("RetiredRecord", func(t *testing.T) {
+		// A deleted registration keeps its UUID, so the identifier is still reported as
+		// claimed by the record that holds it.
+		retired := entity.NewClient()
+		retired.ClientName = "pp-claimed-retired"
+		retired.NodeUUID = rnd.UUIDv7()
+		assert.NoError(t, retired.Create())
+		assert.NoError(t, retired.Delete())
+
+		assert.True(t, nodeUUIDClaimedBy(retired.NodeUUID, ""))
+		assert.True(t, nodeUUIDClaimedBy(retired.NodeUUID, rnd.GenerateUID(entity.ClientUID)))
+		assert.False(t, nodeUUIDClaimedBy(retired.NodeUUID, retired.ClientUID))
 	})
 	t.Run("DuplicateRecords", func(t *testing.T) {
 		// The column is not unique, so a second record sharing the UUID must still be seen
@@ -976,6 +1078,11 @@ func TestValidateSiteURL(t *testing.T) {
 		{"https://photos.example.com", true},
 		{"http://photos.example.com", false},
 		{"http://127.0.0.1:2342", true},
+		{"http://127.0.0.2:2342", true},
+		{"http://[::1]:2342", true},
+		{"http://[0:0:0:0:0:0:0:1]:2342", true},
+		{"http://[::ffff:127.0.0.1]:2342", true},
+		{"http://[2001:db8::1]:2342", false},
 		{"mailto:me@example.com", false},
 		{"://bad", false},
 	}

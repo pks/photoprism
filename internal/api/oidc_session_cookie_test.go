@@ -113,11 +113,22 @@ func TestSignParseOIDCSession(t *testing.T) {
 	})
 }
 
+// storedCookieSession returns a stored session for the cookie tests, since only a stored session is eligible.
+func storedCookieSession(t *testing.T) *entity.Session {
+	t.Helper()
+
+	sess := &entity.Session{ID: rnd.SessionID(rnd.AuthToken()), UserUID: "uqxetse3cy5eo9z2"}
+	require.NoError(t, sess.Save())
+	t.Cleanup(func() { _ = sess.Delete() })
+
+	return sess
+}
+
 func TestSetOIDCSessionCookie(t *testing.T) {
 	t.Run("SignsSessionReferenceNotToken", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		sess := &entity.Session{ID: rnd.SessionID(rnd.AuthToken()), UserUID: "uqxetse3cy5eo9z2"}
+		sess := storedCookieSession(t)
 		SetOIDCSessionCookie(c, sess, "/api/v1/oauth", true)
 		ck := findCookie(w, OIDCSessionCookie)
 		if assert.NotNil(t, ck) {
@@ -135,7 +146,7 @@ func TestSetOIDCSessionCookie(t *testing.T) {
 	t.Run("EmptyPathFallsBackToBareApiUri", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		SetOIDCSessionCookie(c, &entity.Session{ID: rnd.SessionID(rnd.AuthToken()), UserUID: "uqxetse3cy5eo9z2"}, "", true)
+		SetOIDCSessionCookie(c, storedCookieSession(t), "", true)
 		ck := findCookie(w, OIDCSessionCookie)
 		if assert.NotNil(t, ck) {
 			assert.Equal(t, config.ApiUri+"/oauth", ck.Path)
@@ -144,7 +155,7 @@ func TestSetOIDCSessionCookie(t *testing.T) {
 	t.Run("InsecureOmitsSecureFlag", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		SetOIDCSessionCookie(c, &entity.Session{ID: rnd.SessionID(rnd.AuthToken()), UserUID: "uqxetse3cy5eo9z2"}, "/api/v1/oauth", false)
+		SetOIDCSessionCookie(c, storedCookieSession(t), "/api/v1/oauth", false)
 		ck := findCookie(w, OIDCSessionCookie)
 		if assert.NotNil(t, ck) {
 			assert.False(t, ck.Secure)
@@ -222,17 +233,45 @@ func TestOIDCSessionCookieSession(t *testing.T) {
 	t.Run("NilContext", func(t *testing.T) {
 		assert.Nil(t, OIDCSessionCookieSession(nil))
 	})
+	t.Run("StoredSession", func(t *testing.T) {
+		sess := entity.NewSession(3600, 0).SetUser(entity.UserFixtures.Pointer("alice"))
+		require.NoError(t, sess.Save())
+		t.Cleanup(func() { _ = sess.Delete() })
+
+		v := signOIDCSession(sess.ID, time.Now().Add(time.Minute))
+		c := newCtx(&http.Cookie{Name: OIDCSessionCookie, Value: v}) //nolint:gosec // test builds a request cookie; transport attributes are irrelevant
+
+		found := OIDCSessionCookieSession(c)
+		require.NotNil(t, found)
+		assert.Equal(t, sess.ID, found.ID)
+	})
+	t.Run("RemovedSessionReturnsNil", func(t *testing.T) {
+		sess := entity.NewSession(3600, 0).SetUser(entity.UserFixtures.Pointer("alice"))
+		require.NoError(t, sess.Save())
+
+		// Load the session into the cache, then remove the row directly.
+		_, err := entity.FindSession(sess.ID)
+		require.NoError(t, err)
+		require.NoError(t, entity.UnscopedDb().Exec("DELETE FROM auth_sessions WHERE id = ?", sess.ID).Error)
+
+		v := signOIDCSession(sess.ID, time.Now().Add(time.Minute))
+		c := newCtx(&http.Cookie{Name: OIDCSessionCookie, Value: v}) //nolint:gosec // test builds a request cookie; transport attributes are irrelevant
+		assert.Nil(t, OIDCSessionCookieSession(c))
+	})
 }
 
+// TestLoadOrCreateOIDCSessionKey checks key persistence and storage errors.
 func TestLoadOrCreateOIDCSessionKey(t *testing.T) {
-	// Use a DB-backed isolated config and restore the global afterwards, matching
-	// newPortalJWTFixture; a DB-less config would leave the global entity DB unusable
-	// for later tests in this package.
+	original := get.Config()
+	// Use a DB-backed config for the key store and restore the shared providers.
 	withTempConfig := func(t *testing.T, suffix string) *config.Config {
 		conf := config.NewMinimalTestConfigWithDb("oidc-session-key-"+suffix, t.TempDir())
 		orig := get.Config()
 		get.SetConfig(conf)
-		t.Cleanup(func() { get.SetConfig(orig) })
+		t.Cleanup(func() {
+			get.SetConfig(orig)
+			entity.SetDbProvider(orig)
+		})
 		return conf
 	}
 	t.Run("PersistsAndReloads", func(t *testing.T) {
@@ -259,6 +298,8 @@ func TestLoadOrCreateOIDCSessionKey(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(conf.PortalConfigPath(), "keys"), []byte("x"), fs.ModeSecretFile))
 		assert.Nil(t, loadOrCreateOIDCSessionKey())
 	})
+	require.Same(t, original, get.Config())
+	require.Same(t, original.Db(), entity.Db())
 }
 
 func TestOIDCSessionCookieAdmission(t *testing.T) {

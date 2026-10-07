@@ -1,10 +1,16 @@
 package photoprism
 
 import (
+	"fmt"
 	"math"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/http/header"
 	"github.com/photoprism/photoprism/pkg/media"
 )
 
@@ -29,8 +35,10 @@ func FindInsta360Capture(f *MediaFile) *Insta360Capture {
 	}
 
 	name, ok := media.ParseInsta360VideoName(f.FileName())
-	if !ok {
-		return nil
+
+	// The capture files are looked up under their canonical names, which must include f itself.
+	if !ok || name.FileName(name.Role) != f.FileName() {
+		return findImportedInsta360Capture(f)
 	}
 
 	result := &Insta360Capture{Name: name}
@@ -62,7 +70,299 @@ func FindInsta360Capture(f *MediaFile) *Insta360Capture {
 	return result
 }
 
-// ValidPair reports whether the two full-resolution lens files can safely be combined.
+// findImportedInsta360Capture resolves a capture whose files were renamed when imported together, using
+// the original names stored for the files of the same photo that share the imported set's stored name.
+func findImportedInsta360Capture(f *MediaFile) *Insta360Capture {
+	if f.Root() != entity.RootOriginals || entity.Db() == nil {
+		return nil
+	}
+
+	f.importedOnce.Do(func() {
+		f.importedCapture = queryImportedInsta360Capture(f)
+	})
+
+	return f.importedCapture
+}
+
+// queryImportedInsta360Capture looks up the files of an imported capture in the index.
+func queryImportedInsta360Capture(f *MediaFile) *Insta360Capture {
+	columns := "id, photo_id, file_name, original_name"
+
+	var own entity.File
+	if err := entity.UnscopedDb().Select(columns).Where("file_root = ? AND file_name = ? AND deleted_at IS NULL", entity.RootOriginals, f.RootRelName()).
+		First(&own).Error; err != nil || own.PhotoID == 0 {
+		return nil
+	}
+
+	name, ok := insta360OriginalName(own)
+	if !ok {
+		return nil
+	}
+
+	var files []entity.File
+	if err := entity.UnscopedDb().Select(columns).Where("photo_id = ? AND file_root = ? AND file_missing = 0 AND deleted_at IS NULL", own.PhotoID, entity.RootOriginals).
+		Order("id").Find(&files).Error; err != nil {
+		return nil
+	}
+
+	// Files imported together are named after the same main file, with a numeric suffix for the others.
+	setName := fs.BasePrefix(own.FileName, true)
+	result := &Insta360Capture{Name: name}
+
+	for _, file := range files {
+		member, memberOk := insta360OriginalName(file)
+		if !memberOk || member.Directory != name.Directory || member.Date != name.Date || member.Time != name.Time ||
+			member.Sequence != name.Sequence || filepath.Dir(file.FileName) != filepath.Dir(own.FileName) ||
+			fs.BasePrefix(file.FileName, true) != setName {
+			continue
+		}
+
+		fileName := filepath.Join(Config().OriginalsPath(), file.FileName)
+		if !fs.FileExistsNotEmpty(fileName) {
+			continue
+		}
+
+		captureFile, err := NewMediaFile(fileName)
+		if err != nil {
+			continue
+		}
+
+		switch {
+		case member.Role == media.Insta360VideoLeft && result.Left == nil:
+			result.Left = captureFile
+		case member.Role == media.Insta360VideoRight && result.Right == nil:
+			result.Right = captureFile
+		case member.Role == media.Insta360VideoProxy && result.Proxy == nil:
+			result.Proxy = captureFile
+		}
+	}
+
+	return result
+}
+
+// insta360ImportOrder returns the related files in the order they are imported, with the left lens of a
+// complete capture first, so it keeps the unsuffixed name that the other files of its set are named after.
+func insta360ImportOrder(related RelatedFiles) MediaFiles {
+	if capture := FindInsta360Capture(related.Main); !capture.ValidPair() || capture.Left.FileName() != related.Main.FileName() {
+		return related.Files
+	}
+
+	result := make(MediaFiles, 0, len(related.Files))
+	result = append(result, related.Main)
+
+	for _, f := range related.Files {
+		if f != nil && f.FileName() != related.Main.FileName() {
+			result = append(result, f)
+		}
+	}
+
+	return result
+}
+
+// insta360ImportedMember reports whether a file with the specified original name is the right lens or proxy
+// of the capture whose left lens has the original main name, so it needs no preview of its own.
+func insta360ImportedMember(mainOriginal, fileOriginal string) bool {
+	main, mainOk := parseInsta360OriginalName(mainOriginal)
+	member, memberOk := parseInsta360OriginalName(fileOriginal)
+
+	return mainOk && memberOk && main.Role == media.Insta360VideoLeft && member.Role != media.Insta360VideoLeft &&
+		member.Directory == main.Directory && member.Date == main.Date && member.Time == main.Time && member.Sequence == main.Sequence
+}
+
+// insta360OriginalName parses the original name of an .insv file that was renamed on import.
+func insta360OriginalName(file entity.File) (media.Insta360VideoName, bool) {
+	if fs.FileType(file.FileName) != fs.VideoInsv {
+		return media.Insta360VideoName{}, false
+	}
+
+	return parseInsta360OriginalName(file.OriginalName)
+}
+
+// parseInsta360OriginalName parses an original file name that must be a canonical capture name.
+func parseInsta360OriginalName(originalName string) (media.Insta360VideoName, bool) {
+	if originalName == "" {
+		return media.Insta360VideoName{}, false
+	}
+
+	name, ok := media.ParseInsta360VideoName(originalName)
+
+	return name, ok && name.FileName(name.Role) == filepath.Clean(originalName)
+}
+
+// insta360SkipConvert reports whether f is the right lens or proxy of a video capture, whose
+// sidecars are created from the left lens, or an LRV proxy, which is never converted.
+func insta360SkipConvert(f *MediaFile) bool {
+	if f != nil && f.HasFileType(fs.VideoLrv) {
+		return true
+	}
+
+	capture := FindInsta360Capture(f)
+	return capture.ValidPair() && capture.Left.FileName() != f.FileName()
+}
+
+// insta360ProxyPartner returns the existing partner of a left lens video or its LRV proxy, as written by
+// cameras that store both lenses in one file: the proxy for the left lens, and the left lens for the proxy.
+func insta360ProxyPartner(f *MediaFile) string {
+	if f == nil {
+		return ""
+	}
+
+	dir, baseName := filepath.Split(f.FileName())
+	var partner string
+
+	if match := fs.Insta360ProxyPattern.FindStringSubmatch(baseName); match != nil && match[1] == "LRV" && strings.HasSuffix(baseName, fs.ExtLrv) {
+		partner = fmt.Sprintf("VID_%s_%s_00_%s%s", match[2], match[3], match[5], fs.ExtInsv)
+	} else if match = fs.Insta360VideoPattern.FindStringSubmatch(baseName); match != nil && match[1] == "VID" && match[4] == "00" && strings.HasSuffix(baseName, fs.ExtInsv) {
+		partner = fmt.Sprintf("LRV_%s_%s_01_%s%s", match[2], match[3], match[5], fs.ExtLrv)
+	} else {
+		return ""
+	}
+
+	if partner = filepath.Join(dir, partner); fs.FileExistsNotEmpty(partner) {
+		return partner
+	}
+
+	return ""
+}
+
+// insta360ExpectsDewarp reports whether the preview of an Insta360 original is expected to be dewarped.
+func insta360ExpectsDewarp(f *MediaFile) bool {
+	return f != nil && (f.DewarpableInsv() || f.IsInsp() && f.DualFisheyeLayout())
+}
+
+// insta360PairPreview returns the complete capture whose left lens m is the generated preview of.
+func insta360PairPreview(m *MediaFile) *Insta360Capture {
+	if m == nil || !m.IsPreviewImage() {
+		return nil
+	}
+
+	sourceName := m.generatedSourceName()
+	if fs.FileType(sourceName) != fs.VideoInsv {
+		return nil
+	}
+
+	source, err := NewMediaFile(sourceName)
+	if err != nil {
+		return nil
+	}
+
+	if capture := FindInsta360Capture(source); capture.ValidPair() && capture.Left.FileName() == source.FileName() {
+		return capture
+	}
+
+	return nil
+}
+
+// insta360RightLensSidecar reports whether m was generated from the right lens of a complete capture.
+func insta360RightLensSidecar(m *MediaFile) bool {
+	sourceName := m.generatedSourceName()
+	if fs.FileType(sourceName) != fs.VideoInsv {
+		return false
+	}
+
+	source, err := NewMediaFile(sourceName)
+	if err != nil {
+		return false
+	}
+
+	capture := FindInsta360Capture(source)
+
+	return capture.ValidPair() && capture.Right.FileName() == source.FileName()
+}
+
+// insta360StalePreview reports whether the sidecar preview of a complete capture's left lens is not
+// 2:1 while its right lens is among the pending files, i.e. was made before both lenses were present.
+func insta360StalePreview(f *MediaFile, pending MediaFiles) bool {
+	capture := FindInsta360Capture(f)
+	if !capture.Dewarpable() || capture.Left.FileName() != f.FileName() {
+		return false
+	}
+
+	rightPending := false
+	for _, file := range pending {
+		if file != nil && file.FileName() == capture.Right.FileName() {
+			rightPending = true
+			break
+		}
+	}
+
+	if !rightPending {
+		return false
+	}
+
+	previewName := fs.ImageJpeg.FindGenerated(f.FileName(), []string{Config().SidecarPath(), fs.PPHiddenPathname}, Config().OriginalsPath(), false, nil)
+	if previewName == "" {
+		return false
+	}
+
+	preview, err := NewMediaFile(previewName)
+
+	return err == nil && preview.InSidecar() && preview.Width() > 0 && !preview.DualFisheyeLayout()
+}
+
+// MemberPreview reports whether the specified file name is a preview of the right lens or proxy.
+func (m *Insta360Capture) MemberPreview(rootRelName string) bool {
+	if m == nil || rootRelName == "" {
+		return false
+	}
+
+	sourceName := strings.TrimSuffix(rootRelName, filepath.Ext(rootRelName))
+	for _, file := range (MediaFiles{m.Right, m.Proxy}) {
+		if file != nil && file.RootRelName() == sourceName {
+			return true
+		}
+	}
+
+	return false
+}
+
+// Dewarpable reports whether the two lens files of a valid pair can be combined, which also requires
+// the content of both lenses to match their type and to be an MP4 or QuickTime container.
+func (m *Insta360Capture) Dewarpable() bool {
+	return m.ValidPair() && m.Left.CheckType() == nil && m.Right.CheckType() == nil &&
+		insta360LensContainer(m.Left.FileName()) && insta360LensContainer(m.Right.FileName())
+}
+
+// insta360LensContainer reports whether the file header shows an MP4 or QuickTime container.
+func insta360LensContainer(fileName string) bool {
+	switch fs.BaseType(fs.MimeType(fileName)) {
+	case header.ContentTypeMp4, header.ContentTypeMov:
+		return true
+	default:
+		return false
+	}
+}
+
+// insta360LensNotVideo reports whether f is an .insv file whose header was read and shows no MP4 or
+// QuickTime container, as Insta360 cameras write.
+func insta360LensNotVideo(f *MediaFile) bool {
+	if f == nil || !f.IsInsv() {
+		return false
+	}
+
+	mimeType, err := fs.DetectMimeType(f.FileName())
+
+	if err != nil {
+		return false
+	}
+
+	switch fs.BaseType(mimeType) {
+	case header.ContentTypeMp4, header.ContentTypeMov:
+		return false
+	default:
+		return true
+	}
+}
+
+// warnInsta360LensNotVideo logs a warning with the given prefix if f is an .insv file that is not a video.
+func warnInsta360LensNotVideo(prefix string, f *MediaFile) {
+	if insta360LensNotVideo(f) {
+		log.Warnf("%s: %s is not an MP4 or QuickTime video", prefix, clean.Log(f.RootRelName()))
+	}
+}
+
+// ValidPair reports whether the two lens files match in dimensions, frame rate, and duration, which
+// decides grouping and stacking. Dewarpable decides whether they are combined.
 func (m *Insta360Capture) ValidPair() bool {
 	if m == nil || m.Left == nil || m.Right == nil || !m.Left.IsInsv() || !m.Right.IsInsv() {
 		return false
@@ -118,16 +418,31 @@ func (m *MediaFile) DewarpableInsv() bool {
 		return false
 	}
 
+	if capture := FindInsta360Capture(m); capture != nil && capture.Dewarpable() {
+		return true
+	}
+
+	return m.Insta360DualStream() || m.DualFisheyeLayout()
+}
+
+// Insta360Fisheye reports whether an INSV holds or belongs to dual-fisheye footage, including a
+// grouped capture whose lenses are not dewarpable.
+func (m *MediaFile) Insta360Fisheye() bool {
+	if m == nil || !m.IsInsv() {
+		return false
+	}
+
 	if capture := FindInsta360Capture(m); capture != nil && capture.ValidPair() {
 		return true
 	}
 
-	return m.DualFisheyeLayout()
+	return m.Insta360DualStream() || m.DualFisheyeLayout()
 }
 
-// DewarpedVideoFile returns an existing equirectangular AVC for an Insta360 video.
+// DewarpedVideoFile returns an existing AVC derivative of an Insta360 video, which is equirectangular
+// unless the footage cannot be dewarped.
 func DewarpedVideoFile(m *MediaFile) *MediaFile {
-	if m == nil || !m.DewarpableInsv() {
+	if m == nil || !m.Insta360Fisheye() {
 		return nil
 	}
 
@@ -140,6 +455,21 @@ func DewarpedVideoFile(m *MediaFile) *MediaFile {
 	}
 
 	return nil
+}
+
+// Insta360PlaybackFile returns the file to play for a video, and false while the equirectangular
+// AVC of footage that can be dewarped is not ready. Footage that cannot be dewarped and has no
+// derivative is played as it is.
+func Insta360PlaybackFile(m *MediaFile) (*MediaFile, bool) {
+	if m == nil {
+		return nil, false
+	} else if playable := DewarpedVideoFile(m); playable != nil {
+		return playable, true
+	} else if m.DewarpableInsv() {
+		return nil, false
+	}
+
+	return m, true
 }
 
 // absDuration returns the absolute value of a duration.

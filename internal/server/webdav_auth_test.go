@@ -5,14 +5,22 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
+	"github.com/photoprism/photoprism/internal/server/limiter"
+	"github.com/photoprism/photoprism/pkg/authn"
+	"github.com/photoprism/photoprism/pkg/dsn"
 	"github.com/photoprism/photoprism/pkg/http/header"
 	"github.com/photoprism/photoprism/pkg/rnd"
 )
@@ -169,6 +177,63 @@ func TestWebDAVAuth(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, c.Writer.Status())
 		assert.Equal(t, BasicAuthRealm, c.Writer.Header().Get("WWW-Authenticate"))
+	})
+	t.Run("AppPasswordAuthToken", func(t *testing.T) {
+		appSess, err := entity.AddClientSession("webdav-app-password", 3600, "*", authn.GrantPassword, entity.UserFixtures.Pointer("alice"))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = appSess.Delete() })
+		require.True(t, appSess.IsApplication())
+
+		request := func(extraToken string) int {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = &http.Request{Header: make(http.Header)}
+
+			basicAuth := fmt.Appendf(nil, "alice:%s", appSess.AuthToken())
+			c.Request.Header.Add(header.Auth, fmt.Sprintf("%s %s", header.AuthBasic, base64.StdEncoding.EncodeToString(basicAuth)))
+
+			if extraToken != "" {
+				c.Request.Header.Set(header.XAuthToken, extraToken)
+			}
+
+			entity.FlushSessionCache()
+			webdavHandler(c)
+
+			return c.Writer.Status()
+		}
+
+		// App passwords authenticate through the auth token check only.
+		assert.Equal(t, http.StatusOK, request(""))
+		assert.Equal(t, http.StatusUnauthorized, request("x"))
+
+		conf.Settings().Features.AppPasswords = false
+		defer func() { conf.Settings().Features.AppPasswords = true }()
+
+		assert.Equal(t, http.StatusUnauthorized, request(""))
+		assert.Equal(t, http.StatusUnauthorized, request("x"))
+	})
+	t.Run("AppPasswordWithoutWebDAVScope", func(t *testing.T) {
+		appSess, err := entity.AddClientSession("webdav-app-password-scope", 3600, "sessions", authn.GrantPassword, entity.UserFixtures.Pointer("alice"))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = appSess.Delete() })
+
+		for _, extraToken := range []string{"", "x"} {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = &http.Request{Header: make(http.Header)}
+
+			basicAuth := fmt.Appendf(nil, "alice:%s", appSess.AuthToken())
+			c.Request.Header.Add(header.Auth, fmt.Sprintf("%s %s", header.AuthBasic, base64.StdEncoding.EncodeToString(basicAuth)))
+
+			if extraToken != "" {
+				c.Request.Header.Set(header.XAuthToken, extraToken)
+			}
+
+			entity.FlushSessionCache()
+			webdavHandler(c)
+
+			assert.Equal(t, http.StatusUnauthorized, c.Writer.Status())
+		}
 	})
 }
 
@@ -334,4 +399,86 @@ func TestSetWebDAVUserFullAccess(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWebDAVAuthSession_RemovedRow checks that a session whose row was removed is refused and stays removed.
+func TestWebDAVAuthSession_RemovedRow(t *testing.T) {
+	alice := entity.UserFixtures.Pointer("alice")
+
+	s := entity.NewSession(3600, 0).SetUser(alice).SetScope("webdav")
+	s.SetClientName("webdav-removed")
+	s.SetClientIP("10.1.1.1")
+	s.SetUserAgent("agent-a")
+	assert.NoError(t, s.Save())
+
+	token := s.AuthToken()
+
+	// Load the session into the cache, then remove the row directly.
+	_, err := entity.FindSession(s.ID)
+	assert.NoError(t, err)
+	assert.NoError(t, entity.UnscopedDb().Exec("DELETE FROM auth_sessions WHERE id = ?", s.ID).Error)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request, _ = http.NewRequest(http.MethodGet, "/originals/", nil)
+	c.Request.Header.Set("User-Agent", "agent-b")
+	c.Request.RemoteAddr = "10.2.2.2:1234"
+
+	sess, user, _, _ := WebDAVAuthSession(c, token)
+
+	assert.Nil(t, sess)
+	assert.Nil(t, user)
+
+	var n int
+	assert.NoError(t, entity.UnscopedDb().Model(&entity.Session{}).Where("id = ?", s.ID).Count(&n).Error)
+	assert.Equal(t, 0, n, "the session row must stay deleted")
+}
+
+// TestWebDAVAuthSession_RateLimit checks that tokens without a session are counted and failed lookups are not.
+func TestWebDAVAuthSession_RateLimit(t *testing.T) {
+	origLimit := limiter.Auth
+	t.Cleanup(func() { limiter.Auth = origLimit })
+
+	lookup := func(clientIp string) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request, _ = http.NewRequest(http.MethodGet, "/originals/", nil)
+		c.Request.RemoteAddr = clientIp + ":1234"
+		sess, user, _, _ := WebDAVAuthSession(c, rnd.AuthToken())
+		assert.Nil(t, sess)
+		assert.Nil(t, user)
+	}
+
+	t.Run("NotFound", func(t *testing.T) {
+		limiter.Auth = limiter.NewLimit(rate.Every(24*time.Hour), 3)
+		for range 3 {
+			lookup("198.51.100.61")
+		}
+		assert.True(t, limiter.Auth.Reject("198.51.100.61"))
+	})
+	t.Run("DatabaseError", func(t *testing.T) {
+		limiter.Auth = limiter.NewLimit(rate.Every(24*time.Hour), 3)
+		tempConn := &entity.DbConn{Driver: dsn.DriverSQLite3, Dsn: filepath.Join(t.TempDir(), "webdav-session-error.db")}
+		entity.SetDbProvider(tempConn)
+		t.Cleanup(func() {
+			entity.SetDbProvider(get.Config())
+			tempConn.Close()
+		})
+
+		for range 4 {
+			lookup("198.51.100.62")
+		}
+		assert.False(t, limiter.Auth.Reject("198.51.100.62"), "not counted")
+	})
+}
+
+func TestWebDAVAbortServerError(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		WebDAVAbortServerError(c)
+
+		assert.True(t, c.IsAborted())
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, BasicAuthRealm, w.Header().Get("WWW-Authenticate"))
+	})
 }

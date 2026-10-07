@@ -592,6 +592,56 @@ func (m *File) Rename(fileName, rootName, filePath, fileBase string) error {
 	return nil
 }
 
+// captureName returns the file name that identifies a capture original: its current name, or its
+// original name as long as the file type has not changed since import.
+func (m *File) captureName() string {
+	switch {
+	case m == nil:
+		return ""
+	case fs.StackGroup(m.FileName) != "":
+		return m.FileName
+	case m.OriginalName != "" && fs.FileType(m.FileName) == fs.FileType(m.OriginalName):
+		return m.OriginalName
+	}
+
+	return m.FileName
+}
+
+// StackGroup returns the shared stack name of a lens or proxy original of a multi-file capture.
+func (m *File) StackGroup() string {
+	return fs.StackGroup(m.captureName())
+}
+
+// KeepStacked reports whether the file is stacked under the name of another file of its capture,
+// such as a right lens or proxy, so it must not be separated from it.
+func (m *File) KeepStacked() bool {
+	return fs.KeepStacked(m.captureName())
+}
+
+// KeepStackedWith reports whether the file must stay with the given files of its photo: it is
+// stacked under another file's name, or another original of its capture is stacked under its name.
+func (m *File) KeepStackedWith(files Files) bool {
+	if m == nil {
+		return false
+	} else if m.KeepStacked() {
+		return true
+	}
+
+	group := m.StackGroup()
+
+	if group == "" {
+		return false
+	}
+
+	for i := range files {
+		if f := &files[i]; f.FileUID != m.FileUID && f.FileRoot == RootOriginals && !f.FileSidecar && !f.FileMissing && f.KeepStacked() && f.StackGroup() == group {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Undelete removes the missing flag from this file.
 func (m *File) Undelete() error {
 	if !m.Missing() {
@@ -864,6 +914,23 @@ func (m *File) AddFaces(faces face.Faces) {
 	}
 }
 
+// validFaceEmbeddings reports whether the face holds one finite embedding of the width its model
+// produces. A remote service can return either defect, and a vector that records no model is
+// checked against no expected width.
+func validFaceEmbeddings(f face.Face) bool {
+	if !f.Embeddings.One() {
+		return false
+	}
+
+	dims := f.Embeddings.Dims()
+
+	if producer := face.FindEmbeddingModel(f.EmbedModel); producer != nil {
+		dims = producer.Dims
+	}
+
+	return face.ValidEmbeddings(f.Embeddings, dims)
+}
+
 // AddFace adds a face marker to the file.
 func (m *File) AddFace(f face.Face, subjUid string) {
 	// Only add faces with exactly one embedding so that they can be compared and clustered.
@@ -871,17 +938,7 @@ func (m *File) AddFace(f face.Face, subjUid string) {
 		return
 	}
 
-	// A vector with non-finite values poisons every later distance, and one whose width
-	// disagrees with its own model belongs to no embedding space at all; a remote service
-	// can return either, so both are rejected here. The width is only checked against a
-	// known producer, because a vector that records no model implies no expected width.
-	dims := f.Embeddings.Dims()
-
-	if producer := face.FindEmbeddingModel(f.EmbedModel); producer != nil {
-		dims = producer.Dims
-	}
-
-	if !face.ValidEmbeddings(f.Embeddings, dims) {
+	if !validFaceEmbeddings(f) {
 		log.Warnf("faces: skipped invalid %d-value embedding for file %s", f.Embeddings.Dims(), clean.Log(m.FileUID))
 		return
 	}

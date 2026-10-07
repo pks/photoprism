@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -74,14 +73,14 @@ func (c *Config) FaceEngineRunType() vision.RunType {
 }
 
 // FaceEngineShouldRun reports whether the face detection engine should execute in the
-// specified scheduling context. The decision mirrors the face model run schedule in
-// the vision subsystem, so detection stays aligned with embedding generation.
+// specified scheduling context. It never does while no embeddings can be generated,
+// since a detected face is only saved with its embedding.
 func (c *Config) FaceEngineShouldRun(when vision.RunType) bool {
 	if c == nil {
 		return false
 	}
 
-	if c.DisableFaces() || c.FaceEngine() == face.EngineNone {
+	if c.DisableFaces() || c.FaceEngine() == face.EngineNone || faceEmbeddingsUnavailable() != "" {
 		return false
 	}
 
@@ -113,6 +112,21 @@ func (c *Config) FaceEngineShouldRun(when vision.RunType) bool {
 	}
 
 	return false
+}
+
+// faceEmbeddingsUnavailable returns why this process generates no face embeddings, or "" when it
+// does. Detection is skipped then, because a detected face is only saved with its embedding.
+func faceEmbeddingsUnavailable() string {
+	switch {
+	case face.EmbedderError() != nil:
+		return "the face embedding model failed to load"
+	case face.EmbeddingsDisabled():
+		return "face embeddings are disabled"
+	case face.EmbeddingsBlocked():
+		return "face embeddings are paused"
+	}
+
+	return ""
 }
 
 // faceEngineRunsOnIndex reports whether this host is fast enough to detect faces while indexing
@@ -296,6 +310,7 @@ func (c *Config) ConfigureFaceDetector(minScore float64) error {
 			ModelPath:      c.FaceEngineModelPath(),
 			Threads:        c.FaceDetectorThreads(),
 			ScoreThreshold: detectorScoreThreshold(minScore),
+			Provider:       c.OnnxProvider(),
 		},
 	})
 }
@@ -500,6 +515,12 @@ func (c *Config) FaceModel() face.ModelName {
 func (c *Config) usableFaceModel(name face.ModelName) face.ModelName {
 	if err := face.LicenseRefused(name, c.Edition()); err != nil {
 		c.warnFaceConfig("face-model-license", "config: %s, so face embeddings are disabled", err)
+
+		return face.ModelNone
+	}
+
+	if face.FindEmbeddingModel(name).RequiresTensorFlow() && c.DisableTensorFlow() {
+		c.warnFaceConfig("face-model-tensorflow", "config: face model %s requires TensorFlow, which is disabled, so face embeddings are disabled", clean.Log(name))
 
 		return face.ModelNone
 	}
@@ -739,9 +760,14 @@ func (c *Config) installedFaceModel() face.ModelName {
 	edition := c.Edition()
 
 	for _, candidate := range face.AutoModelPreference {
-		if face.LicenseRefused(candidate, edition) != nil {
+		model := face.FindEmbeddingModel(candidate)
+
+		switch {
+		case face.LicenseRefused(candidate, edition) != nil:
 			continue
-		} else if face.FindEmbeddingModel(candidate).Installed(modelsPath) {
+		case model.RequiresTensorFlow() && c.DisableTensorFlow():
+			continue
+		case model.Installed(modelsPath):
 			return candidate
 		}
 	}
@@ -826,7 +852,7 @@ func (c *Config) CheckFaceModelSuperseded() bool {
 	// an administrator to act, and the ordinary log is not where they are looking. Keyed by the
 	// model, so a second migration in the same process is reported again while a worker that
 	// wakes every few minutes does not repeat the first.
-	if _, warned := c.faceWarned.LoadOrStore("face-model-superseded-"+superseded, true); !warned {
+	if _, warned := c.warnedOnce.LoadOrStore("face-model-superseded-"+superseded, true); !warned {
 		event.SystemWarn([]string{"faces", "face model %s is recorded in %s but not loaded here, " +
 			"so face embeddings are paused until this instance is restarted"}, clean.Log(superseded), optionsFile)
 	}
@@ -851,7 +877,7 @@ func (c *Config) SupersededFaceModel() face.ModelName {
 		return ""
 	}
 
-	b, err := os.ReadFile(fileName) //nolint:gosec // path derived from the config directory
+	b, err := readOptionsFile(fileName)
 
 	if err != nil {
 		return ""
@@ -1008,6 +1034,7 @@ func (c *Config) ConfigureFaceEmbedder(name face.ModelName) error {
 		Model:     model,
 		ModelPath: model.FilePath(c.ModelsPath()),
 		Threads:   c.FaceModelThreads(),
+		Provider:  c.OnnxProvider(),
 	})
 }
 
@@ -1329,7 +1356,7 @@ func (c *Config) faceAcceptThresholds() (radius, matchDist float64) {
 		return radius, matchDist
 	}
 
-	if _, warned := c.faceWarned.LoadOrStore("face-accept-dist", true); !warned {
+	if _, warned := c.warnedOnce.LoadOrStore("face-accept-dist", true); !warned {
 		log.Warnf("config: face-cluster-radius %g and face-match-dist %g accept faces up to %g, more than the maximum of %g, using %g and %g instead",
 			radius, matchDist, radius+matchDist, face.ConfigDistMax, calibratedRadius, calibratedMatchDist)
 	}
@@ -1385,7 +1412,7 @@ func (c *Config) faceThreadsSetting(threads int) int {
 // warnFaceConfig reports a face configuration problem once, because the getters are called from
 // Propagate and from the config report rather than a single time per start.
 func (c *Config) warnFaceConfig(key, format string, args ...any) {
-	if _, warned := c.faceWarned.LoadOrStore(key, true); !warned {
+	if _, warned := c.warnedOnce.LoadOrStore(key, true); !warned {
 		log.Warnf(format, args...)
 	}
 }
@@ -1393,7 +1420,7 @@ func (c *Config) warnFaceConfig(key, format string, args ...any) {
 // infoFaceConfig reports a face setting that has no effect once. It is not a fault, so it is
 // reported at info level, but an instruction that is ignored must still not be silent.
 func (c *Config) infoFaceConfig(key, format string, args ...any) {
-	if _, warned := c.faceWarned.LoadOrStore(key, true); !warned {
+	if _, warned := c.warnedOnce.LoadOrStore(key, true); !warned {
 		log.Infof(format, args...)
 	}
 }
@@ -1406,7 +1433,7 @@ func (c *Config) warnFaceThreshold(configured bool, flagName string, value, minV
 		return
 	}
 
-	if _, warned := c.faceWarned.LoadOrStore(flagName, true); !warned {
+	if _, warned := c.warnedOnce.LoadOrStore(flagName, true); !warned {
 		log.Warnf("config: %s %g is out of range (%g-%g), using %g instead", flagName, value, minValue, maxValue, resolved)
 	}
 }

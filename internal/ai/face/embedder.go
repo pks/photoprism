@@ -3,6 +3,8 @@ package face
 import (
 	"image"
 	"sync"
+
+	"github.com/photoprism/photoprism/internal/ai/onnx"
 )
 
 // Embedder generates face embeddings from prepared face crops.
@@ -28,6 +30,7 @@ type EmbedderSettings struct {
 	ModelPath   string
 	Threads     int
 	LibraryPath string
+	Provider    onnx.Provider
 }
 
 var (
@@ -79,6 +82,22 @@ func ConfiguredModel() ModelName {
 	embedderMu.RUnlock()
 
 	return name
+}
+
+// EmbedderConfig returns the settings the embedding model was last configured with, so a caller
+// that replaces the model can configure the same one again with ConfigureEmbedder.
+func EmbedderConfig() EmbedderSettings {
+	embedderMu.RLock()
+	defer embedderMu.RUnlock()
+
+	settings := embedderSettings
+
+	// Not configured yet, which ConfigureEmbedder would otherwise record as ModelNone.
+	if settings.Name == "" {
+		settings.Name = configuredModel
+	}
+
+	return settings
 }
 
 // ExpectedDims returns the embedding length that the configured model produces.

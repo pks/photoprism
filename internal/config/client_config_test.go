@@ -144,7 +144,7 @@ func TestClientConfig_ApplyACL(t *testing.T) {
 	t.Run("RoleAdmin", func(t *testing.T) {
 		u := apply(acl.RoleAdmin)
 		assert.Equal(t, 60, u.FilesUsedPct)
-		assert.Equal(t, 200, int(u.FilesTotal))
+		assert.EqualValues(t, 200, u.FilesTotal)
 		assert.True(t, u.StorageLow)
 		assert.Equal(t, 50, u.UsersUsedPct)
 	})
@@ -152,9 +152,9 @@ func TestClientConfig_ApplyACL(t *testing.T) {
 		u := apply(acl.RoleGuest)
 		assert.Equal(t, -1, u.FilesUsedPct)
 		assert.Equal(t, -1, u.FilesFreePct)
-		assert.Equal(t, 0, int(u.FilesUsed))
-		assert.Equal(t, 0, int(u.FilesFree))
-		assert.Equal(t, 0, int(u.FilesTotal))
+		assert.EqualValues(t, 0, u.FilesUsed)
+		assert.EqualValues(t, 0, u.FilesFree)
+		assert.EqualValues(t, 0, u.FilesTotal)
 		assert.False(t, u.StorageLow)
 		// Guests hold view on their own user record, so the account quota stays visible.
 		assert.Equal(t, 50, u.UsersUsedPct)
@@ -162,7 +162,7 @@ func TestClientConfig_ApplyACL(t *testing.T) {
 	t.Run("RoleVisitor", func(t *testing.T) {
 		u := apply(acl.RoleVisitor)
 		assert.Equal(t, -1, u.FilesUsedPct)
-		assert.Equal(t, 0, int(u.FilesTotal))
+		assert.EqualValues(t, 0, u.FilesTotal)
 		assert.Equal(t, -1, u.UsersUsedPct)
 		assert.Equal(t, -1, u.UsersFreePct)
 	})
@@ -170,7 +170,7 @@ func TestClientConfig_ApplyACL(t *testing.T) {
 		// An unrecognized role holds no grant, so the guard must clear rather than pass through.
 		u := apply(acl.Role("unknown-role"))
 		assert.Equal(t, -1, u.FilesUsedPct)
-		assert.Equal(t, 0, int(u.FilesTotal))
+		assert.EqualValues(t, 0, u.FilesTotal)
 	})
 }
 
@@ -201,6 +201,27 @@ func TestConfig_ClientUser(t *testing.T) {
 
 		assert.Equal(t, result.Settings.Features.Private, false)
 		assert.Equal(t, result.Settings.Features, guestFeatures)
+	})
+	t.Run("ManualCameras", func(t *testing.T) {
+		added, created, err := entity.AddCamera("Minolta", "X-700")
+		assert.NoError(t, err)
+		assert.True(t, created)
+		orphan := entity.FirstOrCreateCamera(entity.NewCamera("Minolta", "XD-7"))
+		t.Cleanup(func() {
+			entity.FlushCameraCache()
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.Camera{}, "id IN (?)", []uint{added.ID, orphan.ID}).Error)
+		})
+
+		c.Settings().Features = c.ClientRole(acl.RoleAdmin).Settings.Features
+		result := c.ClientUser(true)
+
+		// Cameras added manually are listed even though no picture references them, other orphans are not.
+		slugs := make([]string, 0, len(result.Cameras))
+		for _, camera := range result.Cameras {
+			slugs = append(slugs, camera.CameraSlug)
+		}
+		assert.Contains(t, slugs, added.CameraSlug)
+		assert.NotContains(t, slugs, orphan.CameraSlug)
 	})
 	t.Run("NilTesting", func(t *testing.T) {
 		if testing.Short() {

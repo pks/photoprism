@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
@@ -94,8 +93,10 @@ func rotateNodeInRegistry(conf *config.Config, name string, rotateDatabase, rota
 
 		creds, _, credsErr := provisioner.EnsureCredentials(ctx, conf, n.UUID, n.Name, true)
 
-		if credsErr != nil {
-			return resp, cli.Exit(credsErr, 5)
+		if errors.Is(credsErr, provisioner.ErrUnsupportedDriver) {
+			return resp, cli.Exit(credsErr, 2)
+		} else if credsErr != nil {
+			return resp, cli.Exit(credsErr, 1)
 		}
 
 		if n.Database == nil {
@@ -231,6 +232,10 @@ func clusterNodesRotateAction(ctx *cli.Context) error {
 		rotateDatabase := ctx.Bool("database") || (!ctx.IsSet("database") && !ctx.IsSet("secret"))
 		rotateSecret := ctx.Bool("secret")
 
+		if !rotateDatabase && !rotateSecret {
+			return cli.Exit(fmt.Errorf("nothing to rotate (use --database or --secret)"), 2)
+		}
+
 		if ctx.Bool("dry-run") {
 			target := clean.LogQuote(name)
 			if target == "" {
@@ -242,9 +247,6 @@ func clusterNodesRotateAction(ctx *cli.Context) error {
 			}
 			if rotateSecret {
 				what = append(what, "node secret")
-			}
-			if len(what) == 0 {
-				what = append(what, "no resources (no rotation flags set)")
 			}
 			switch {
 			case conf.Portal():
@@ -272,8 +274,9 @@ func clusterNodesRotateAction(ctx *cli.Context) error {
 			case rotateSecret:
 				what = "node secret"
 			}
-			prompt := promptui.Prompt{Label: fmt.Sprintf("Rotate %s for %s?", what, clean.LogQuote(name)), IsConfirm: true}
-			if _, err := prompt.Run(); err != nil {
+			if proceed, confirmErr := ConfirmAction(false, fmt.Sprintf("Rotate %s for %s", what, clean.LogQuote(name))); confirmErr != nil {
+				return confirmErr
+			} else if !proceed {
 				log.Infof("rotation canceled for %s", clean.LogQuote(name))
 				return nil
 			}

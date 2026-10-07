@@ -12,9 +12,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 
 	clusterjwt "github.com/photoprism/photoprism/internal/auth/jwt"
 	"github.com/photoprism/photoprism/internal/config"
@@ -297,8 +298,10 @@ func registerWithPortal(c *config.Config, portal *url.URL, token string) (*clust
 				}
 				return false, nil, errors.New(resp.Status)
 			case http.StatusConflict, http.StatusBadRequest:
-				// Do not retry on 400/409 per spec intent.
-				return false, nil, errors.New(resp.Status)
+				// Do not retry on 400/409 per spec intent. The Portal explains which
+				// identifier it refused and what to do about it, and the status alone
+				// does not, so the reason is reported rather than dropped.
+				return false, nil, registerError(resp)
 			default:
 				if attempt < maxAttempts {
 					log.Debugf("cluster: join attempt %d/%d failed with status %s", attempt, maxAttempts, resp.Status)
@@ -320,6 +323,27 @@ func registerWithPortal(c *config.Config, portal *url.URL, token string) (*clust
 		}
 	}
 	return nil, nil
+}
+
+// registerError reports a refused registration with the reason the Portal gave, falling back
+// to the status when the body carries none. The body names the identifier that was refused,
+// which is what an operator needs, and the status alone reads the same for every cause.
+func registerError(resp *http.Response) error {
+	if resp == nil {
+		return errors.New("registration failed")
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
+	if err != nil || len(body) == 0 {
+		return errors.New(resp.Status)
+	}
+
+	if reason := strings.TrimSpace(gjson.GetBytes(body, "error").String()); reason != "" {
+		return fmt.Errorf("%s (%s)", reason, resp.Status)
+	}
+
+	return errors.New(resp.Status)
 }
 
 // registerAuthToken returns the bearer token used for register requests.
@@ -511,15 +535,18 @@ func persistRegistration(c *config.Config, r *cluster.RegisterResponse, wantRota
 			updates.SetDatabaseDriver(r.Database.Driver)
 			updates.SetDatabaseDSN(r.Database.DSN)
 		} else if r.Database.Name != "" && r.Database.User != "" && r.Database.Password != "" {
-			server := r.Database.Host
-			if r.Database.Port > 0 {
-				server = net.JoinHostPort(r.Database.Host, strconv.Itoa(r.Database.Port))
+			// The settings are ignored as a whole if the server address is unusable.
+			if server, ok := r.Database.Server(); !ok {
+				log.Warnf("cluster: ignored database settings with unusable server address %s", clean.Log(server))
+			} else {
+				updates.SetDatabaseDriver(r.Database.Driver)
+				if server != "" {
+					updates.SetDatabaseServer(server)
+				}
+				updates.SetDatabaseName(r.Database.Name)
+				updates.SetDatabaseUser(r.Database.User)
+				updates.SetDatabasePassword(r.Database.Password)
 			}
-			updates.SetDatabaseDriver(r.Database.Driver)
-			updates.SetDatabaseServer(server)
-			updates.SetDatabaseName(r.Database.Name)
-			updates.SetDatabaseUser(r.Database.User)
-			updates.SetDatabasePassword(r.Database.Password)
 		}
 	}
 

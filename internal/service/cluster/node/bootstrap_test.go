@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1026,4 +1028,138 @@ func TestRegisterWithPortal_DropsConfiguredQuery(t *testing.T) {
 
 	assert.Equal(t, 1, hits)
 	assert.Empty(t, rawQuery, "the configured query reached the endpoint")
+}
+
+func TestRegisterError(t *testing.T) {
+	newResp := func(status int, body string) *http.Response {
+		return &http.Response{
+			StatusCode: status,
+			Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+
+	t.Run("ReasonFromBody", func(t *testing.T) {
+		err := registerError(newResp(http.StatusConflict, `{"error":"node uuid is already registered"}`))
+
+		if assert.Error(t, err) {
+			assert.Contains(t, err.Error(), "node uuid is already registered")
+			assert.Contains(t, err.Error(), "409")
+		}
+	})
+	t.Run("EmptyBody", func(t *testing.T) {
+		err := registerError(newResp(http.StatusBadRequest, ""))
+
+		if assert.Error(t, err) {
+			assert.Equal(t, "400 Bad Request", err.Error())
+		}
+	})
+	t.Run("BodyWithoutError", func(t *testing.T) {
+		err := registerError(newResp(http.StatusConflict, `{"status":"failed"}`))
+
+		if assert.Error(t, err) {
+			assert.Equal(t, "409 Conflict", err.Error())
+		}
+	})
+	t.Run("Nil", func(t *testing.T) {
+		assert.Error(t, registerError(nil))
+	})
+}
+
+// TestRegister_PersistDBFieldsIPv6 checks that database fields without a DSN are persisted with an
+// IPv6 server address in brackets.
+func TestRegister_PersistDBFieldsIPv6(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/cluster/nodes/register" {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(cluster.RegisterResponse{
+			Node:    cluster.Node{Name: "pp-node-02"},
+			UUID:    rnd.UUID(),
+			Secrets: &cluster.RegisterSecrets{ClientSecret: cluster.ExampleClientSecret},
+			Database: cluster.RegisterDatabase{
+				Driver:   dsn.DriverMySQL,
+				Host:     "[fd00::10]",
+				Port:     3306,
+				Name:     "pp_db",
+				User:     "pp_user",
+				Password: "pp_pw",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newBootstrapTestConfig(t, "bootstrap-reg-ipv6")
+	c.Options().PortalUrl = srv.URL
+	c.Options().JoinToken = cluster.ExampleJoinToken
+	c.Options().SiteUrl = "https://public.example.test/"
+	c.Options().AdvertiseUrl = "https://public.example.test/"
+	c.Options().DatabaseDriver = dsn.DriverMySQL
+	c.Options().DatabaseDSN = ""
+	c.Options().DatabaseName = ""
+	c.Options().DatabaseUser = ""
+	c.Options().DatabasePassword = ""
+
+	assert.NoError(t, InitConfig(c))
+	assert.Equal(t, "[fd00::10]:3306", c.Options().DatabaseServer)
+	assert.Equal(t, "fd00::10", c.DatabaseHost())
+}
+
+// TestPersistRegistration checks which database settings bootstrap saves from a registration response.
+func TestPersistRegistration(t *testing.T) {
+	t.Run("UnusableServer", func(t *testing.T) {
+		// Without a DSN, database settings with a server address the instance cannot use are ignored as a
+		// whole, and the cluster settings are saved.
+		c := newBootstrapTestConfig(t, "bootstrap-persist")
+		clusterUUID := rnd.UUID()
+
+		require.NoError(t, persistRegistration(c, &cluster.RegisterResponse{
+			UUID: clusterUUID,
+			Node: cluster.Node{Name: "pp-node-01"},
+			Database: cluster.RegisterDatabase{
+				Driver:   dsn.DriverMySQL,
+				Host:     "/run/mysqld/mysqld.sock",
+				Port:     3306,
+				Name:     "pp_db",
+				User:     "pp_user",
+				Password: "pp_pw",
+			},
+		}, true))
+
+		content, err := os.ReadFile(c.OptionsYaml())
+		require.NoError(t, err)
+
+		var persisted map[string]any
+		require.NoError(t, yaml.Unmarshal(content, &persisted))
+		assert.Equal(t, clusterUUID, persisted["ClusterUUID"])
+		for _, key := range []string{"DatabaseDriver", "DatabaseName", "DatabaseUser", "DatabasePassword", "DatabaseServer"} {
+			assert.NotContains(t, persisted, key)
+		}
+	})
+	t.Run("Server", func(t *testing.T) {
+		c := newBootstrapTestConfig(t, "bootstrap-persist-server")
+
+		require.NoError(t, persistRegistration(c, &cluster.RegisterResponse{
+			UUID: rnd.UUID(),
+			Database: cluster.RegisterDatabase{
+				Driver:   dsn.DriverMySQL,
+				Host:     "db.local",
+				Port:     3306,
+				Name:     "pp_db",
+				User:     "pp_user",
+				Password: "pp_pw",
+			},
+		}, true))
+
+		content, err := os.ReadFile(c.OptionsYaml())
+		require.NoError(t, err)
+
+		var persisted map[string]any
+		require.NoError(t, yaml.Unmarshal(content, &persisted))
+		assert.Equal(t, "db.local:3306", persisted["DatabaseServer"])
+	})
 }

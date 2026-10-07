@@ -27,6 +27,9 @@ import (
 // ErrSkipPath identifies a path excluded by the transfer policy without a remote failure.
 var ErrSkipPath = errors.New("webdav: transfer path skipped")
 
+// ErrForbidden identifies a transfer the remote server refused with 403 Forbidden.
+var ErrForbidden = errors.New("forbidden")
+
 // ErrUnsafePath identifies a path with a parent-directory segment. It is reported as a failure
 // rather than a skip, so a queued transfer is not recorded as benignly ignored.
 var ErrUnsafePath = errors.New("webdav: transfer path contains a parent directory")
@@ -47,6 +50,7 @@ func checkTransferPath(name string) error {
 // Client represents a webdav client.
 type Client struct {
 	client        *webdav.Client
+	http          *http.Client
 	ctx           context.Context
 	endpoint      *url.URL
 	timeout       time.Duration
@@ -65,6 +69,16 @@ func (c *Client) SetDownloadLimit(maxBytes int64) {
 	}
 
 	c.downloadLimit = maxBytes
+}
+
+// CheckDownloadSize returns an error if size exceeds the download limit, where a size of zero or less is unknown.
+func (c *Client) CheckDownloadSize(dest string, size int64) error {
+	if c == nil || c.downloadLimit <= 0 || size <= c.downloadLimit {
+		return nil
+	}
+
+	// The name is bounded so the reason after it survives clipping.
+	return fmt.Errorf("webdav: %s exceeds the maximum size of %d bytes", clean.LogBytes(path.Base(dest), clean.LogNamesBytes), c.downloadLimit)
 }
 
 // clientUrl returns the validated server url including username and password, if specified.
@@ -138,7 +152,8 @@ func NewClient(serverUrl, user, pass string, timeout Timeout, servicesCIDR strin
 	// line does not.
 	log.Debugf("webdav: connecting to %s", clean.Log(clean.UriRedacted(serverUrl)))
 
-	client, err := webdav.NewClient(newTransferHTTPClient(allowedCIDRs), serverUrl)
+	transfer := newTransferHTTPClient(allowedCIDRs)
+	client, err := webdav.NewClient(transfer, serverUrl)
 
 	if err != nil {
 		return nil, err
@@ -147,6 +162,7 @@ func NewClient(serverUrl, user, pass string, timeout Timeout, servicesCIDR strin
 	// Create a new webdav.Client wrapper.
 	result := &Client{
 		client:   client,
+		http:     transfer,
 		ctx:      context.Background(),
 		endpoint: endpoint,
 		timeout:  Durations[timeout],
@@ -446,7 +462,7 @@ func (c *Client) Upload(src, dest string) (err error) {
 	dest = trimPath(dest)
 
 	if !fs.FileExists(src) {
-		return fmt.Errorf("file %s not found", clean.Log(path.Base(src)))
+		return fmt.Errorf("file %s not found", clean.LogBytes(path.Base(src), clean.LogNamesBytes))
 	}
 
 	f, err := os.OpenFile(src, os.O_RDONLY, 0) //nolint:gosec // path provided by caller; read-only
@@ -462,26 +478,50 @@ func (c *Client) Upload(src, dest string) (err error) {
 		}
 	}()
 
-	var writer io.WriteCloser
-	writer, err = c.client.Create(c.ctx, dest)
+	// The deferred Close owns the file, as the client would otherwise close the request body.
+	req, err := http.NewRequestWithContext(c.ctx, http.MethodPut, c.resolveHref(dest).String(), io.NopCloser(f))
 
 	if err != nil {
 		log.Errorf("webdav: %s", clean.Error(err))
 		return fmt.Errorf("webdav: failed to write %s", clean.Log(dest))
 	}
 
-	if _, err = io.Copy(writer, f); err != nil {
-		_ = writer.Close()
+	if info, statErr := f.Stat(); statErr == nil {
+		req.ContentLength = info.Size()
+	}
+
+	resp, err := c.http.Do(req)
+
+	if err != nil {
 		log.Errorf("webdav: %s", clean.Error(err))
 		return fmt.Errorf("webdav: failed to upload %s", clean.Log(dest))
 	}
 
-	if closeErr := writer.Close(); closeErr != nil {
-		log.Errorf("webdav: %s", clean.Error(closeErr))
-		return fmt.Errorf("webdav: failed to finalize upload %s", clean.Log(dest))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	_ = resp.Body.Close()
+
+	switch {
+	case resp.Request != nil && resp.Request.Method != http.MethodPut:
+		// The client follows 301, 302, and 303 with a GET, whose status does not report the upload.
+		return fmt.Errorf("webdav: failed to upload %s (redirected)", clean.LogBytes(dest, clean.LogNamesBytes))
+	case resp.StatusCode == http.StatusForbidden:
+		return fmt.Errorf("webdav: failed to upload %s (%w)", clean.LogBytes(dest, clean.LogNamesBytes), ErrForbidden)
+	case resp.StatusCode/100 != 2:
+		return fmt.Errorf("webdav: failed to upload %s (%d %s)", clean.LogBytes(dest, clean.LogNamesBytes), resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
 	return nil
+}
+
+// resolveHref returns the absolute URL of a path relative to the endpoint, including its credentials.
+func (c *Client) resolveHref(name string) *url.URL {
+	base := c.endpoint.Path
+
+	if base == "" {
+		base = "/"
+	}
+
+	return &url.URL{Scheme: c.endpoint.Scheme, User: c.endpoint.User, Host: c.endpoint.Host, Path: path.Join(base, name)}
 }
 
 // Download downloads a single file to the given location.
@@ -510,10 +550,10 @@ func (c *Client) Download(src, dest string, force bool) (err error) {
 	if err != nil {
 		// Create local storage path.
 		if err = fs.MkdirAll(dir); err != nil {
-			return fmt.Errorf("webdav: cannot create folder %s (%s)", clean.Log(dir), clean.Error(err))
+			return fmt.Errorf("webdav: cannot create folder %s (%s)", clean.LogBytes(dir, clean.LogNamesBytes), clean.Error(err))
 		}
 	} else if !dirInfo.IsDir() {
-		return fmt.Errorf("webdav: %s is not a folder", clean.Log(dir))
+		return fmt.Errorf("webdav: %s is not a folder", clean.LogBytes(dir, clean.LogNamesBytes))
 	}
 
 	var reader io.ReadCloser
@@ -566,8 +606,8 @@ func (c *Client) Download(src, dest string, force bool) (err error) {
 		// instead of being silently truncated into a corrupt local file.
 		if n, copyErr := io.Copy(f, io.LimitReader(reader, c.downloadLimit+1)); copyErr != nil {
 			err = copyErr
-		} else if n > c.downloadLimit {
-			return fmt.Errorf("webdav: %s exceeds the maximum size of %d bytes", clean.Log(path.Base(dest)), c.downloadLimit)
+		} else if sizeErr := c.CheckDownloadSize(dest, n); sizeErr != nil {
+			return sizeErr
 		}
 	} else {
 		_, err = f.ReadFrom(reader)

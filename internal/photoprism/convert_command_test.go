@@ -40,6 +40,22 @@ func TestNewConvertCmd(t *testing.T) {
 		assert.Same(t, result, result.WithImageVerification())
 		assert.True(t, result.VerifyImage)
 	})
+	t.Run("WithSourceOrientation", func(t *testing.T) {
+		result := NewConvertCmd(
+			exec.Command("exiftool", "-q", "-q", "-b", "-JpgFromRaw", "file.cr3"),
+		)
+		assert.Zero(t, result.SourceOrientation)
+		for _, o := range []int{-1, 0, 1, 9} {
+			assert.Same(t, result, result.WithSourceOrientation(o))
+			assert.Zero(t, result.SourceOrientation, "orientation %d", o)
+		}
+		assert.Same(t, result, result.WithSourceOrientation(2))
+		assert.Equal(t, 2, result.SourceOrientation)
+		assert.Same(t, result, result.WithSourceOrientation(8))
+		assert.Equal(t, 8, result.SourceOrientation)
+		assert.Same(t, result, result.WithSourceOrientation(1))
+		assert.Zero(t, result.SourceOrientation, "1 clears the previous value")
+	})
 	t.Run("WithStderrRejection", func(t *testing.T) {
 		result := NewConvertCmd(
 			exec.Command("rawtherapee-cli", "-o", "file.jpg", "-c", "file.cr3"),
@@ -47,6 +63,19 @@ func TestNewConvertCmd(t *testing.T) {
 		assert.Empty(t, result.RejectStderr)
 		assert.Same(t, result, result.WithStderrRejection("first error", "second error"))
 		assert.Equal(t, []string{"first error", "second error"}, result.RejectStderr)
+	})
+}
+
+func TestConvertCmd_String(t *testing.T) {
+	t.Run("Nil", func(t *testing.T) {
+		assert.Equal(t, "", (&ConvertCmd{}).String())
+	})
+	t.Run("Uri", func(t *testing.T) {
+		// Rendering goes through the shared helper, so a URI argument comes back in its log form.
+		result := NewConvertCmd(
+			exec.Command("/usr/bin/exiftool", "-Comment=https://user:pass@example.com/source.jpg", "file.jpg"),
+		)
+		assert.Equal(t, "/usr/bin/exiftool -Comment=https://user:***@example.com/source.jpg file.jpg", result.String())
 	})
 }
 

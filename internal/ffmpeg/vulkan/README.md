@@ -1,6 +1,6 @@
 ## PhotoPrism — Vulkan Video Transcoding
 
-**Last Updated:** May 30, 2026
+**Last Updated:** October 4, 2026
 
 ### Overview
 
@@ -32,15 +32,19 @@ ffmpeg -hide_banner -y -strict -2 \
 2. **Filter** — `scale=…` and `format=nv12` run in software, then a single `hwupload` moves the frames onto the Vulkan device referenced by `-filter_hw_device`. The `hwupload` step is part of `encode.FormatNV12`, so the builder must not append it a second time — `…,hwupload,hwupload` fails because the frames are already on the GPU.
 3. **Encode** — `h264_vulkan` encodes the uploaded Vulkan frames.
 
+#### Rate Control
+
+`-qp` selects constant QP, mapped from `PHOTOPRISM_FFMPEG_QUALITY` by `encode.QpQuality()` as `(100 - quality) / 2`, the CRF scale of the software encoder; the default 50 gives 25. Size and quality relative to the software encoder have not been measured, since no Vulkan encode driver was available. `Options.MaxBitrate` is not passed, so there is no bitrate limit.
+
 ### Flags
 
-| Flag                          | Value                             | Purpose                                                                |
-|-------------------------------|-----------------------------------|------------------------------------------------------------------------|
+| Flag                          | Value                              | Purpose                                                                                     |
+|-------------------------------|------------------------------------|---------------------------------------------------------------------------------------------|
 | `-init_hw_device`             | `vulkan=vk` or `vulkan=vk:<index>` | Creates the named Vulkan device `vk`; `<index>` is a physical-device index, not a DRM path. |
-| `-filter_hw_device`           | `vk`                              | Supplies the device that `hwupload` and the encoder attach to.         |
-| `-vf … ,format=nv12,hwupload` | from `encode.FormatNV12`          | Software scale, NV12 conversion, then a single upload to a Vulkan frame. |
-| `-c:v`                        | `h264_vulkan`                     | Vulkan video H.264 encoder (FFmpeg 8+).                                |
-| `-qp`                         | `25` (`DefaultQuality` 50)        | Constant-QP quality, via `Options.QpQuality()`.                       |
+| `-filter_hw_device`           | `vk`                               | Supplies the device that `hwupload` and the encoder attach to.                              |
+| `-vf … ,format=nv12,hwupload` | from `encode.FormatNV12`           | Software scale, NV12 conversion, then a single upload to a Vulkan frame.                    |
+| `-c:v`                        | `h264_vulkan`                      | Vulkan video H.264 encoder (FFmpeg 8+).                                                     |
+| `-qp`                         | `25` (`DefaultQuality` 50)         | Constant-QP quality, via `Options.QpQuality()`.                                             |
 
 ### Encoders & Decoders
 

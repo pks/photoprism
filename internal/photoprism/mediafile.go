@@ -67,6 +67,8 @@ type MediaFile struct {
 	videoOnce        sync.Once
 	insta360Model    string
 	insta360Once     sync.Once
+	importedCapture  *Insta360Capture
+	importedOnce     sync.Once
 	visualProjection projection.Type
 	fileMutex        sync.Mutex
 	location         *entity.Cell
@@ -206,11 +208,9 @@ func (m *MediaFile) DateCreated() time.Time {
 	return takenAt
 }
 
-// TakenAt returns the UTC creation timestamp, the local timestamp and the source
-// used to derive it. The value is cached so repeated calls avoid re-reading
-// metadata. Extraction order: EXIF metadata, filename parsing, file modification
-// time; if none of those succeed the timestamps remain set to the current time
-// captured when the method first ran.
+// TakenAt returns the UTC and local time the file was taken, and their source, and caches them. It tries the capture
+// time from the metadata, a date in the file name, the modify time from the metadata, and the file modification time;
+// otherwise, it returns the time of the first call.
 func (m *MediaFile) TakenAt() (utc time.Time, local time.Time, source string) {
 	// Check if creation time has been cached.
 	if !m.takenAt.IsZero() {
@@ -238,6 +238,15 @@ func (m *MediaFile) TakenAt() (utc time.Time, local time.Time, source string) {
 		m.takenAtLocal = nameTime.Truncate(time.Second).Local()
 		m.takenAt = nameTime.Truncate(time.Second).UTC()
 		m.takenAtSrc = entity.SrcName
+		log.Infof("media: %s was taken at %s (%s)", clean.Log(filepath.Base(m.fileName)), m.takenAt.String(), m.takenAtSrc)
+		return m.takenAt, m.takenAtLocal, m.takenAtSrc
+	}
+
+	// Then fall back to the time the file was last modified according to its metadata.
+	if modifiedAt, _, _, modified := data.TakenOrModified(); data.Error == nil && modified && modifiedAt.Year() > 1000 {
+		m.takenAtLocal = modifiedAt.Truncate(time.Second).Local()
+		m.takenAt = m.takenAtLocal.UTC()
+		m.takenAtSrc = entity.SrcModified
 		log.Infof("media: %s was taken at %s (%s)", clean.Log(filepath.Base(m.fileName)), m.takenAt.String(), m.takenAtSrc)
 		return m.takenAt, m.takenAtLocal, m.takenAtSrc
 	}
@@ -371,7 +380,7 @@ func (m *MediaFile) Checksum() string {
 }
 
 // PathNameInfo resolves the file root (originals/import/sidecar/etc) and returns
-// the root identifier, file base prefix, relative directory and relative name
+// the root identifier, stack prefix, relative directory and relative name
 // for indexing / metadata persistence.
 func (m *MediaFile) PathNameInfo(stripSequence bool) (fileRoot, fileBase, relativePath, relativeName string) {
 	fileRoot = m.Root()
@@ -391,7 +400,11 @@ func (m *MediaFile) PathNameInfo(stripSequence bool) (fileRoot, fileBase, relati
 		rootPath = Config().OriginalsPath()
 	}
 
-	fileBase = m.BasePrefix(stripSequence)
+	// A file whose stack name is empty is not stacked by name, so its photo gets the unstripped name.
+	if fileBase = m.StackPrefix(stripSequence); fileBase == "" {
+		fileBase = m.StackPrefix(false)
+	}
+
 	relativePath = m.RelPath(rootPath)
 	relativeName = m.RelName(rootPath)
 
@@ -434,15 +447,7 @@ func (m *MediaFile) RelName(directory string) string {
 // RelPath returns the relative directory (without filename) by trimming the
 // provided base directory from the stored file path.
 func (m *MediaFile) RelPath(directory string) string {
-	pathname := m.fileName
-
-	if i := strings.Index(pathname, directory); i == 0 {
-		if i = strings.LastIndex(directory, string(os.PathSeparator)); i == len(directory)-1 {
-			pathname = pathname[len(directory):]
-		} else if i = strings.LastIndex(directory, string(os.PathSeparator)); i != len(directory) {
-			pathname = pathname[len(directory)+1:]
-		}
-	}
+	pathname := fs.RelName(m.fileName, directory)
 
 	if end := strings.LastIndex(pathname, string(os.PathSeparator)); end != -1 {
 		pathname = pathname[:end]
@@ -512,9 +517,14 @@ func (m *MediaFile) AbsPrefix(stripSequence bool) string {
 }
 
 // BasePrefix returns the filename (without directory) stripped of all
-// extensions; stripSequence removes trailing sequence tokens such as "_01".
+// extensions; stripSequence removes sequence suffixes such as ".00001", " (2)", or " copy 2".
 func (m *MediaFile) BasePrefix(stripSequence bool) string {
 	return fs.BasePrefix(m.FileName(), stripSequence)
+}
+
+// StackPrefix returns the name under which the file is stacked with the other files of a photo.
+func (m *MediaFile) StackPrefix(stripSequence bool) string {
+	return fs.StackPrefix(m.FileName(), stripSequence)
 }
 
 // EditedName returns the alternate filename used by Apple Photos for edited
@@ -539,28 +549,28 @@ func (m *MediaFile) Root() string {
 		return m.fileRoot
 	}
 
-	if strings.HasPrefix(m.FileName(), Config().OriginalsPath()) {
+	if fs.InDir(m.FileName(), Config().OriginalsPath()) {
 		m.fileRoot = entity.RootOriginals
 		return m.fileRoot
 	}
 
 	importPath := Config().ImportPath()
 
-	if importPath != "" && strings.HasPrefix(m.FileName(), importPath) {
+	if importPath != "" && fs.InDir(m.FileName(), importPath) {
 		m.fileRoot = entity.RootImport
 		return m.fileRoot
 	}
 
 	sidecarPath := Config().SidecarPath()
 
-	if sidecarPath != "" && strings.HasPrefix(m.FileName(), sidecarPath) {
+	if sidecarPath != "" && fs.InDir(m.FileName(), sidecarPath) {
 		m.fileRoot = entity.RootSidecar
 		return m.fileRoot
 	}
 
 	samplesPath := Config().SamplesPath()
 
-	if samplesPath != "" && strings.HasPrefix(m.FileName(), samplesPath) {
+	if samplesPath != "" && fs.InDir(m.FileName(), samplesPath) {
 		m.fileRoot = entity.RootSamples
 		return m.fileRoot
 	}
@@ -1037,13 +1047,37 @@ func (m *MediaFile) FisheyeDngProjection() projection.Type {
 }
 
 // DualFisheyeLayout reports whether the frame is compatible with the side-by-side dual-fisheye
-// input that "v360=input=dfisheye" expects, i.e. a ~2:1 aspect ratio.
-// An unknown aspect (0) counts as compatible so the extension-authoritative .insp/.insv path still
-// dewarps; known non-2:1 frames (X3/X4 per-lens streams, single-lens sources) are rejected.
+// input that "v360=input=dfisheye" expects, i.e. a ~2:1 aspect ratio (exactly 2:1 for .insp). An .insv
+// without known dimensions uses its first video track size; any other unknown aspect counts as compatible.
 func (m *MediaFile) DualFisheyeLayout() bool {
 	r := float64(m.AspectRatio())
 
-	return r <= 0 || math.Abs(r-2.0) <= 0.2
+	if r <= 0 && m.IsInsv() {
+		if sizes := m.VideoInfo().TrackSizes; len(sizes) > 0 {
+			r = float64(sizes[0].Width) / float64(sizes[0].Height)
+		}
+	}
+
+	// Photos are exactly 2:1 when they hold both lenses, while single-lens modes use 16:9 and similar.
+	tolerance := 0.2
+	if m.IsInsp() {
+		tolerance = 0.02
+	}
+
+	return r <= 0 || math.Abs(r-2.0) <= tolerance
+}
+
+// Insta360DualStream reports whether the file is an .insv that stores each lens as a separate,
+// square video stream of the same size.
+func (m *MediaFile) Insta360DualStream() bool {
+	if m == nil || !m.IsInsv() {
+		return false
+	}
+
+	sizes := m.VideoInfo().TrackSizes
+
+	return len(sizes) == 2 && sizes[0] == sizes[1] && sizes[0].Height > 0 &&
+		math.Abs(float64(sizes[0].Width)/float64(sizes[0].Height)-1) <= insta360PairAspectTolerance
 }
 
 // StackedDualFisheyeLayout reports whether two square fisheye frames are stacked vertically.
@@ -1072,7 +1106,7 @@ func (m *MediaFile) IsHeic() bool {
 	}
 
 	// Check the mime type after other tests have passed to improve performance.
-	return m.HasMimeType(header.ContentTypeHeic) || m.HasMimeType(header.ContentTypeHeicS)
+	return isHeifType(m.BaseType())
 }
 
 // IsHeicS checks if the file is a HEIC image sequence with a supported file type extension.
@@ -1161,6 +1195,24 @@ func (m *MediaFile) FileType() fs.Type {
 	}
 }
 
+// isHeifType reports whether the media type is an image or sequence type of the HEIF container, which
+// the content detector reports depending on the brand of the writer, e.g. "image/heif" for "mif1".
+func isHeifType(mimeType string) bool {
+	switch mimeType {
+	case header.ContentTypeHeic, header.ContentTypeHeicS, "image/heif", "image/heif-sequence", header.ContentTypeAvif, header.ContentTypeAvifS:
+		return true
+	default:
+		return false
+	}
+}
+
+// isImageType reports whether the media type is an image format. HEIF types are excluded because
+// they share the ISO base media file format with videos, and "image/x-icon" because the detector
+// reports it for MP4 files whose first box is 256 or 512 bytes long.
+func isImageType(mimeType string) bool {
+	return mimeType != "image/x-icon" && !isHeifType(mimeType) && strings.HasPrefix(mimeType, "image/")
+}
+
 // CheckType returns an error if the file extension is missing or invalid,
 // see https://github.com/photoprism/photoprism/issues/3518 for details.
 func (m *MediaFile) CheckType() error {
@@ -1196,11 +1248,22 @@ func (m *MediaFile) CheckType() error {
 	case fs.ImagePsd:
 		valid = mimeType == header.ContentTypePsd || mimeType == header.ContentTypePsdAlt
 	case fs.ImageHeic, fs.ImageHeif:
-		valid = mimeType == header.ContentTypeHeic || mimeType == header.ContentTypeHeicS
+		valid = isHeifType(mimeType)
+	case fs.ImageBmp:
+		// Some legacy BMP header versions are not identified, so only other formats are rejected.
+		valid = mimeType == header.ContentTypeBmp || mimeType == fs.MimeTypeUnknown
+	case fs.ImageWebp:
+		valid = mimeType == header.ContentTypeWebp
+	case fs.ImageJpegXL:
+		valid = mimeType == header.ContentTypeJpegXL
+	case fs.ImageMPO, fs.ImageInsp:
+		valid = mimeType == header.ContentTypeJpeg
+	case fs.VideoMjpeg:
+		// Motion JPEG streams consist of JPEG images.
+		valid = mimeType == header.ContentTypeJpeg || !isImageType(mimeType)
 	default:
-		// Skip mime type check. Note: Checks for additional formats and/or generic
-		// checks based on the media content type can be added over time as needed.
-		return nil
+		// Video files must not contain a still image.
+		valid = !m.IsVideo() || !isImageType(mimeType)
 	}
 
 	// Ok?
@@ -1427,18 +1490,8 @@ func (m *MediaFile) PreviewImage() (*MediaFile, error) {
 		return nil, fmt.Errorf("%s is empty", m.RootRelName())
 	}
 
-	jpegName := fs.ImageJpeg.FindFirst(m.FileName(),
-		[]string{Config().SidecarPath(), fs.PPHiddenPathname}, Config().OriginalsPath(), false)
-
-	if jpegName != "" {
-		return NewMediaFile(jpegName)
-	}
-
-	pngName := fs.ImagePng.FindFirst(m.FileName(),
-		[]string{Config().SidecarPath(), fs.PPHiddenPathname}, Config().OriginalsPath(), false)
-
-	if pngName != "" {
-		return NewMediaFile(pngName)
+	if preview := findPreviewImage(m.FileName(), Config().SidecarPath(), Config().OriginalsPath(), false, fs.ImageJpeg, fs.ImagePng); preview != nil {
+		return preview, nil
 	}
 
 	return nil, fmt.Errorf("no preview image found for %s", m.RootRelName())
@@ -1456,21 +1509,9 @@ func (m *MediaFile) HasPreviewImage() bool {
 		return true
 	}
 
-	jpegName := fs.ImageJpeg.FindFirst(m.FileName(),
-		[]string{Config().SidecarPath(), fs.PPHiddenPathname}, Config().OriginalsPath(), false)
+	m.hasPreviewImage = findPreviewImage(m.FileName(), Config().SidecarPath(), Config().OriginalsPath(), false, fs.ImageJpeg, fs.ImagePng) != nil
 
-	if m.hasPreviewImage = fs.MimeType(jpegName) == header.ContentTypeJpeg; m.hasPreviewImage {
-		return true
-	}
-
-	pngName := fs.ImagePng.FindFirst(m.FileName(),
-		[]string{Config().SidecarPath(), fs.PPHiddenPathname}, Config().OriginalsPath(), false)
-
-	if m.hasPreviewImage = fs.MimeType(pngName) == header.ContentTypePng; m.hasPreviewImage {
-		return true
-	}
-
-	return false
+	return m.hasPreviewImage
 }
 
 func (m *MediaFile) decodeDimensions() error {
