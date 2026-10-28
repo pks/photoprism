@@ -1,8 +1,10 @@
 package search
 
 import (
+	"errors"
 	"strings"
 
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/entity/sortby"
 	"github.com/photoprism/photoprism/internal/form"
@@ -10,9 +12,27 @@ import (
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
+// LabelsPublicOnly reports whether the session may see public labels only, because its user role may not see
+// private content; this includes sessions without a user, such as API clients.
+func LabelsPublicOnly(sess *entity.Session) bool {
+	return sess != nil && acl.Rules.Deny(acl.ResourceLabels, sess.GetUserRole(), acl.AccessPrivate)
+}
+
+// UserLabels searches labels like Labels and returns only public labels if LabelsPublicOnly applies to the session.
+func UserLabels(frm form.SearchLabels, sess *entity.Session) (results []Label, err error) {
+	if LabelsPublicOnly(sess) {
+		frm.NSFW = false
+		frm.Public = true
+	}
+
+	return Labels(frm)
+}
+
 // Labels searches labels based on their name.
 func Labels(frm form.SearchLabels) (results []Label, err error) {
-	if err = frm.ParseQueryString(); err != nil {
+	if err = frm.ParseQueryString(); errors.Is(err, form.ErrNoMatch) {
+		return []Label{}, nil
+	} else if err != nil {
 		return results, err
 	}
 
@@ -28,9 +48,9 @@ func Labels(frm form.SearchLabels) (results []Label, err error) {
 
 	// Filter private labels.
 	if frm.Public {
-		s = s.Where("labels.label_nsfw = 0")
+		s = s.Where("labels.label_nsfw = FALSE")
 	} else if frm.NSFW {
-		s = s.Where("labels.label_nsfw = 1")
+		s = s.Where("labels.label_nsfw = TRUE")
 	}
 
 	// Limit result count.
@@ -53,6 +73,8 @@ func Labels(frm form.SearchLabels) (results []Label, err error) {
 	if frm.UID != "" {
 		s = s.Where("labels.label_uid IN (?)", strings.Split(strings.ToLower(frm.UID), txt.Or))
 
+		results = make([]Label, 0)
+
 		if result := s.Scan(&results); result.Error != nil {
 			return results, result.Error
 		}
@@ -66,7 +88,7 @@ func Labels(frm form.SearchLabels) (results []Label, err error) {
 		if labelIds, findErr := entity.FindLabelIDs(frm.Query, " ", true); findErr != nil || len(labelIds) == 0 {
 			log.Infof("search: label %s not found", clean.Log(frm.Query))
 
-			s = s.Where(clean.SqlLikeCond("labels.label_name"), likeString)
+			s = s.Where(clean.SqlLikeCond(entity.DbDialect(), false, "labels.label_name"), likeString)
 		} else {
 			log.Infof("search: label %s resolves to %d labels", clean.Log(frm.Query), len(labelIds))
 
@@ -75,12 +97,14 @@ func Labels(frm form.SearchLabels) (results []Label, err error) {
 	}
 
 	if frm.Favorite {
-		s = s.Where("labels.label_favorite = 1")
+		s = s.Where("labels.label_favorite = TRUE")
 	}
 
 	if frm.Query == "" && !frm.All {
-		s = s.Where("labels.label_priority >= 0 AND labels.photo_count > 1 OR labels.label_favorite = 1")
+		s = s.Where("(labels.label_priority >= 0 AND labels.photo_count > 1 OR labels.label_favorite = TRUE)")
 	}
+
+	results = make([]Label, 0)
 
 	if result := s.Scan(&results); result.Error != nil {
 		return results, result.Error

@@ -20,7 +20,6 @@ import (
 	"github.com/photoprism/photoprism/internal/service/cluster"
 	"github.com/photoprism/photoprism/internal/service/cluster/theme"
 	"github.com/photoprism/photoprism/pkg/clean"
-	"github.com/photoprism/photoprism/pkg/dsn"
 	"github.com/photoprism/photoprism/pkg/http/dns"
 	"github.com/photoprism/photoprism/pkg/http/header"
 	"github.com/photoprism/photoprism/pkg/log/status"
@@ -34,11 +33,11 @@ var (
 	regRoleFlag       = &cli.StringFlag{Name: "role", Usage: "node `ROLE` (instance, service)", Value: "instance"}
 	regIntUrlFlag     = &cli.StringFlag{Name: "advertise-url", Usage: "internal service `URL`"}
 	regSiteUrlFlag    = &cli.StringFlag{Name: "site-url", Usage: "public site `URL` (https://...)"}
-	regAppNameFlag    = &cli.StringFlag{Name: "app-name", Usage: "override app `NAME` reported to the portal"}
+	regAppNameFlag    = &LocalStringFlag{&cli.StringFlag{Name: "app-name", Usage: "override app `NAME` reported to the portal"}}
 	regAppVersionFlag = &cli.StringFlag{Name: "app-version", Usage: "override app `VERSION` reported to the portal"}
 	regLabelFlag      = &cli.StringSliceFlag{Name: "label", Usage: "`k=v` label (repeatable)"}
 	regRotateDatabase = &cli.BoolFlag{Name: "rotate", Usage: "rotates the node's database password"}
-	regRotateSec      = &cli.BoolFlag{Name: "rotate-secret", Usage: "rotates the node's secret used for JWT"}
+	regRotateSec      = &cli.BoolFlag{Name: "rotate-secret", Usage: "rotates the node's client secret and revokes its other access tokens"}
 	regPortalURL      = &cli.StringFlag{Name: "portal-url", Usage: "Portal base `URL` (defaults to config)"}
 	regPortalTok      = &cli.StringFlag{Name: "join-token", Usage: "Portal access `TOKEN` (defaults to config)"}
 	regWriteConf      = &cli.BoolFlag{Name: "write-config", Usage: "persists returned secrets and DB settings to local config"}
@@ -73,7 +72,7 @@ var ClusterRegisterCommand = &cli.Command{
 // clusterRegisterAction resolves CLI flags, builds the registration payload,
 // and calls the Portal's register endpoint with retry/backoff handling.
 func clusterRegisterAction(ctx *cli.Context) error {
-	return CallWithDependencies(ctx, func(conf *config.Config) error {
+	return CallWithCoreDependencies(ctx, func(conf *config.Config) error {
 		// Resolve inputs
 		name := clean.DNSLabel(ctx.String("name"))
 		derivedName := false
@@ -159,7 +158,7 @@ func clusterRegisterAction(ctx *cli.Context) error {
 					PortalURL string                  `json:"PortalUrl"`
 					Payload   cluster.RegisterRequest `json:"Payload"`
 				}{PortalURL: portalURL, Payload: payload}
-				jb, _ := json.Marshal(out)
+				jb, _ := report.MarshalJSON(out)
 				fmt.Println(string(jb))
 			} else {
 				fmt.Printf("Portal URL: %s\n", portalURL)
@@ -238,7 +237,7 @@ func clusterRegisterAction(ctx *cli.Context) error {
 
 		// Output
 		if ctx.Bool("json") {
-			jb, _ := json.Marshal(resp)
+			jb, _ := report.MarshalJSON(resp)
 			fmt.Println(string(jb))
 		} else {
 			// Human-readable: node row and credentials if present (UUID first as primary identifier)
@@ -283,7 +282,7 @@ func clusterRegisterAction(ctx *cli.Context) error {
 					fmt.Printf("\n%s\n", dbTable)
 				}
 				if resp.Database.DSN != "" {
-					fmt.Printf("DSN: %s\n", resp.Database.DSN)
+					fmt.Printf("DSN: %s\n", clean.Display(resp.Database.DSN))
 				}
 			}
 		}
@@ -300,11 +299,30 @@ func clusterRegisterAction(ctx *cli.Context) error {
 			status.Succeeded,
 		), clean.Log(nodeID))
 
-		// Optional persistence
+		// Optional persistence. Explicitly rotated credentials replace the password the node uses, so the
+		// command fails when the node will not use the new ones.
 		if ctx.Bool("write-config") {
-			if err := persistRegisterResponse(conf, &resp); err != nil {
+			refused, err := persistRegisterResponse(conf, &resp)
+			rotated := ctx.Bool("rotate") && !resp.Database.Incomplete && (resp.Database.Password != "" || resp.Database.DSN != "")
+
+			switch {
+			case err != nil && rotated:
+				return cli.Exit(fmt.Errorf("the portal changed the database password, but the new credentials could not be saved (%s); save the node credentials shown above", clean.Error(err)), 1)
+			case err != nil:
 				return err
+			case rotated && refused:
+				return cli.Exit(errors.New("the portal changed the database password, but the new credentials could not be saved; save the node credentials shown above"), 1)
+			case rotated:
+				if override := conf.DatabaseDSNOverride(); override != "" {
+					return cli.Exit(fmt.Errorf("the portal changed the database password, but %s sets a database dsn that takes precedence over the saved credentials; set the node credentials shown above there", clean.Log(override)), 1)
+				}
 			}
+		}
+
+		if resp.Database.Incomplete && ctx.Bool("write-config") {
+			return cli.Exit(errors.New("the portal could not complete database provisioning; rotate the database credentials once this has been resolved"), 1)
+		} else if resp.Database.Incomplete {
+			return cli.Exit(errors.New("the portal could not complete database provisioning; save the node credentials shown above, then rotate the database credentials once this has been resolved"), 1)
 		}
 
 		return nil
@@ -312,6 +330,12 @@ func clusterRegisterAction(ctx *cli.Context) error {
 }
 
 // HTTP helpers and backoff
+
+// registerErrorBodyMax and registerResponseMax bound how much of a register response is read.
+const (
+	registerErrorBodyMax = 4096
+	registerResponseMax  = 1 << 20
+)
 
 type httpError struct {
 	Status int
@@ -349,11 +373,11 @@ func postWithBackoff(url, token string, payload []byte, out any) error {
 			}
 
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				b, _ := io.ReadAll(resp.Body)
+				b, _ := io.ReadAll(io.LimitReader(resp.Body, registerErrorBodyMax))
 				return false, &httpError{Status: resp.StatusCode, Body: string(b)}
 			}
 
-			dec := json.NewDecoder(resp.Body)
+			dec := json.NewDecoder(io.LimitReader(resp.Body, registerResponseMax))
 			return false, dec.Decode(out)
 		}()
 
@@ -428,8 +452,9 @@ func parseLabelSlice(labels []string) map[string]string {
 	return m
 }
 
-// persistRegisterResponse writes returned secrets/DB details into local config when requested.
-func persistRegisterResponse(conf *config.Config, resp *cluster.RegisterResponse) error {
+// persistRegisterResponse writes returned secrets/DB details into local config when requested, and reports
+// whether database credentials of the response were refused.
+func persistRegisterResponse(conf *config.Config, resp *cluster.RegisterResponse) (refused bool, err error) {
 	updates := cluster.OptionsUpdate{}
 
 	if rnd.IsUUID(resp.UUID) {
@@ -454,38 +479,32 @@ func persistRegisterResponse(conf *config.Config, resp *cluster.RegisterResponse
 
 	// Node client secret is persisted only via config helper.
 	if resp.Secrets != nil && resp.Secrets.ClientSecret != "" {
-		if fileName, err := conf.SaveNodeClientSecret(resp.Secrets.ClientSecret); err != nil {
-			return err
+		if fileName, saveErr := conf.SaveNodeClientSecret(resp.Secrets.ClientSecret); saveErr != nil {
+			return false, saveErr
 		} else if fileName != "" {
 			log.Infof("wrote node client secret to %s", clean.Log(fileName))
 		}
 	}
 
-	// DB settings (MySQL/MariaDB only), which are ignored as a whole if the server address is unusable.
-	if resp.Database.Name != "" && resp.Database.User != "" {
-		driver := strings.TrimSpace(resp.Database.Driver)
-		if driver == "" {
-			driver = dsn.DriverMySQL
-		}
+	// DB settings (MySQL/MariaDB only), which replace a stored DSN and are ignored as a whole if the
+	// server address is unusable. Credentials of a complete response that are not saved count as refused.
+	credentials := !resp.Database.Incomplete && (resp.Database.Password != "" || resp.Database.DSN != "")
 
-		if server, ok := resp.Database.Server(); !ok {
-			log.Warnf("cluster: ignored database settings with unusable server address %s", clean.Log(server))
-		} else {
-			updates.SetDatabaseDriver(driver)
-			updates.SetDatabaseName(resp.Database.Name)
-			if server != "" {
-				updates.SetDatabaseServer(server)
-			}
-			updates.SetDatabaseUser(resp.Database.User)
-			updates.SetDatabasePassword(resp.Database.Password)
-		}
+	if server, ok := updates.SetDatabase(resp.Database); !ok {
+		event.SystemWarn([]string{"cluster", "ignored database settings with unusable server address %s"}, clean.Log(server))
+	} else if credentials && !updates.HasDatabaseUpdate() {
+		event.SystemWarn([]string{"cluster", "ignored database settings without name, user, or password"})
 	}
 
+	// SaveClusterOptionsUpdate skips settings it refuses with a warning.
+	refused = credentials && (!updates.HasDatabaseUpdate() || config.ValidateClusterDatabaseUpdate(updates) != nil)
+
 	if !updates.IsZero() {
-		if _, err := conf.SaveClusterOptionsUpdate(updates); err != nil {
-			return err
+		if _, err = conf.SaveClusterOptionsUpdate(updates); err != nil {
+			return refused, err
 		}
 		log.Infof("updated options.yml with cluster registration settings for node %s", clean.LogQuote(resp.Node.Name))
 	}
-	return nil
+
+	return refused, nil
 }

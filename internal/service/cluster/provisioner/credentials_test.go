@@ -3,9 +3,12 @@ package provisioner
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,9 +35,9 @@ func TestEnsureCredentials_MariaDB(t *testing.T) {
 		_ = db.Close()
 	}
 
-	// Unique-ish ClusterUUID to avoid collisions across runs; format is not strictly validated.
+	// A random ClusterUUID gives each run its own database and user names.
 	c := config.NewConfig(config.CliTestContext())
-	c.Options().ClusterUUID = time.Now().UTC().Format("20060102-150405.000000000")
+	c.Options().ClusterUUID = rnd.UUID()
 
 	nodeName := "pp-itest-node"
 
@@ -83,6 +86,181 @@ func TestEnsureCredentials_MariaDB(t *testing.T) {
 	if creds2.Password != "" || creds2.DSN != "" {
 		t.Fatalf("expected no password/DSN without rotation; got: %+v", creds2)
 	}
+}
+
+// limitedAdminDSN creates an admin account with the given grants, where %s stands for the account,
+// and returns a DSN for it. The account is removed when the test ends.
+func limitedAdminDSN(t *testing.T, ctx context.Context, grants ...string) string {
+	t.Helper()
+
+	// The account is managed through a root connection of its own, which the provisioner never replaces.
+	rootDSN := ProvisionDSN
+	root, err := sql.Open("mysql", rootDSN)
+	require.NoError(t, err)
+
+	if err = root.PingContext(ctx); err != nil {
+		_ = root.Close()
+		t.Skipf("provisioning database is unavailable: %v", err)
+	}
+
+	const user = "pp_provision_limited"
+	pass := rnd.Base62(24)
+
+	account := "'" + user + "'@'%'"
+	stmts := []string{"DROP USER IF EXISTS " + account, "CREATE USER " + account + " IDENTIFIED BY '" + pass + "'"}
+
+	for _, grant := range grants {
+		stmts = append(stmts, fmt.Sprintf(grant, account))
+	}
+
+	t.Cleanup(func() {
+		if _, dropErr := root.ExecContext(context.Background(), "DROP USER IF EXISTS "+account); dropErr != nil {
+			t.Errorf("cleanup: %v", dropErr)
+		}
+
+		_ = root.Close()
+	})
+
+	for _, stmt := range stmts {
+		_, execErr := root.ExecContext(ctx, stmt)
+		require.NoError(t, execErr, stmt)
+	}
+
+	cfg, err := mysql.ParseDSN(rootDSN)
+	require.NoError(t, err)
+	cfg.User, cfg.Passwd, cfg.DBName = user, pass, ""
+
+	return cfg.FormatDSN()
+}
+
+// TestEnsureCredentials_Incomplete checks that a failed grant reports the created database, and that
+// a later call with sufficient privileges completes it.
+func TestEnsureCredentials_Incomplete(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	rootDSN := ProvisionDSN
+	t.Cleanup(func() { ProvisionDSN = rootDSN })
+	limitedDSN := limitedAdminDSN(t, ctx, "GRANT CREATE, CREATE USER ON *.* TO %s WITH GRANT OPTION")
+
+	c := config.NewConfig(config.CliTestContext())
+	c.Options().ClusterUUID = rnd.UUID()
+	nodeUUID, nodeName := "11111111-1111-4111-8111-555555555555", "pp-incomplete"
+	dbName, dbUser, _ := GenerateCredentials(c, nodeUUID, nodeName)
+
+	t.Cleanup(func() {
+		ProvisionDSN = rootDSN
+		if dropErr := DropCredentials(context.Background(), dbName, dbUser); dropErr != nil {
+			t.Errorf("cleanup: %v", dropErr)
+		}
+	})
+
+	ProvisionDSN = limitedDSN
+	creds, created, err := EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrIncomplete)
+	assert.True(t, created)
+	assert.Equal(t, dbName, creds.Name)
+	assert.Equal(t, dbUser, creds.User)
+	assert.Empty(t, creds.Password)
+	assert.Empty(t, creds.DSN)
+	assert.Empty(t, creds.RotatedAt)
+
+	ProvisionDSN = rootDSN
+	creds, created, err = EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+
+	require.NoError(t, err)
+	assert.False(t, created)
+	assert.NotEmpty(t, creds.Password)
+
+	udb, err := sql.Open("mysql", creds.DSN)
+	require.NoError(t, err)
+	defer udb.Close()
+	assert.NoError(t, udb.PingContext(ctx))
+}
+
+// TestEnsureCredentials_CreateDatabaseFailed checks that a failed CREATE DATABASE whose database exists is
+// reported as incomplete.
+func TestEnsureCredentials_CreateDatabaseFailed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	db, err := GetDB(ctx)
+	if err != nil {
+		t.Skipf("provisioning database is unavailable: %v", err)
+	}
+
+	rootDSN := ProvisionDSN
+	t.Cleanup(func() { ProvisionDSN = rootDSN })
+
+	c := config.NewConfig(config.CliTestContext())
+	c.Options().ClusterUUID = rnd.UUID()
+	nodeUUID, nodeName := rnd.UUIDv7(), "pp-create-failed"
+	dbName, dbUser, _ := GenerateCredentials(c, nodeUUID, nodeName)
+
+	t.Cleanup(func() {
+		ProvisionDSN = rootDSN
+		if dropErr := DropCredentials(context.Background(), dbName, dbUser); dropErr != nil {
+			t.Errorf("cleanup: %v", dropErr)
+		}
+	})
+
+	// The account sees the existing database but may not create one, so CREATE DATABASE fails.
+	_, err = db.ExecContext(ctx, "CREATE DATABASE `"+dbName+"`")
+	require.NoError(t, err)
+	ProvisionDSN = limitedAdminDSN(t, ctx, "GRANT SELECT ON `"+dbName+"`.* TO %s")
+
+	creds, created, err := EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrIncomplete)
+	assert.False(t, created)
+	assert.Equal(t, dbName, creds.Name)
+	assert.Equal(t, dbUser, creds.User)
+	assert.Empty(t, creds.Password)
+}
+
+// TestEnsureCredentials_PrivilegeChange checks that privileges granted to the provisioning account
+// after a failed attempt apply to the next one without reopening the pool.
+func TestEnsureCredentials_PrivilegeChange(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	rootDSN := ProvisionDSN
+	t.Cleanup(func() { ProvisionDSN = rootDSN })
+	limitedDSN := limitedAdminDSN(t, ctx, "GRANT CREATE, CREATE USER ON *.* TO %s WITH GRANT OPTION")
+
+	root, err := sql.Open("mysql", rootDSN)
+	require.NoError(t, err)
+	defer root.Close()
+
+	c := config.NewConfig(config.CliTestContext())
+	c.Options().ClusterUUID = rnd.UUID()
+	nodeUUID, nodeName := rnd.UUIDv7(), "pp-privilege-change"
+	dbName, dbUser, _ := GenerateCredentials(c, nodeUUID, nodeName)
+
+	t.Cleanup(func() {
+		ProvisionDSN = rootDSN
+		if dropErr := DropCredentials(context.Background(), dbName, dbUser); dropErr != nil {
+			t.Errorf("cleanup: %v", dropErr)
+		}
+	})
+
+	ProvisionDSN = limitedDSN
+	_, _, err = EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+	require.ErrorIs(t, err, ErrIncomplete)
+
+	_, err = root.ExecContext(ctx, "GRANT ALL PRIVILEGES ON *.* TO 'pp_provision_limited'@'%' WITH GRANT OPTION")
+	require.NoError(t, err)
+
+	creds, _, err := EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+	require.NoError(t, err)
+	assert.NotEmpty(t, creds.Password)
+
+	db, err := GetDB(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, db.Stats().Idle, "no connection may stay open")
 }
 
 // TestEnsureCredentials_DriverNormalization verifies driver normalization and rejections.
@@ -145,7 +323,7 @@ func TestCredentials_ProxyError(t *testing.T) {
 	}
 
 	c := config.NewConfig(config.CliTestContext())
-	c.Options().ClusterUUID = time.Now().UTC().Format("20060102-150405.000000000")
+	c.Options().ClusterUUID = rnd.UUID()
 	nodeUUID, nodeName := "11111111-1111-4111-8111-444444444444", "pp-proxy-error"
 	dbName, dbUser, _ := GenerateCredentials(c, nodeUUID, nodeName)
 
@@ -162,7 +340,58 @@ func TestCredentials_ProxyError(t *testing.T) {
 	ProvisionProxyDSN = "admin:pa?ss=word@tcp(127.0.0.1:6032)"
 	t.Cleanup(func() { ProvisionProxyDSN = origDSN })
 
-	_, _, err := EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
-	assert.EqualError(t, err, "proxysql: invalid admin dsn")
+	creds, _, err := EnsureCredentials(ctx, c, nodeUUID, nodeName, true)
+	assert.EqualError(t, err, "database provisioning incomplete: proxysql: invalid admin dsn")
+	assert.ErrorIs(t, err, ErrIncomplete)
+	assert.Equal(t, dbName, creds.Name)
+	assert.Equal(t, dbUser, creds.User)
+	assert.Empty(t, creds.Password)
+	assert.Empty(t, creds.DSN)
 	assert.EqualError(t, DropCredentials(ctx, "", dbUser), "drop credentials: proxysql: invalid admin dsn")
+}
+
+func TestCheckConfig(t *testing.T) {
+	driver, dsnValue := DatabaseDriver, ProvisionDSN
+	t.Cleanup(func() { DatabaseDriver, ProvisionDSN = driver, dsnValue })
+
+	t.Run("Ready", func(t *testing.T) {
+		DatabaseDriver, ProvisionDSN = "MariaDB", "root:secret@tcp(127.0.0.1:1)/photoprism"
+		assert.NoError(t, CheckConfig())
+	})
+	t.Run("UnsupportedDriver", func(t *testing.T) {
+		DatabaseDriver, ProvisionDSN = "sqlite3", "root:secret@tcp(127.0.0.1:1)/photoprism"
+		assert.ErrorIs(t, CheckConfig(), ErrUnsupportedDriver)
+	})
+	t.Run("NotConfigured", func(t *testing.T) {
+		DatabaseDriver, ProvisionDSN = "mysql", ""
+		assert.ErrorIs(t, CheckConfig(), ErrNotConfigured)
+	})
+}
+
+func TestProvisionDriver(t *testing.T) {
+	driver := DatabaseDriver
+	t.Cleanup(func() { DatabaseDriver = driver })
+
+	for value, expected := range map[string]string{"MySQL": "mysql", "mariadb": "mariadb"} {
+		DatabaseDriver = value
+		got, err := provisionDriver()
+		assert.NoError(t, err, value)
+		assert.Equal(t, expected, got)
+	}
+
+	for _, value := range []string{"postgres", "sqlite3", "oracle", ""} {
+		DatabaseDriver = value
+		_, err := provisionDriver()
+		assert.ErrorIs(t, err, ErrUnsupportedDriver, value)
+	}
+}
+
+func TestSchemaExists(t *testing.T) {
+	db, err := GetDB(context.Background())
+	if err != nil {
+		t.Skipf("provisioning database is unavailable: %v", err)
+	}
+
+	assert.True(t, schemaExists(db, "information_schema"))
+	assert.False(t, schemaExists(db, "cluster_d"+strings.ToLower(rnd.Base36(11))))
 }

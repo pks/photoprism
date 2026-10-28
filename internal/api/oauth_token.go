@@ -27,9 +27,9 @@ import (
 //	@Tags		Authentication
 //	@Accept		json,x-www-form-urlencoded,mpfd
 //	@Produce	json
-//	@Param		request				body		form.OAuthCreateToken	true	"token request (supports client_credentials, password, or session grant)"
-//	@Success	200					{object}	gin.H
-//	@Failure	400,401,403,413,429	{object}	i18n.Response
+//	@Param		request					body		form.OAuthCreateToken	true	"token request (supports client_credentials, password, session, authorization_code, or refresh_token grant)"
+//	@Success	200						{object}	gin.H
+//	@Failure	400,401,403,413,429,500	{object}	i18n.Response
 //	@Router		/api/v1/oauth/token [post]
 func OAuthToken(router *gin.RouterGroup) {
 	router.POST("/oauth/token", func(c *gin.Context) {
@@ -54,9 +54,7 @@ func OAuthToken(router *gin.RouterGroup) {
 		// Disable caching of responses.
 		c.Header(header.CacheControl, header.CacheControlNoStore)
 
-		// Abort if the client has exhausted its authentication failure budget. Checked
-		// before the body is read, and charged on each path below that rejects a request
-		// before it presents credentials.
+		// Abort if the client has exhausted its authentication failure budget, checked before the body is read.
 		if limiter.Auth.Reject(clientIp) {
 			limiter.AbortJSON(c)
 			return
@@ -67,18 +65,23 @@ func OAuthToken(router *gin.RouterGroup) {
 		LimitRequestBodyBytes(c, MaxOAuthRequestBytes)
 
 		if IsOAuthFormRequest(c) {
+			// An oversized form counts towards limiter.Authorize.
 			if err := c.Request.ParseForm(); IsRequestBodyTooLarge(err) {
-				limiter.Auth.Reserve(clientIp)
+				if limiter.Authorize.Reject(clientIp) {
+					limiter.AbortJSON(c)
+					return
+				}
+
+				limiter.Authorize.Reserve(clientIp)
 				event.AuditWarn([]string{clientIp, "oauth2", actor, action, "request too large", status.Error(err)})
 				AbortRequestTooLarge(c, i18n.ErrBadRequest)
 				return
 			}
 		}
 
-		// The Portal OIDC OP handles the authorization_code grant and parses the request
-		// itself, so a single token_endpoint serves both. This runs before the binding
-		// because form.OAuthCreateToken.Validate rejects the grant, and it is gated on a
-		// form content type per RFC 6749.
+		// OAuthAuthorizationCodeHandler (the app flow; on Portal a dispatcher) parses the
+		// authorization_code grant itself. This runs before the binding, which rejects the
+		// grant, and is gated on a form content type per RFC 6749.
 		if IsOAuthFormRequest(c) && authn.Grant(c.PostForm("grant_type")) == authn.GrantAuthorizationCode {
 			if OAuthAuthorizationCodeHandler != nil {
 				OAuthAuthorizationCodeHandler(c)
@@ -90,6 +93,13 @@ func OAuthToken(router *gin.RouterGroup) {
 				"error":             "unsupported_grant_type",
 				"error_description": "grant_type is not supported",
 			})
+			return
+		}
+
+		// Refresh tokens are only issued to apps, which authenticate without a client secret,
+		// so the grant is handled before HTTP Basic credentials select client_credentials.
+		if IsOAuthFormRequest(c) && authn.Grant(c.PostForm("grant_type")) == authn.GrantRefreshToken {
+			OAuthAppRefresh(c)
 			return
 		}
 
@@ -244,15 +254,27 @@ func OAuthToken(router *gin.RouterGroup) {
 		}
 
 		// Save new session.
-		if sess, err = get.Session().Save(sess); err != nil {
+		sess, err = get.Session().Save(sess)
+
+		switch {
+		case err != nil:
 			event.AuditErr([]string{clientIp, "oauth2", actor, action, status.Error(err)})
 			AbortInvalidCredentials(c)
 			return
-		} else if sess == nil {
+		case sess == nil:
 			event.AuditErr([]string{clientIp, "oauth2", actor, action, StatusFailed.String()})
 			AbortUnexpectedError(c)
 			return
-		} else {
+		case client != nil && client.AuthChanged():
+			// Issue the token only if the stored client matches the copy the request authenticated with.
+			if err = sess.Delete(); err != nil {
+				event.AuditErr([]string{clientIp, "oauth2", actor, action, "delete session", status.Error(err)})
+			}
+
+			event.AuditWarn([]string{clientIp, "oauth2", actor, action, "client changed", status.Denied})
+			AbortInvalidCredentials(c)
+			return
+		default:
 			event.AuditInfo([]string{clientIp, "oauth2", actor, action, status.Created})
 		}
 

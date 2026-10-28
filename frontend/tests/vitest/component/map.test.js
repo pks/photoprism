@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { isProxy } from "vue";
 import PMap from "component/map.vue";
 
 const mocks = vi.hoisted(() => ({ load: vi.fn(), supportsWebGL2: vi.fn(), locale: vi.fn(() => ({ "Map.Title": "Karte" })) }));
@@ -91,6 +92,20 @@ describe("PMap", () => {
     expect(namespace.Map).not.toHaveBeenCalled();
   });
 
+  // MapLibre memoizes values like color channels as read-only, non-configurable
+  // properties, which a reactive proxy cannot return without throwing.
+  it("keeps the renderer and marker raw so memoized read-only values stay readable", async () => {
+    const color = {};
+    Object.defineProperty(color, "rgb", { value: [0, 0, 0, 1] });
+    renderer.style = { color };
+    wrapper = mountMap();
+    await flushPromises();
+    events.load();
+    expect(isProxy(wrapper.vm.map)).toBe(false);
+    expect(isProxy(wrapper.vm.marker)).toBe(false);
+    expect(wrapper.vm.map.style.color.rgb).toBe(color.rgb);
+  });
+
   it("preserves controls, coordinate ordering, click and drag events, and cleanup", async () => {
     wrapper = mountMap({ interactive: true, clickable: true, draggable: true, showControls: true });
     await flushPromises();
@@ -124,7 +139,6 @@ describe("PMap", () => {
     expect(wrapper.emitted("marker-moved")).toEqual([[{ lat: 48, lng: 17 }]]);
     expect(wrapper.emitted("update:latlng")).toEqual([[[48, 17]]]);
     expect(wrapper.emitted("map-clicked")).toBeUndefined();
-    expect(renderer.setCenter).not.toHaveBeenCalled();
     expect(renderer.flyTo).not.toHaveBeenCalled();
     expect(renderer.jumpTo).not.toHaveBeenCalled();
     expect(marker.setLngLat).toHaveBeenCalledExactlyOnceWith([17, 48]);
@@ -148,7 +162,7 @@ describe("PMap", () => {
     expect(wrapper.emitted("update:latlng")).toEqual([[[48, 17]], [[49, 18]]]);
     expect(marker.setLngLat).toHaveBeenCalledExactlyOnceWith([18, 49]);
     expect(renderer.stop).toHaveBeenCalledOnce();
-    expect(renderer.setCenter).not.toHaveBeenCalled();
+    expect(renderer.jumpTo).not.toHaveBeenCalled();
     expect(renderer.flyTo).not.toHaveBeenCalled();
   });
 
@@ -163,7 +177,7 @@ describe("PMap", () => {
 
     expect(namespace.Marker).toHaveBeenCalledOnce();
     expect(marker.setLngLat).toHaveBeenCalledExactlyOnceWith([17, 48]);
-    expect(renderer.setCenter).not.toHaveBeenCalled();
+    expect(renderer.jumpTo).not.toHaveBeenCalled();
     expect(renderer.flyTo).not.toHaveBeenCalled();
   });
 
@@ -180,9 +194,66 @@ describe("PMap", () => {
 
     expect(marker.setLngLat).toHaveBeenCalledWith([19, 50]);
     if (animateDuration) {
-      expect(renderer.flyTo).toHaveBeenCalledWith(expect.objectContaining({ center: [19, 50], duration: animateDuration }));
+      // Not essential, so MapLibre skips the animation when the system prefers reduced motion.
+      expect(renderer.flyTo).toHaveBeenCalledWith({ center: [19, 50], zoom: 9, duration: animateDuration, essential: false });
     } else {
-      expect(renderer.setCenter).toHaveBeenCalledWith([19, 50], expect.any(Object));
+      expect(renderer.jumpTo).toHaveBeenCalledWith({ center: [19, 50], zoom: 9 });
     }
+  });
+
+  it.each([0, 1000])("zooms from the world view to a location set from outside with animation duration %i", async (animateDuration) => {
+    wrapper = mountMap({ latlng: [0, 0], zoom: 12, interactive: true, draggable: true, animateDuration });
+    await flushPromises();
+    expect(namespace.Map).toHaveBeenCalledWith(expect.objectContaining({ center: [0, 20], zoom: 2 }));
+    events.load();
+
+    await wrapper.setProps({ latlng: [48, 17] });
+
+    const camera = animateDuration ? renderer.flyTo : renderer.jumpTo;
+    expect(camera).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ center: [17, 48], zoom: 12 }));
+  });
+
+  it("recenters a non-interactive map without changing its zoom", async () => {
+    wrapper = mountMap({ animateDuration: 0 });
+    await flushPromises();
+    events.load();
+    vi.clearAllMocks();
+
+    await wrapper.setProps({ latlng: [50, 19] });
+
+    expect(renderer.jumpTo).toHaveBeenCalledExactlyOnceWith({ center: [19, 50] });
+    expect(renderer.jumpTo.mock.calls[0][0].zoom).toBeUndefined();
+  });
+
+  it("flies to coordinates passed by the location dialog without an essential animation", async () => {
+    wrapper = mountMap({ animateDuration: 1000 });
+    await flushPromises();
+
+    wrapper.vm.flyTo(20, 0, 2);
+
+    expect(renderer.flyTo).toHaveBeenCalledExactlyOnceWith({ center: [0, 20], zoom: 2, duration: 1000, essential: false });
+  });
+
+  it("centers the initial view on a location on the equator", async () => {
+    wrapper = mountMap({ latlng: [0, 30] });
+    await flushPromises();
+    expect(namespace.Map).toHaveBeenCalledWith(expect.objectContaining({ center: [30, 0], zoom: 9 }));
+    events.load();
+    expect(marker.setLngLat).toHaveBeenCalledWith([30, 0]);
+  });
+});
+
+describe("PMap.lngLat", () => {
+  it.each([
+    [[47.5, 16.5], [16.5, 47.5]],
+    [[0, 30], [30, 0]],
+    [[51.5, 0], [0, 51.5]],
+    [[-90, -180], [-180, -90]],
+    [["47.5", "16.5"], [16.5, 47.5]],
+  ])("converts %j to MapLibre order", (latlng, expected) => {
+    expect(PMap.methods.lngLat(latlng)).toEqual(expected);
+  });
+  it.each([[[0, 0]], [[90.5, 10]], [[10, 180.5]], [[null, 10]], [["", ""]], [[Number.NaN, 10]], [[]], [undefined]])("rejects %j", (latlng) => {
+    expect(PMap.methods.lngLat(latlng)).toBeNull();
   });
 });

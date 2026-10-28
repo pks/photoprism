@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,7 @@ import (
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/i18n"
 	"github.com/photoprism/photoprism/pkg/rnd"
@@ -57,6 +59,35 @@ func TestStartImport(t *testing.T) {
 
 		assert.Equal(t, http.StatusInsufficientStorage, r.Code)
 		config.Options().FilesQuota = 0
+	})
+	t.Run("UnsupportedDest", func(t *testing.T) {
+		app, router, config := NewApiTest()
+		dest := config.Options().ImportDest
+		t.Cleanup(func() { config.Options().ImportDest = dest })
+		config.Options().ImportDest = "a:b"
+		StartImport(router)
+		r := PerformRequestWithBody(app, "POST", "/api/v1/import/", `{"move":false}`)
+
+		assert.Equal(t, http.StatusBadRequest, r.Code, r.Body.String())
+	})
+	t.Run("ImportPathInOriginals", func(t *testing.T) {
+		app, router, config := NewApiTest()
+		importPath := config.Options().ImportPath
+		t.Cleanup(func() { config.Options().ImportPath = importPath })
+		config.Options().ImportPath = config.OriginalsPath()
+		StartImport(router)
+		sub := event.Subscribe("notify.info")
+		defer event.Unsubscribe(sub)
+		r := PerformRequestWithBody(app, "POST", "/api/v1/import/", `{"move":false}`)
+
+		assert.Equal(t, http.StatusBadRequest, r.Code, r.Body.String())
+
+		// The import is not announced.
+		select {
+		case msg := <-sub.Receiver:
+			t.Fatalf("unexpected notification %v", msg.Fields)
+		case <-time.After(100 * time.Millisecond):
+		}
 	})
 }
 
@@ -105,11 +136,11 @@ func TestStartImportAlbums(t *testing.T) {
 	file, err := entity.FirstFileByHash(hash)
 	require.NoError(t, err)
 
-	var count int
+	var count int64
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("photo_uid = ? AND album_uid = ?", file.PhotoUID, album.AlbumUID).Count(&count).Error)
-	assert.Equal(t, 1, count)
+	assert.EqualValues(t, 1, count)
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("album_uid = ?", missing).Count(&count).Error)
-	assert.Equal(t, 0, count)
+	assert.EqualValues(t, 0, count)
 }
 
 func TestStartImportUploadFolder(t *testing.T) {

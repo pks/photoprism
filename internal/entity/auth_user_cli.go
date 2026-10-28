@@ -17,7 +17,7 @@ func (m *User) SetValuesFromCli(ctx *cli.Context) error {
 
 	// Email address.
 	if ctx.IsSet("email") {
-		m.UserEmail = frm.Email()
+		m.SetEmail(frm.Email())
 	}
 
 	// Display name.
@@ -37,13 +37,11 @@ func (m *User) SetValuesFromCli(ctx *cli.Context) error {
 		privilegeLevelChange = true
 	}
 
-	// Authentication ID.
+	// Authentication ID, which is set after validation, since setting it clears the same ID on other accounts.
 	if ctx.IsSet("auth-id") {
 		if frm.AuthID == "" {
 			m.AuthID = ""
 			m.AuthIssuer = ""
-		} else {
-			m.SetAuthID(frm.AuthID, m.AuthIssuer)
 		}
 		privilegeLevelChange = true
 	}
@@ -71,6 +69,12 @@ func (m *User) SetValuesFromCli(ctx *cli.Context) error {
 	// Allow the use of WebDAV?
 	if ctx.IsSet("webdav") {
 		m.WebDAV = frm.WebDAV
+		privilegeLevelChange = true
+	}
+
+	// Allow the use of MCP?
+	if ctx.IsSet("mcp") {
+		m.MCP = frm.MCPSetting()
 		privilegeLevelChange = true
 	}
 
@@ -108,7 +112,13 @@ func (m *User) SetValuesFromCli(ctx *cli.Context) error {
 	if err := m.Validate(); err != nil {
 		// Invalid.
 		return err
-	} else if privilegeLevelChange {
+	}
+
+	if ctx.IsSet("auth-id") && frm.AuthID != "" {
+		m.SetAuthID(frm.AuthID, m.AuthIssuer)
+	}
+
+	if privilegeLevelChange {
 		// Revoke all user sessions after a privilege level change,
 		// except for app passwords and client access tokens.
 		m.RevokeDerivedSessions(nil)
@@ -126,7 +136,7 @@ func (m *User) RestoreFromCli(ctx *cli.Context, newPassword string) (err error) 
 		}
 	}
 
-	m.DeletedAt = nil
+	m.DeletedAt = DeletedAt{}
 
 	// Set values.
 	if err = m.SetValuesFromCli(ctx); err != nil {

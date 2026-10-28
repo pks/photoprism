@@ -84,7 +84,7 @@ func (w *Convert) JpegConvertCmds(f *MediaFile, jpegName string, xmpName string)
 	// ExifTool preview extraction also runs when rendering is disabled, so existing previews stay usable.
 	if f.IsRaw() {
 		if rawEnabled {
-			if w.conf.DarktableEnabled() && w.darktableExclude.Allow(fileExt) {
+			if w.conf.DarktableEnabled() && w.darktableExclude.Allow(fileExt) && raw.DarktableOutputAllowed(jpegName) {
 				cmd, mutex := raw.DarktableCmd(raw.DarktableOptions{
 					Bin:       w.conf.DarktableBin(),
 					RawName:   f.FileName(),
@@ -142,8 +142,8 @@ func (w *Convert) JpegConvertCmds(f *MediaFile, jpegName string, xmpName string)
 		)
 	}
 
-	// Use ImageMagick for other media file formats if the type and extension are allowed.
-	if w.conf.ImageMagickEnabled() && w.imageMagickExclude.Allow(fileExt) {
+	// Use ImageMagick for other media file formats if the type, extension, and file names are allowed.
+	if w.conf.ImageMagickEnabled() && w.imageMagickExclude.Allow(fileExt) && magickNames(f.FileName(), jpegName) {
 		resize := fmt.Sprintf("%dx%d>", w.conf.JpegSize(), w.conf.JpegSize())
 		quality := fmt.Sprintf("%d", w.conf.JpegQuality())
 

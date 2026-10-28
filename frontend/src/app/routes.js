@@ -38,6 +38,7 @@ import Admin from "page/admin.vue";
 import Cluster from "page/cluster.vue";
 import Login from "page/auth/login.vue";
 import Instances from "page/auth/instances.vue";
+import Consent from "page/auth/consent.vue";
 import Discover from "page/discover.vue";
 import About from "page/about/about.vue";
 import License from "page/about/license.vue";
@@ -50,30 +51,21 @@ const c = window.__CONFIG__;
 const siteTitle = c.siteTitle ? c.siteTitle : c.name;
 const loginRoute = "login";
 
-// safeReturnTo validates the `return_to` query parameter so callers can route
-// the user back to a same-origin destination without enabling an open-redirect
-// vector. Accepts root-relative paths or absolute URLs whose origin matches
-// the browser's; rejects protocol-relative URLs and cross-origin absolutes.
+// safeReturnTo returns the path, query, and fragment of a return_to value that resolves to the
+// current origin, or an empty string otherwise. The path must not start with "//", as it is resolved
+// again when followed.
 export function safeReturnTo(value) {
   if (!value || typeof value !== "string") {
     return "";
   }
   const trimmed = value.trim();
-  if (!trimmed) {
+  const here = typeof window !== "undefined" ? window.location?.origin : "";
+  if (!trimmed || !here) {
     return "";
-  }
-  // Protocol-relative URLs (//evil.example) and backslash-prefixed paths
-  // (\\evil.example) can be misparsed by old browsers — reject up front.
-  if (trimmed.startsWith("//") || trimmed.startsWith("\\")) {
-    return "";
-  }
-  if (trimmed.startsWith("/")) {
-    return trimmed;
   }
   try {
-    const here = typeof window !== "undefined" ? window.location?.origin : "";
-    const parsed = new URL(trimmed, here || "http://localhost/");
-    if (here && parsed.origin === here) {
+    const parsed = new URL(trimmed, here);
+    if (parsed.origin === here && !parsed.pathname.startsWith("//")) {
       return parsed.pathname + parsed.search + parsed.hash;
     }
   } catch {
@@ -247,6 +239,18 @@ export default [
         // cluster.vue redirects to the user's default route in `created()`.
         next();
       }
+    },
+  },
+  {
+    name: "consent",
+    path: "/oauth/consent",
+    component: Consent,
+    meta: {
+      title: $gettext("Connect"),
+      requiresAuth: true,
+      hideNav: true,
+      settings: false,
+      background: "background",
     },
   },
   {

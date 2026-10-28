@@ -106,7 +106,7 @@
                 v-model="time"
                 :append-inner-icon="view.model.TakenSrc === 'manual' ? 'mdi-check' : ''"
                 :disabled="disabled"
-                :label="view.model.timeIsUTC() ? $gettext('Time UTC') : $gettext('Local Time')"
+                :label="view.model.timeIsUTC() ? 'UTC' : $gettext('Local Time')"
                 :prepend-inner-icon="$vuetify.display.xs ? undefined : 'mdi-clock-time-eight-outline'"
                 autocomplete="off"
                 autocorrect="off"
@@ -121,7 +121,8 @@
             </v-col>
             <v-col cols="6" lg="4">
               <v-autocomplete
-                v-model="view.model.TimeZone"
+                :key="timeZoneKey"
+                :model-value="view.model.TimeZone"
                 :disabled="disabled"
                 :label="$gettext('Time Zone')"
                 hide-no-data
@@ -130,7 +131,7 @@
                 :items="options.TimeZones()"
                 density="comfortable"
                 class="input-timezone"
-                @update:model-value="syncTime"
+                @update:model-value="setTimeZone"
               ></v-autocomplete>
             </v-col>
             <v-col cols="12" sm="6" md="6">
@@ -445,6 +446,8 @@ export default {
       showDatePicker: false,
       showTimePicker: false,
       invalidDate: false,
+      dateChanged: false,
+      timeZoneKey: 0,
       time: "",
       locationLabel: this.$gettext("Location"),
       locationDialog: false,
@@ -462,10 +465,21 @@ export default {
     inReview() {
       return this.featReview && this.view.model.Quality < 3;
     },
+    // takenTime identifies the capture time and zone of the model, so the time field can follow outside updates.
+    takenTime() {
+      return `${this.view?.model?.TimeZone}|${this.view?.model?.TakenAt}|${this.view?.model?.TakenAtLocal}`;
+    },
   },
   watch: {
     uid() {
       this.syncData();
+    },
+    // takenTime resyncs the time field when the model's time is replaced, e.g. by a label or file update,
+    // unless the field holds an edit that has not been applied yet.
+    takenTime() {
+      if (!this.dateChanged) {
+        this.syncTime();
+      }
     },
   },
   created() {
@@ -480,7 +494,9 @@ export default {
     this.$refs.form?.validate?.();
   },
   methods: {
+    // setDay applies a manual date selection.
     setDay(v) {
+      this.dateChanged = true;
       if (Number.isInteger(v?.value)) {
         this.view.model.Day = v?.value;
         this.clampDayToValidRange();
@@ -496,7 +512,9 @@ export default {
         this.syncTime();
       }
     },
+    // setMonth applies a manual date selection.
     setMonth(v) {
+      this.dateChanged = true;
       if (Number.isInteger(v?.value)) {
         this.view.model.Month = v?.value;
         this.clampDayToValidRange();
@@ -512,7 +530,9 @@ export default {
         this.syncTime();
       }
     },
+    // setYear applies a manual date selection.
     setYear(v) {
+      this.dateChanged = true;
       if (Number.isInteger(v?.value)) {
         this.view.model.Year = v?.value;
         this.clampDayToValidRange();
@@ -557,12 +577,16 @@ export default {
         this.view.model.Day = maxDay;
       }
     },
+    // setTime applies a valid manual time edit.
     setTime() {
+      this.dateChanged = true;
       if (this.rules.isTime(this.time)) {
         this.updateModel();
       }
     },
+    // syncData refreshes the editor after loading or saving a photo.
     syncData() {
+      this.dateChanged = false;
       this.syncLocation();
       this.syncTime();
     },
@@ -573,6 +597,25 @@ export default {
         this.locationLabel = this.$gettext("Location");
       }
     },
+    // setTimeZone applies pending date edits, then changes the zone with Photo.changeTimeZone.
+    // A cleared or refused selection re-renders the field, so it shows the zone that is kept.
+    setTimeZone(zone) {
+      if (!zone || (this.dateChanged && !this.updateModel())) {
+        this.timeZoneKey++;
+        return;
+      }
+
+      this.view.model.changeTimeZone(zone);
+
+      if (this.view.model.TimeZone !== zone) {
+        this.timeZoneKey++;
+        return;
+      }
+
+      this.dateChanged = false;
+      this.syncTime();
+    },
+    // syncTime refreshes the time input from the current photo values.
     syncTime() {
       if (!this.view?.model.hasId()) {
         return;
@@ -581,46 +624,38 @@ export default {
       const taken = this.view.model.getDateTime();
       this.time = taken.toFormat("HH:mm:ss");
     },
+    // updateModel applies manual calendar fields and time to the capture timestamps and reports whether they are valid.
     updateModel() {
       if (!this.view?.model.hasId()) {
-        return;
+        return false;
       }
 
-      let localDate = this.view.model.localDate(this.time);
+      const localDate = this.view.model.setLocalTime(this.time);
 
       this.invalidDate = !localDate.isValid;
 
       if (this.invalidDate) {
-        return;
+        return false;
       }
 
       if (this.view.model.Day === 0) {
-        this.view.model.Day = parseInt(localDate.toFormat("d"));
+        this.view.model.Day = localDate.day;
       }
 
       if (this.view.model.Month === 0) {
-        this.view.model.Month = parseInt(localDate.toFormat("L"));
+        this.view.model.Month = localDate.month;
       }
 
       if (this.view.model.Year === 0) {
-        this.view.model.Year = parseInt(localDate.toFormat("y"));
+        this.view.model.Year = localDate.year;
       }
 
-      const isoTime =
-        localDate.toISO({
-          suppressMilliseconds: true,
-          includeOffset: false,
-        }) + "Z";
-
-      this.view.model.TakenAtLocal = isoTime;
-
-      if (this.view.model.currentTimeZoneUTC()) {
-        this.view.model.TakenAt = isoTime;
-      }
+      return true;
     },
     openPhoto() {
       this.$lightbox.openModels(Thumb.fromPhotos([this.view.model]), 0);
     },
+    // save validates and persists the edited photo.
     save(close) {
       if (this.invalidDate) {
         this.$notify.error(this.$gettext("Invalid date"));
@@ -636,7 +671,13 @@ export default {
           return;
         }
 
-        this.updateModel();
+        if (this.dateChanged) {
+          this.updateModel();
+          if (this.invalidDate) {
+            this.$notify.error(this.$gettext("Invalid date"));
+            return;
+          }
+        }
 
         // Photo.update() runs trimInputs() before the PUT.
         return this.view.model.update().then(() => {

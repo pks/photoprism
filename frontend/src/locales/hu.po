@@ -1,17 +1,17 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: photoprism\n"
-"Report-Msgid-Bugs-To: ci@photoprism.app\n"
+"Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2026-10-02 16:58+0000\n"
-"Last-Translator: DeepL <noreply-mt-deepl@weblate.org>\n"
+"PO-Revision-Date: 2026-10-23 09:04+0000\n"
+"Last-Translator: \n"
 "Language-Team: Hungarian <https://translate.photoprism.app/projects/photoprism/frontend/hu/>\n"
 "Language: hu\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
-"X-Generator: Weblate 2026.10\n"
+"X-Generator: Weblate 2026.10.1\n"
 
 #: src/locales.js:461
 msgid "%d entries added to %s"
@@ -33,9 +33,21 @@ msgstr "%s már létezik"
 msgid "%s has been restored"
 msgstr "%s visszaállítva"
 
+#: src/page/auth/consent.vue:23
+msgid "%{client} cannot be connected to your account %{account} on %{site}."
+msgstr "A %{client} nem tud csatlakozni a %{site} oldalon található %{account} fiókjához."
+
+#: src/page/auth/consent.vue:20
+msgid "%{client} wants to access your account %{account} on %{site}."
+msgstr "%{client} hozzáférést szeretne kérni a %{site} webhelyen található %{account} fiókjához."
+
 #: src/component/navigation.vue:652
 msgid "%{n} GB of %{q} GB used"
 msgstr "%{n} GB %{q} GB használt"
+
+#: src/component/photo/export/dialog.vue:59
+msgid "%{n} Selected"
+msgstr "%{n} Kiválasztva"
 
 #: src/page/albums.vue:1116
 msgid "%{n} albums found"
@@ -58,38 +70,38 @@ msgstr "%{n} ember találat"
 msgid "%{n} pictures found"
 msgstr "%{n} kép találat"
 
-#: src/common/form.js:291 src/common/form.js:296
+#: src/common/form.js:311 src/common/form.js:316
 #: src/component/input/chip-selector.vue:277
-#: src/component/lightbox/sidebar.vue:1677
+#: src/component/lightbox/sidebar.vue:1682
 #: src/component/photo/album/dialog.vue:143
 #: src/component/photo/edit/labels.vue:299
 msgid "%{s} is too long"
 msgstr "%{s} túl hosszú"
 
-#: src/common/form.js:290 src/common/form.js:295
+#: src/common/form.js:310 src/common/form.js:315
 msgid "%{s} is too short"
 msgstr "%{s} túl rövid"
 
-#: src/options/options.js:426
+#: src/options/options.js:429
 msgid "1 hour"
 msgstr "1 óra"
 
-#: src/options/options.js:428
+#: src/options/options.js:431
 msgid "12 hours"
 msgstr "12 óra"
 
-#: src/component/user/edit/dialog.vue:293
+#: src/component/user/edit/dialog.vue:303
 #: src/component/cluster/node/user-edit.vue:245
-#: src/component/user/edit/dialog.vue:316 src/page/settings/account.vue:175
-#: src/component/user/edit/dialog.vue:309
+#: src/component/user/edit/dialog.vue:326 src/page/settings/account.vue:175
+#: src/component/user/edit/dialog.vue:319
 #: src/component/settings/passcode.vue:18 src/page/settings/account.vue:159
 msgid "2-Factor Authentication"
 msgstr "2-faktoros hitelesítés"
 
-#: src/component/user/edit/dialog.vue:292
+#: src/component/user/edit/dialog.vue:302
 #: src/component/cluster/node/user-edit.vue:244
-#: src/component/user/edit/dialog.vue:315
-#: src/component/user/edit/dialog.vue:308 src/options/auth.js:76
+#: src/component/user/edit/dialog.vue:325
+#: src/component/user/edit/dialog.vue:318 src/options/auth.js:81
 msgid "2FA"
 msgstr "2FA"
 
@@ -97,11 +109,11 @@ msgstr "2FA"
 msgid "3rd-party software packages"
 msgstr "Harmadik féltől származó szoftvercsomagok"
 
-#: src/options/options.js:427
+#: src/options/options.js:430
 msgid "4 hours"
 msgstr "4 óra"
 
-#: src/component/share/dialog.vue:123
+#: src/component/share/dialog.vue:104
 msgid "A click will copy it to your clipboard."
 msgstr "A kattintás egy másolatot helyez a vágólapra."
 
@@ -128,15 +140,20 @@ msgstr "API Kulcs"
 #: src/component/user/edit/dialog.vue:146
 #: src/component/user/edit/dialog.vue:147 src/page/settings/account.vue:139
 #: src/page/settings/account.vue:140 src/page/about/about.vue:19
-#: src/app/routes.js:97 src/component/navigation.vue:595
+#: src/app/routes.js:89 src/component/navigation.vue:595
 #: src/page/people/recognized.vue:132 src/page/settings/account.vue:123
 #: src/page/settings/account.vue:124
 msgid "About"
 msgstr "Rólunk"
 
-#: src/options/auth.js:46 src/options/auth.js:74
+#: src/options/auth.js:50 src/options/auth.js:78
 msgid "Access Token"
 msgstr "Hozzáférési jelszó"
+
+#: src/component/client/add/dialog.vue:105
+#: src/component/client/edit/dialog.vue:117
+msgid "Access Token Lifetime"
+msgstr "A hozzáférési token érvényességi ideje"
 
 #: src/component/cluster/instance-access.vue:209
 #: src/component/cluster/instance-access.vue:211
@@ -147,15 +164,15 @@ msgstr "Hozzáférés engedélyezve."
 msgid "Access revoked."
 msgstr "A hozzáférés visszavonva."
 
-#: src/page/settings/general.vue:423
+#: src/page/settings/general.vue:438
 msgid "Accessibility"
 msgstr "Akadálymentesség"
 
 #: src/component/navigation.vue:578 src/component/user/edit/dialog.vue:26
 #: src/component/auth/menu.vue:14 src/component/navigation.vue:698
 #: src/component/navigation.vue:887 src/component/service/upload.vue:25
-#: src/locales.js:358 src/model/service.js:81 src/model/user.js:151
-#: src/page/settings.vue:112 src/page/settings/general.vue:394
+#: src/locales.js:358 src/model/service.js:86 src/model/user.js:152
+#: src/page/settings.vue:112 src/page/settings/general.vue:409
 msgid "Account"
 msgstr "Fiók"
 
@@ -163,7 +180,7 @@ msgstr "Fiók"
 msgid "Account Group Mappings"
 msgstr "Fiókcsoport-hozzárendelések"
 
-#: src/component/user/add/dialog.vue:268 src/component/user/add/dialog.vue:284
+#: src/component/user/add/dialog.vue:292 src/component/user/add/dialog.vue:306
 #: src/component/service/add.vue:137 src/locales.js:464
 msgid "Account created"
 msgstr "Fiók létrehozva"
@@ -177,7 +194,7 @@ msgstr "Fiók törölve"
 msgid "Account not found"
 msgstr "Fiók nem található"
 
-#: src/page/admin/users.vue:589 src/page/admin/users.vue:532
+#: src/page/admin/users.vue:616 src/page/admin/users.vue:559
 msgid "Account restored"
 msgstr "Fiók visszaállítva"
 
@@ -187,7 +204,9 @@ msgstr "Fiók mentve"
 
 #: src/page/admin.vue:55 src/component/cluster/node/dialog.vue:29
 #: src/component/navigation.vue:196 src/component/navigation.vue:461
-#: src/page/cluster/nodes.vue:91 src/page/admin.vue:54 src/locales.js:359
+#: src/page/cluster/nodes.vue:92 src/component/client/edit/dialog.vue:56
+#: src/page/admin/clients.vue:85 src/page/admin/clients.vue:218
+#: src/locales.js:359
 msgid "Accounts"
 msgstr "Fiókok"
 
@@ -226,13 +245,15 @@ msgid "Activation Code"
 msgstr "Aktiválási kód"
 
 #: src/component/navigation.vue:280 src/component/navigation.vue:431
-#: src/page/admin.vue:76 src/locales.js:375
+#: src/page/admin.vue:88 src/locales.js:375
 msgid "Activity"
 msgstr "Tevékenység"
 
-#: src/component/user/add/dialog.vue:201 src/page/admin/users.vue:107
-#: src/component/user/add/dialog.vue:208 src/page/admin/users.vue:36
-#: src/component/settings/apps.vue:218
+#: src/component/user/add/dialog.vue:210 src/page/admin/users.vue:120
+#: src/component/user/add/dialog.vue:217 src/page/admin/users.vue:36
+#: src/component/client/add/dialog.vue:129
+#: src/component/client/redirect-uris.vue:23 src/page/admin/clients.vue:34
+#: src/component/settings/apps.vue:219
 msgid "Add"
 msgstr "Add"
 
@@ -249,11 +270,15 @@ msgstr "Fiók hozzáadása"
 msgid "Add Album"
 msgstr "Album hozzáadása"
 
+#: src/component/client/add/dialog.vue:16
+msgid "Add Client"
+msgstr "Ügyfél hozzáadása"
+
 #: src/component/share/dialog.vue:15
 msgid "Add Link"
 msgstr "Hivatkozás hozzáadása"
 
-#: src/component/lightbox/sidebar.vue:891
+#: src/component/lightbox/sidebar.vue:892
 msgid "Add Notes"
 msgstr "Megjegyzések hozzáadása"
 
@@ -268,7 +293,7 @@ msgstr "Cím hozzáadása"
 
 #: src/component/lightbox/sidebar.vue:480
 #: src/component/photo/edit/people.vue:97
-#: src/component/photo/edit/people.vue:138
+#: src/component/photo/edit/people.vue:139
 msgid "Add person?"
 msgstr "Személyt hozzáadni?"
 
@@ -291,7 +316,7 @@ msgstr "Hozzáadás az összeshez"
 msgid "Add to all selected photos"
 msgstr "Hozzáadás az összes kiválasztott fényképhez"
 
-#: src/component/photo/edit/files.vue:342
+#: src/component/photo/edit/files.vue:345
 msgid "Added"
 msgstr "Hozzáadva"
 
@@ -309,12 +334,12 @@ msgstr "Dátum és idő beállítása"
 
 #: src/component/meta/location/dialog.vue:18
 #: src/component/photo/batch-edit.vue:278
-#: src/component/photo/edit/details.vue:145
+#: src/component/photo/edit/details.vue:146
 msgid "Adjust Location"
 msgstr "Helyszín beállítása"
 
 #: src/model/cluster-instance.js:28 src/options/admin.js:35
-#: src/common/util.js:967 src/options/auth.js:6
+#: src/common/util.js:1021 src/options/auth.js:6
 msgid "Admin"
 msgstr "Admin"
 
@@ -322,15 +347,15 @@ msgstr "Admin"
 msgid "Advanced"
 msgstr "Haladó"
 
-#: src/options/options.js:436
+#: src/options/options.js:439
 msgid "After 1 day"
 msgstr "Egy nap után"
 
-#: src/options/options.js:437
+#: src/options/options.js:440
 msgid "After 3 days"
 msgstr "Három nap után"
 
-#: src/options/options.js:438
+#: src/options/options.js:441
 msgid "After 7 days"
 msgstr "Hét nap után"
 
@@ -338,11 +363,11 @@ msgstr "Hét nap után"
 msgid "After entering your password for confirmation, you can set up two-factor authentication with a compatible authenticator app or device:"
 msgstr "Miután megerősítésképpen megadta jelszavát, beállíthat kétfaktoros hitelesítést egy kompatibilis hitelesítő alkalmazással vagy eszközzel:"
 
-#: src/options/options.js:440
+#: src/options/options.js:443
 msgid "After one month"
 msgstr "Egy hónap után"
 
-#: src/options/options.js:442
+#: src/options/options.js:445
 msgid "After one year"
 msgstr "Egy év után"
 
@@ -350,11 +375,11 @@ msgstr "Egy év után"
 msgid "After selecting pictures from search results, you can add them to an album using the context menu."
 msgstr "A találokból kiválasztott képeket, tetszőleges albumhoz adni a menü segítségével lehet."
 
-#: src/options/options.js:441
+#: src/options/options.js:444
 msgid "After two months"
 msgstr "Két hónap után"
 
-#: src/options/options.js:439
+#: src/options/options.js:442
 msgid "After two weeks"
 msgstr "Két hét után"
 
@@ -390,10 +415,10 @@ msgstr "Album nem található"
 msgid "Album saved"
 msgstr "Album mentve"
 
-#: src/app/routes.js:342 src/component/album/toolbar.vue:118
+#: src/app/routes.js:346 src/component/album/toolbar.vue:118
 #: src/component/lightbox/sidebar.vue:286 src/component/navigation.vue:197
 #: src/component/navigation.vue:734 src/component/photo/batch-edit.vue:428
-#: src/component/photo/edit/info.vue:107 src/options/options.js:258
+#: src/component/photo/edit/info.vue:107 src/options/options.js:261
 #: src/page/settings/collections.vue:113 src/page/settings/general.vue:81
 msgid "Albums"
 msgstr "Albumok"
@@ -455,35 +480,43 @@ msgstr "Összes fájlt az import könyvtárból"
 msgid "All originals"
 msgstr "Összes eredeti"
 
-#: src/page/settings/general.vue:479
+#: src/page/auth/consent.vue:72
+msgid "Allow"
+msgstr "Engedélyezés"
+
+#: src/page/settings/general.vue:494
 msgid "Allow Page Zoom"
 msgstr "Oldal nagyításának engedélyezése"
 
-#: src/page/settings/general.vue:306
+#: src/page/settings/general.vue:321
 msgid "Allow configuration and use of connected apps and services for remote uploads and sync."
 msgstr "Lehetővé teszi a csatlakoztatott alkalmazások és szolgáltatások konfigurálását és használatát távoli feltöltéshez és szinkronizáláshoz."
 
-#: src/page/settings/general.vue:261
+#: src/page/settings/general.vue:276
 msgid "Allow editing of metadata such as title, description, date, and location."
 msgstr "Lehetővé teszi a metaadatok, például a cím, a leírás, a dátum és a helyszín szerkesztését."
 
-#: src/page/settings/general.vue:276
+#: src/page/settings/general.vue:291
 msgid "Allow editing the metadata, labels, and albums of multiple pictures at once."
 msgstr "Lehetővé teszi több kép metaadatainak, címkéinek és albumainak szerkesztését egyszerre."
 
 #: src/page/settings/general.vue:246
+msgid "Allow exporting pictures in different formats and sizes."
+msgstr "Lehetővé teszi a képek különböző formátumokban és méretekben történő exportálását."
+
+#: src/page/settings/general.vue:261
 msgid "Allow files to be copied or moved from the Import to the Originals folder."
 msgstr "Engedélyezze az Importálás eszközt a fájlok másolásához vagy áthelyezéséhez az Importálás mappából az Eredeti mappába."
 
-#: src/page/settings/general.vue:336
+#: src/page/settings/general.vue:351
 msgid "Allow files to be permanently deleted to free up storage space."
 msgstr "Engedélyezi a fájlok végleges törlését a tárhely felszabadítása érdekében."
 
-#: src/page/settings/general.vue:321
+#: src/page/settings/general.vue:336
 msgid "Allow users to archive photos and videos so they are hidden without being deleted."
 msgstr "Lehetővé teszi a felhasználók számára a fényképek és videók archiválását, így azok törlés nélkül elrejthetők."
 
-#: src/page/settings/general.vue:291
+#: src/page/settings/general.vue:306
 msgid "Allow users to create and share links, and enable sharing with connected services."
 msgstr "Lehetővé teszi a felhasználók számára, hogy linkeket hozzanak létre és osszanak meg, és lehetővé teszi a megosztást a kapcsolódó szolgáltatásokkal."
 
@@ -491,11 +524,11 @@ msgstr "Lehetővé teszi a felhasználók számára, hogy linkeket hozzanak lét
 msgid "Allow users to upload new photos and videos through the web interface."
 msgstr "Lehetővé teszi a felhasználók számára, hogy új fényképeket és videókat töltsenek fel a webes felületen keresztül."
 
-#: src/page/settings/general.vue:480
+#: src/page/settings/general.vue:495
 msgid "Allow zooming with pinch gestures on mobile devices."
 msgstr "Lehetővé teszi a nagyítást csípőmozdulatokkal a mobil eszközökön."
 
-#: src/component/share/dialog.vue:125
+#: src/component/share/dialog.vue:106
 msgid "Alternatively, you can upload files directly to WebDAV servers like Nextcloud."
 msgstr "Alternatívaként a fájlok feltölthetők WebDAV szerverekre is, mint például Nextcloud."
 
@@ -504,20 +537,21 @@ msgid "Altitude"
 msgstr "Magasság"
 
 #: src/component/photo/batch-edit.vue:317
-#: src/component/photo/edit/details.vue:180
+#: src/component/photo/edit/details.vue:181
 msgid "Altitude (m)"
 msgstr "Magasság (m)"
 
-#: src/app/routes.js:423 src/common/util.js:907
+#: src/app/routes.js:427 src/common/util.js:961
 #: src/component/photo/batch-edit.vue:68 src/component/photo/batch-edit.vue:127
 #: src/component/photo/edit/files.vue:194
+#: src/component/photo/export/dialog.vue:273
 #: src/component/photo/view/cards.vue:113
 #: src/component/photo/view/cards.vue:230 src/component/photo/view/list.vue:82
-#: src/component/photo/view/mosaic.vue:68 src/options/options.js:365
+#: src/component/photo/view/mosaic.vue:68 src/options/options.js:368
 msgid "Animated"
 msgstr "Mozgó"
 
-#: src/page/settings/general.vue:521
+#: src/page/settings/general.vue:536
 msgid "Animation"
 msgstr "Animáció"
 
@@ -525,12 +559,12 @@ msgstr "Animáció"
 msgid "Animations"
 msgstr "Animációk"
 
-#: src/component/share/dialog.vue:124
+#: src/component/share/dialog.vue:105
 msgid "Any private photos and videos remain private and won't be shared."
 msgstr "Bármilyen privát fotó és videó privát marad és nem kerül megosztásra."
 
-#: src/page/admin/sessions.vue:132 src/component/cluster/node/overview.vue:23
-#: src/page/admin/sessions.vue:172 src/locales.js:381 src/options/auth.js:45
+#: src/page/admin/sessions.vue:134 src/component/cluster/node/overview.vue:23
+#: src/page/admin/sessions.vue:174 src/locales.js:381 src/options/auth.js:49
 msgid "Application"
 msgstr "Alkalmazás"
 
@@ -539,12 +573,12 @@ msgid "Applications"
 msgstr "Alkalmazások"
 
 #: src/component/photo/clipboard.vue:36
-#: src/component/photo/edit/details.vue:395
+#: src/component/photo/edit/details.vue:396
 #: src/component/photo/view/cards.vue:177
 msgid "Approve"
 msgstr "Jóváhagy"
 
-#: src/component/photo/edit/details.vue:391
+#: src/component/photo/edit/details.vue:392
 msgid "Approve and save changes"
 msgstr "A változtatások jóváhagyása és mentése"
 
@@ -553,19 +587,19 @@ msgstr "A változtatások jóváhagyása és mentése"
 msgid "Apps and Devices"
 msgstr "Alkalmazások és eszközök"
 
-#: src/app/routes.js:454 src/component/navigation.vue:183
-#: src/page/settings/general.vue:320
+#: src/app/routes.js:458 src/component/navigation.vue:183
+#: src/page/settings/general.vue:335
 msgctxt "Noun"
 msgid "Archive"
 msgstr "Archívum"
 
-#: src/component/lightbox.vue:1754 src/component/photo/clipboard.vue:108
+#: src/component/lightbox.vue:1779 src/component/photo/clipboard.vue:108
 #: src/component/photo/view/cards.vue:165
 msgctxt "Verb"
 msgid "Archive"
 msgstr "Archívum"
 
-#: src/component/lightbox.vue:3267 src/component/photo/edit/info.vue:303
+#: src/component/lightbox.vue:3326 src/component/photo/edit/info.vue:303
 msgid "Archived"
 msgstr "Archíválva"
 
@@ -602,11 +636,11 @@ msgstr "Biztos benne, hogy véglegesen törli a kiválasztott fájlokat?"
 msgid "Are you sure?"
 msgstr "Biztos benne?"
 
-#: src/component/lightbox/sidebar.vue:848
+#: src/component/lightbox/sidebar.vue:849
 #: src/component/photo/batch-edit.vue:392
 #: src/component/photo/batch-edit.vue:394
-#: src/component/photo/edit/details.vue:319
-#: src/component/photo/edit/details.vue:321
+#: src/component/photo/edit/details.vue:320
+#: src/component/photo/edit/details.vue:322
 msgid "Artist"
 msgstr "Művész"
 
@@ -618,8 +652,8 @@ msgstr "Képarány"
 msgid "Attributes"
 msgstr "Attribútumok"
 
-#: src/app/routes.js:416 src/common/util.js:905
-#: src/component/navigation.vue:254 src/options/options.js:361
+#: src/app/routes.js:420 src/common/util.js:959
+#: src/component/navigation.vue:254 src/options/options.js:364
 msgid "Audio"
 msgstr "Audio"
 
@@ -628,24 +662,28 @@ msgid "Audit Log"
 msgstr "Audio"
 
 #: src/component/user/add/dialog.vue:113 src/component/user/edit/dialog.vue:189
-#: src/page/admin/sessions.vue:112 src/page/admin/sessions.vue:222
-#: src/page/admin/users.vue:181 src/component/cluster/node/user-edit.vue:145
+#: src/page/admin/sessions.vue:114 src/page/admin/sessions.vue:224
+#: src/page/admin/users.vue:196 src/component/cluster/node/user-edit.vue:145
 #: src/component/user/add/dialog.vue:119 src/component/user/edit/dialog.vue:199
-#: src/page/admin/sessions.vue:152 src/page/admin/sessions.vue:295
-#: src/page/admin/users.vue:289 src/component/user/edit/dialog.vue:192
-#: src/page/admin/sessions.vue:293 src/page/admin/users.vue:273
+#: src/page/admin/sessions.vue:154 src/page/admin/sessions.vue:297
+#: src/page/admin/users.vue:306 src/component/user/edit/dialog.vue:192
+#: src/page/admin/sessions.vue:295 src/page/admin/users.vue:290
 #: src/locales.js:360
 msgid "Authentication"
 msgstr "Hitelesítés"
 
-#: src/common/util.js:927
+#: src/common/util.js:981
 msgid "Auto"
 msgstr "Auto"
 
-#: src/component/meta/face/markers.vue:94
-#: src/component/meta/face/markers.vue:95 src/component/settings/apps.vue:56
+#: src/component/meta/face/markers.vue:93
+#: src/component/meta/face/markers.vue:94 src/component/settings/apps.vue:56
 msgid "Back"
 msgstr "Vissza"
+
+#: src/page/auth/consent.vue:61
+msgid "Back to App"
+msgstr "Vissza az alkalmazáshoz"
 
 #: src/component/scroll.vue:6
 msgid "Back to top"
@@ -668,11 +706,11 @@ msgstr "Jelvény"
 msgid "Base Path"
 msgstr "Bázis útvonal"
 
-#: src/common/util.js:961
+#: src/common/util.js:1015
 msgid "Batch"
 msgstr "Batch"
 
-#: src/page/settings/general.vue:275
+#: src/page/settings/general.vue:290
 msgid "Batch Edit"
 msgstr "Batch szerkesztés"
 
@@ -695,20 +733,20 @@ msgstr "Mivel 100%-ban önfinanszírozók és függetlenek vagyunk, megígérhet
 msgid "Bio"
 msgstr "Bio"
 
-#: src/page/settings/account.vue:212 src/component/people/edit/dialog.vue:41
-#: src/page/settings/account.vue:196
+#: src/page/settings/account.vue:225 src/component/people/edit/dialog.vue:41
+#: src/page/settings/account.vue:209
 msgid "Birth Date"
 msgstr "Születési dátum"
 
-#: src/options/options.js:461
+#: src/options/options.js:464
 msgid "Black"
 msgstr "Fekete"
 
-#: src/options/options.js:457
+#: src/options/options.js:460
 msgid "Blue"
 msgstr "Kék"
 
-#: src/options/options.js:458
+#: src/options/options.js:461
 msgid "Brown"
 msgstr "Barna"
 
@@ -721,11 +759,11 @@ msgstr "Böngésszen a  oldalon."
 msgid "Browse Files"
 msgstr "Fájlok böngészése"
 
-#: src/component/photo/edit/people.vue:217
+#: src/component/photo/edit/people.vue:218
 msgid "Browse Pictures"
 msgstr "Képek böngészése"
 
-#: src/options/options.js:467
+#: src/options/options.js:470
 msgid "Bug Report"
 msgstr "Hibajelentés"
 
@@ -741,15 +779,15 @@ msgstr "Elfoglalt, kérem, várjon…"
 msgid "By using the software and services we provide, you agree to our terms of service, privacy policy, and code of conduct."
 msgstr "Az általunk biztosított szoftver és szolgáltatások használatával Ön elfogadja szolgáltatási feltételeinket, adatvédelmi szabályzatunkat és magatartási kódexünket."
 
-#: src/app/routes.js:355 src/component/navigation.vue:396
-#: src/options/options.js:264 src/page/settings/collections.vue:173
+#: src/app/routes.js:359 src/component/navigation.vue:396
+#: src/options/options.js:267 src/page/settings/collections.vue:173
 #: src/page/settings/general.vue:156
 msgid "Calendar"
 msgstr "Naptár"
 
 #: src/component/lightbox/sidebar.vue:119
 #: src/component/meta/camera/dialog.vue:30
-#: src/component/photo/edit/details.vue:195 src/component/photo/toolbar.vue:129
+#: src/component/photo/edit/details.vue:196 src/component/photo/toolbar.vue:129
 #: src/component/photo/view/cards.vue:204 src/component/photo/view/list.vue:40
 msgid "Camera"
 msgstr "Kamera"
@@ -780,38 +818,41 @@ msgid "Can't select more items"
 msgstr "Nem lehet több elemet kiválasztani"
 
 #: src/component/session/remove/dialog.vue:19
-#: src/component/user/add/dialog.vue:200 src/component/user/edit/dialog.vue:304
+#: src/component/user/add/dialog.vue:209 src/component/user/edit/dialog.vue:314
 #: src/component/user/remove/dialog.vue:19
 #: src/component/cluster/node/user-edit.vue:253
-#: src/component/user/add/dialog.vue:207 src/component/user/edit/dialog.vue:334
-#: src/page/connect.vue:39 src/component/user/edit/dialog.vue:320
-#: src/page/connect.vue:46 src/component/album/delete/dialog.vue:19
+#: src/component/user/add/dialog.vue:216 src/component/user/edit/dialog.vue:344
+#: src/page/connect.vue:39 src/component/client/add/dialog.vue:126
+#: src/component/client/edit/dialog.vue:205
+#: src/component/user/edit/dialog.vue:330 src/page/connect.vue:46
+#: src/component/album/delete/dialog.vue:19
 #: src/component/album/edit/dialog.vue:86 src/component/confirm/dialog.vue:23
 #: src/component/file/delete/dialog.vue:19
 #: src/component/label/delete/dialog.vue:19
 #: src/component/label/edit/dialog.vue:43
 #: src/component/meta/camera/dialog.vue:118
-#: src/component/meta/datetime/dialog.vue:120
-#: src/component/meta/face/markers.vue:54
-#: src/component/meta/face/markers.vue:73
+#: src/component/meta/datetime/dialog.vue:121
+#: src/component/meta/face/markers.vue:53
+#: src/component/meta/face/markers.vue:72
 #: src/component/meta/location/dialog.vue:109
 #: src/component/people/edit/dialog.vue:74
-#: src/component/photo/album/dialog.vue:64 src/component/service/add.vue:103
+#: src/component/photo/album/dialog.vue:64
+#: src/component/photo/export/dialog.vue:92 src/component/service/add.vue:103
 #: src/component/service/edit.vue:256 src/component/service/remove.vue:19
 #: src/component/service/upload.vue:57 src/component/settings/apps.vue:157
 #: src/component/settings/passcode.vue:107
 #: src/component/settings/passcode.vue:148
-#: src/component/settings/password.vue:91 src/component/share/dialog.vue:170
-#: src/locales.js:225 src/page/auth/login.vue:133 src/page/connect.vue:36
+#: src/component/settings/password.vue:91 src/locales.js:225
+#: src/page/auth/login.vue:133 src/page/connect.vue:36
 #: src/page/library/import.vue:61 src/page/library/index.vue:61
 msgid "Cancel"
 msgstr "Mégsem"
 
-#: src/common/util.js:1145 src/common/util.js:1152
+#: src/common/util.js:1199 src/common/util.js:1206
 msgid "Cannot copy to clipboard"
 msgstr "Nem lehet a vágólapra másolni"
 
-#: src/common/util.js:949 src/component/lightbox/sidebar.vue:807
+#: src/common/util.js:1003 src/component/lightbox/sidebar.vue:808
 #: src/component/photo/batch-edit.vue:175
 #: src/component/photo/batch-edit.vue:178
 #: src/component/photo/edit/details.vue:28
@@ -843,8 +884,10 @@ msgstr "Kategória"
 msgid "Change Avatar"
 msgstr "Profilkép változtatása"
 
+#: src/page/admin/users.vue:70 src/page/admin/users.vue:124
 #: src/page/auth/instances.vue:67 src/page/settings/account.vue:162
-#: src/component/settings/password.vue:16 src/page/settings/account.vue:146
+#: src/page/admin/users.vue:121 src/component/settings/password.vue:16
+#: src/page/settings/account.vue:146
 msgid "Change Password"
 msgstr "Új jelszó"
 
@@ -852,43 +895,44 @@ msgstr "Új jelszó"
 msgid "Change private flag"
 msgstr "Privát fotóként jelölés"
 
-#: src/component/user/add/dialog.vue:275 src/component/user/add/dialog.vue:280
-#: src/component/user/edit/dialog.vue:418
-#: src/component/user/edit/dialog.vue:423
+#: src/component/user/add/dialog.vue:299 src/component/user/add/dialog.vue:304
+#: src/component/user/edit/dialog.vue:441
+#: src/component/user/edit/dialog.vue:446
 #: src/component/cluster/node/overview.vue:141
 #: src/component/cluster/node/user-edit.vue:362
 #: src/component/cluster/node/user-edit.vue:367
-#: src/component/user/add/dialog.vue:291 src/component/user/add/dialog.vue:296
-#: src/component/user/edit/dialog.vue:517
-#: src/component/user/edit/dialog.vue:522 src/page/settings/account.vue:538
-#: src/page/settings/account.vue:543 src/component/user/edit/dialog.vue:443
-#: src/component/user/edit/dialog.vue:448
+#: src/component/user/add/dialog.vue:313 src/component/user/add/dialog.vue:318
+#: src/component/user/edit/dialog.vue:540
+#: src/component/user/edit/dialog.vue:545 src/page/settings/account.vue:564
+#: src/page/settings/account.vue:569 src/component/user/edit/dialog.vue:466
+#: src/component/user/edit/dialog.vue:471
 #: src/component/album/edit/dialog.vue:171
 #: src/component/label/edit/dialog.vue:109
 #: src/component/meta/camera/dialog.vue:214
 #: src/component/people/edit/dialog.vue:168
-#: src/component/photo/batch-edit.vue:1466
-#: src/component/photo/edit/details.vue:635 src/locales.js:399
-#: src/page/settings/account.vue:446 src/page/settings/account.vue:451
+#: src/component/photo/batch-edit.vue:1467
+#: src/component/photo/edit/details.vue:670 src/locales.js:399
+#: src/page/settings/account.vue:472 src/page/settings/account.vue:477
 msgid "Changes could not be saved"
 msgstr "Módosításokat nem sikerült menteni"
 
-#: src/component/user/edit/dialog.vue:411
-#: src/component/user/edit/dialog.vue:512
+#: src/component/user/edit/dialog.vue:434
+#: src/component/user/edit/dialog.vue:535
 #: src/component/cluster/node/overview.vue:140
 #: src/component/cluster/node/user-edit.vue:355
-#: src/component/user/edit/dialog.vue:510
-#: src/component/user/edit/dialog.vue:596
-#: src/component/user/edit/dialog.vue:436
+#: src/component/user/edit/dialog.vue:533
+#: src/component/user/edit/dialog.vue:619
+#: src/component/client/edit/dialog.vue:457
+#: src/component/user/edit/dialog.vue:459
 #: src/component/album/edit/dialog.vue:177
-#: src/component/label/edit/dialog.vue:115 src/component/lightbox.vue:3219
-#: src/component/photo/batch-edit.vue:1498
-#: src/component/photo/edit/files.vue:566 src/component/service/edit.vue:382
-#: src/component/share/dialog.vue:241 src/component/share/dialog.vue:260
+#: src/component/label/edit/dialog.vue:115 src/component/lightbox.vue:3278
+#: src/component/photo/batch-edit.vue:1499
+#: src/component/photo/edit/files.vue:574 src/component/service/edit.vue:382
+#: src/component/share/dialog.vue:214 src/component/share/dialog.vue:233
 #: src/locales.js:452 src/page/albums.vue:1205 src/page/people/new.vue:814
 #: src/page/people/recognized.vue:320 src/page/settings/advanced.vue:507
 #: src/page/settings/collections.vue:247 src/page/settings/content.vue:313
-#: src/page/settings/general.vue:646
+#: src/page/settings/general.vue:662
 msgid "Changes successfully saved"
 msgstr "Módosítások sikeresen mentve"
 
@@ -918,7 +962,7 @@ msgstr "Tisztítás"
 
 #: src/component/meta/location/input.vue:49
 #: src/component/meta/location/input.vue:67
-#: src/component/photo/batch-edit.vue:1189
+#: src/component/photo/batch-edit.vue:1190
 msgid "Clear"
 msgstr "Tiszta"
 
@@ -926,48 +970,60 @@ msgstr "Tiszta"
 msgid "Clear {0}"
 msgstr "Clear {0}"
 
-#: src/options/admin.js:40 src/options/auth.js:13 src/options/auth.js:43
-#: src/options/auth.js:73
+#: src/options/admin.js:40 src/model/client.js:181
+#: src/page/admin/clients.vue:211 src/options/auth.js:13 src/options/auth.js:46
+#: src/options/auth.js:77
 msgid "Client"
 msgstr "Ügyfél"
 
+#: src/page/admin.vue:66
+msgid "Clients"
+msgstr "Ügyfelek"
+
 #: src/component/user/add/dialog.vue:18 src/component/user/edit/dialog.vue:25
-#: src/page/admin/sessions.vue:184 src/component/cluster/node/dialog.vue:15
+#: src/page/admin/sessions.vue:186 src/component/cluster/node/dialog.vue:15
 #: src/component/cluster/node/user-edit.vue:18
 #: src/component/cluster/node/user-edit.vue:253
-#: src/component/user/edit/dialog.vue:30 src/component/user/edit/dialog.vue:334
-#: src/page/admin/sessions.vue:224 src/component/user/edit/dialog.vue:320
+#: src/component/user/edit/dialog.vue:30 src/component/user/edit/dialog.vue:344
+#: src/page/admin/sessions.vue:226 src/component/client/add/dialog.vue:18
+#: src/component/client/edit/dialog.vue:19
+#: src/component/client/edit/dialog.vue:205
+#: src/component/client/edit/dialog.vue:219
+#: src/component/user/edit/dialog.vue:330
 #: src/component/album/edit/dialog.vue:19
-#: src/component/label/edit/dialog.vue:20 src/component/lightbox.vue:557
-#: src/component/lightbox.vue:1557 src/component/lightbox.vue:1558
+#: src/component/label/edit/dialog.vue:20 src/component/lightbox.vue:580
+#: src/component/lightbox.vue:1582 src/component/lightbox.vue:1583
 #: src/component/lightbox/sidebar.vue:7 src/component/meta/camera/dialog.vue:20
 #: src/component/meta/datetime/dialog.vue:20
 #: src/component/meta/location/dialog.vue:20
 #: src/component/people/edit/dialog.vue:21
 #: src/component/photo/album/dialog.vue:18
 #: src/component/photo/batch-edit.vue:18 src/component/photo/batch-edit.vue:487
-#: src/component/photo/edit/details.vue:380
-#: src/component/photo/edit/details.vue:385 src/component/photo/toolbar.vue:94
-#: src/component/settings/apps.vue:91 src/component/settings/apps.vue:215
+#: src/component/photo/edit/details.vue:381
+#: src/component/photo/edit/details.vue:386
+#: src/component/photo/export/dialog.vue:19
+#: src/component/photo/export/dialog.vue:92 src/component/photo/toolbar.vue:94
+#: src/component/settings/apps.vue:91 src/component/settings/apps.vue:216
+#: src/component/settings/connected-apps.vue:65
 #: src/component/settings/passcode.vue:67
 #: src/component/settings/passcode.vue:204
 #: src/component/settings/passcode.vue:219 src/component/settings/webdav.vue:74
-#: src/component/share/dialog.vue:133 src/component/update.vue:25
+#: src/component/share/dialog.vue:114 src/component/update.vue:25
 #: src/component/upload/dialog.vue:20 src/component/upload/dialog.vue:119
 #: src/locales.js:221 src/page/library/errors.vue:105
 msgid "Close"
 msgstr "Bezárás"
 
-#: src/app/routes.js:234
+#: src/app/routes.js:226
 msgid "Cluster"
 msgstr "Klaszter"
 
-#: src/component/user/edit/dialog.vue:285 src/page/admin/users.vue:424
+#: src/component/user/edit/dialog.vue:285 src/page/admin/users.vue:442
 #: src/options/auth.js:7
 msgid "Cluster Admin"
 msgstr "Klaszteradminisztrátor"
 
-#: src/model/cluster-node.js:96
+#: src/model/cluster-node.js:96 src/component/client/edit/dialog.vue:17
 msgid "Cluster Node"
 msgstr "Klaszter csomópont"
 
@@ -995,6 +1051,10 @@ msgstr "Színek"
 msgid "Compare Editions"
 msgstr "Edíciók összehasonlítása"
 
+#: src/component/photo/export/dialog.vue:299
+msgid "Compatible Video"
+msgstr "Kompatibilis videó"
+
 #: src/page/library/index.vue:39
 msgid "Complete Rescan"
 msgstr "Teljes újraolvasás"
@@ -1004,19 +1064,20 @@ msgstr "Teljes újraolvasás"
 msgid "Confidence"
 msgstr "Pontosság"
 
-#: src/component/meta/face/markers.vue:64
+#: src/component/meta/face/markers.vue:63
 #: src/component/meta/location/dialog.vue:120
 #: src/component/photo/album/dialog.vue:67
 #: src/component/settings/passcode.vue:110 src/page/people/new.vue:101
 msgid "Confirm"
 msgstr "megerősít"
 
-#: src/component/service/add.vue:104 src/page/services.vue:114
+#: src/app/routes.js:249 src/component/service/add.vue:104
+#: src/page/services.vue:116
 msgid "Connect"
 msgstr "Csatlakozás"
 
-#: src/page/settings/account.vue:203 src/component/settings/webdav.vue:15
-#: src/page/services.vue:109 src/page/settings/account.vue:187
+#: src/page/settings/account.vue:216 src/component/settings/webdav.vue:15
+#: src/page/services.vue:111 src/page/settings/account.vue:200
 msgid "Connect via WebDAV"
 msgstr "Csatlakozás WebDAV-on keresztül"
 
@@ -1024,7 +1085,13 @@ msgstr "Csatlakozás WebDAV-on keresztül"
 msgid "Connected"
 msgstr "Csatlakozva"
 
-#: src/page/settings/account.vue:346 src/page/settings/account.vue:263
+#: src/page/settings/account.vue:203
+#: src/component/settings/connected-apps.vue:15
+#: src/page/settings/account.vue:187
+msgid "Connected Apps"
+msgstr "Kapcsolódó alkalmazások"
+
+#: src/page/settings/account.vue:359 src/page/settings/account.vue:276
 msgid "Contact Details"
 msgstr "Elérhetőségek"
 
@@ -1067,23 +1134,30 @@ msgstr "Hozzájáruló"
 msgid "Converting"
 msgstr "Konvertálás"
 
-#: src/common/util.js:1138
+#: src/common/util.js:1192
 msgid "Copied to clipboard"
 msgstr "Vágólapra másolva"
 
-#: src/component/settings/apps.vue:97 src/component/settings/passcode.vue:154
+#: src/component/client/add/dialog.vue:42 src/component/client/copy.vue:16
+#: src/component/client/edit/dialog.vue:43 src/component/settings/apps.vue:97
+#: src/component/settings/passcode.vue:154
 msgid "Copy"
 msgstr "Másolat"
+
+#: src/component/client/add/dialog.vue:27
+#: src/component/client/edit/dialog.vue:28
+msgid "Copy the new client secret and keep it in a safe place, as you will not be able to see it again:"
+msgstr "Másolja ki az új ügyfél-titkot, és őrizze meg biztonságos helyen, mivel később már nem fogja tudni megtekinteni:"
 
 #: src/locales.js:477
 msgid "Copying files from %s"
 msgstr "Fájlok másolása innen: %s"
 
-#: src/component/lightbox/sidebar.vue:834
+#: src/component/lightbox/sidebar.vue:835
 #: src/component/photo/batch-edit.vue:375
 #: src/component/photo/batch-edit.vue:377
-#: src/component/photo/edit/details.vue:306
-#: src/component/photo/edit/details.vue:308
+#: src/component/photo/edit/details.vue:307
+#: src/component/photo/edit/details.vue:309
 msgid "Copyright"
 msgstr "Szerzői jog"
 
@@ -1095,7 +1169,7 @@ msgstr "Nem sikerült törölni"
 msgid "Could not connect, please try again"
 msgstr "Nem sikerült csatlakozni, próbálja újra"
 
-#: src/component/photo/edit/people.vue:301
+#: src/component/photo/edit/people.vue:302
 msgid "Could not update person cover"
 msgstr "Nem tudta frissíteni a személyi borítót"
 
@@ -1103,9 +1177,9 @@ msgstr "Nem tudta frissíteni a személyi borítót"
 msgid "Couldn't find anything."
 msgstr "Nem találtunk semmit."
 
-#: src/page/settings/account.vue:369 src/component/photo/batch-edit.vue:293
-#: src/component/photo/edit/details.vue:159 src/component/photo/toolbar.vue:108
-#: src/page/settings/account.vue:286
+#: src/page/settings/account.vue:382 src/component/photo/batch-edit.vue:293
+#: src/component/photo/edit/details.vue:160 src/component/photo/toolbar.vue:108
+#: src/page/settings/account.vue:299
 msgid "Country"
 msgstr "Ország"
 
@@ -1129,8 +1203,8 @@ msgstr "Album létrehozása"
 msgid "Create regular backups based on the configured schedule."
 msgstr "Index biztonsági mentések létrehozása a konfigurált ütemezés alapján."
 
-#: src/page/admin/sessions.vue:151 src/component/cluster/node/overview.vue:55
-#: src/page/admin/sessions.vue:191 src/page/cluster/nodes.vue:168
+#: src/page/admin/sessions.vue:153 src/component/cluster/node/overview.vue:55
+#: src/page/admin/sessions.vue:193 src/page/cluster/nodes.vue:169
 #: src/component/photo/edit/info.vue:271
 msgid "Created"
 msgstr "Létrehozva"
@@ -1139,7 +1213,7 @@ msgstr "Létrehozva"
 msgid "Creating thumbnails for"
 msgstr "Miniatűrök létrehozása a következőhöz"
 
-#: src/options/options.js:504
+#: src/options/options.js:507
 msgid "Current Name"
 msgstr "Jelenlegi név"
 
@@ -1147,16 +1221,16 @@ msgstr "Jelenlegi név"
 msgid "Current Password"
 msgstr "Jelenlegi jelszó"
 
-#: src/options/auth.js:107 src/options/themes.js:1021
+#: src/options/auth.js:112 src/options/themes.js:1021
 #: src/options/themes.js:1031
 msgid "Custom"
 msgstr "Custom"
 
-#: src/options/options.js:456
+#: src/options/options.js:459
 msgid "Cyan"
 msgstr "Cián"
 
-#: src/options/options.js:429
+#: src/options/options.js:432
 msgid "Daily"
 msgstr "Napi"
 
@@ -1176,9 +1250,9 @@ msgstr "Adatbázisok"
 msgid "Date & Time"
 msgstr "Dátum és idő"
 
-#: src/page/settings/account.vue:220 src/component/meta/datetime/dialog.vue:30
+#: src/page/settings/account.vue:233 src/component/meta/datetime/dialog.vue:30
 #: src/component/photo/batch-edit.vue:198
-#: src/component/photo/edit/details.vue:45 src/page/settings/account.vue:204
+#: src/component/photo/edit/details.vue:45 src/page/settings/account.vue:217
 msgid "Day"
 msgstr "Nap"
 
@@ -1190,15 +1264,15 @@ msgstr "Deaktiválás"
 msgid "Debug Logs"
 msgstr "Hibakeresési naplók"
 
-#: src/page/admin/sessions.vue:256 src/page/admin/users.vue:233
-#: src/page/admin/groups.vue:35 src/page/admin/sessions.vue:371
-#: src/page/admin/users.vue:430 src/page/admin/sessions.vue:369
-#: src/page/admin/users.vue:374 src/common/util.js:929
+#: src/page/admin/sessions.vue:258 src/page/admin/users.vue:249
+#: src/page/admin/groups.vue:35 src/page/admin/sessions.vue:373
+#: src/page/admin/users.vue:448 src/page/admin/sessions.vue:371
+#: src/page/admin/users.vue:392 src/common/util.js:983
 #: src/component/photo/edit/info.vue:23 src/model/session.js:42
-#: src/model/user.js:343 src/options/auth.js:40 src/options/auth.js:41
-#: src/options/auth.js:69 src/options/auth.js:70 src/options/options.js:253
-#: src/options/options.js:256 src/options/options.js:296
-#: src/options/options.js:380 src/options/themes.js:863
+#: src/model/user.js:365 src/options/auth.js:43 src/options/auth.js:44
+#: src/options/auth.js:73 src/options/auth.js:74 src/options/options.js:256
+#: src/options/options.js:259 src/options/options.js:299
+#: src/options/options.js:383 src/options/themes.js:863
 msgid "Default"
 msgstr "Alapértelmezett"
 
@@ -1207,14 +1281,19 @@ msgid "Default Folder"
 msgstr "Alapértelmezett mappa"
 
 #: src/component/session/remove/dialog.vue:22
-#: src/component/user/remove/dialog.vue:22 src/page/cluster/nodes.vue:108
+#: src/component/user/remove/dialog.vue:22 src/page/admin/sessions.vue:44
+#: src/page/admin/users.vue:82 src/page/admin/sessions.vue:83
+#: src/page/admin/users.vue:150 src/page/cluster/nodes.vue:77
+#: src/page/cluster/nodes.vue:109 src/page/admin/clients.vue:98
+#: src/page/admin/clients.vue:150 src/page/admin/users.vue:147
 #: src/component/album/clipboard.vue:68
 #: src/component/album/delete/dialog.vue:22 src/component/album/toolbar.vue:57
 #: src/component/file/delete/dialog.vue:22 src/component/label/clipboard.vue:34
 #: src/component/label/delete/dialog.vue:22
 #: src/component/photo/clipboard.vue:132 src/component/photo/edit/files.vue:103
-#: src/component/service/remove.vue:22 src/component/share/dialog.vue:105
-#: src/locales.js:344 src/page/settings/general.vue:335
+#: src/component/service/remove.vue:22 src/component/settings/apps.vue:198
+#: src/component/share/dialog.vue:86 src/locales.js:344
+#: src/page/services.vue:67 src/page/settings/general.vue:350
 msgid "Delete"
 msgstr "Törlés"
 
@@ -1234,6 +1313,10 @@ msgstr "Mindent törölni?"
 msgid "Delete orphaned index entries, sidecar files and thumbnails."
 msgstr "Törli az elárvult indexbejegyzéseket, oldalkocsis fájlokat és miniatűröket."
 
+#: src/page/auth/consent.vue:61
+msgid "Deny"
+msgstr "Elutasítás"
+
 #: src/component/album/edit/dialog.vue:46
 #: src/component/photo/batch-edit.vue:155 src/page/albums.vue:244
 msgid "Description"
@@ -1243,13 +1326,15 @@ msgstr "Leírás"
 msgid "Detailed instructions can be found in our User Guide."
 msgstr "A részletes utasításokat a Felhasználói kézikönyvben találja."
 
-#: src/component/cluster/node/dialog.vue:25
-#: src/component/photo/edit/dialog.vue:42
+#: src/page/admin/sessions.vue:55 src/component/cluster/node/dialog.vue:25
+#: src/page/admin/sessions.vue:94 src/page/admin/users.vue:176
+#: src/component/client/edit/dialog.vue:17 src/page/admin/clients.vue:122
+#: src/page/admin/users.vue:173 src/component/photo/edit/dialog.vue:42
 #: src/component/photo/edit/dialog.vue:45
 msgid "Details"
 msgstr "Részletek"
 
-#: src/component/photo/edit/files.vue:423
+#: src/component/photo/edit/files.vue:427
 msgid "Dimensions"
 msgstr "Méretek"
 
@@ -1325,7 +1410,7 @@ msgstr "Az interaktív világtérképek és a fordított geokódolás letiltása
 msgid "Disable the Model Context Protocol (MCP) API endpoint for AI agent integrations."
 msgstr "A Model Context Protocol (MCP) API végpont letiltása az AI-ügynök integrációkhoz."
 
-#: src/component/photo/clipboard.vue:423
+#: src/component/photo/clipboard.vue:440
 msgid "Disabled"
 msgstr "Tiltva"
 
@@ -1339,24 +1424,31 @@ msgstr "Letiltja a videó átkódolását és a miniatűrök kinyerését."
 
 #: src/component/lightbox/sidebar.vue:472
 #: src/component/photo/batch-edit.vue:486
-#: src/component/photo/edit/details.vue:384
+#: src/component/photo/edit/details.vue:385
 msgid "Discard"
 msgstr "Dobja el a"
 
-#: src/component/photo/edit/details.vue:380
+#: src/component/photo/edit/details.vue:381
 msgid "Discard changes and close"
 msgstr "A módosítások elvetése és bezárása"
 
-#: src/component/lightbox/sidebar.vue:930
+#: src/component/lightbox/sidebar.vue:931
 msgid "Discard invalid changes?"
 msgstr "Érvénytelen módosítások elvetése?"
 
-#: src/component/lightbox/sidebar.vue:932
+#: src/component/lightbox/sidebar.vue:933
 msgid "Discard unsaved changes?"
 msgstr "A nem mentett módosítások elvetése?"
 
-#: src/app/routes.js:745 src/app/routes.js:752 src/app/routes.js:759
-#: src/app/routes.js:766
+#: src/component/client/edit/dialog.vue:179
+#: src/component/client/edit/dialog.vue:180
+#: src/component/client/edit/dialog.vue:228
+#: src/component/settings/connected-apps.vue:51
+msgid "Disconnect"
+msgstr "Kapcsolat bontása"
+
+#: src/app/routes.js:749 src/app/routes.js:756 src/app/routes.js:763
+#: src/app/routes.js:770
 msgid "Discover"
 msgstr "Felfedez"
 
@@ -1366,13 +1458,13 @@ msgstr "Elutasíthatod"
 
 #: src/component/user/add/dialog.vue:72 src/component/user/add/dialog.vue:73
 #: src/component/user/edit/dialog.vue:89 src/component/user/edit/dialog.vue:90
-#: src/page/admin/users.vue:178 src/component/cluster/node/user-edit.vue:80
+#: src/page/admin/users.vue:193 src/component/cluster/node/user-edit.vue:80
 #: src/component/cluster/node/user-edit.vue:81
 #: src/component/cluster/node/users.vue:153
 #: src/component/user/add/dialog.vue:78 src/component/user/add/dialog.vue:79
 #: src/component/user/edit/dialog.vue:96 src/component/user/edit/dialog.vue:97
-#: src/page/admin/users.vue:283 src/page/settings/account.vue:76
-#: src/page/settings/account.vue:78 src/page/admin/users.vue:270
+#: src/page/admin/users.vue:300 src/page/settings/account.vue:76
+#: src/page/settings/account.vue:78 src/page/admin/users.vue:287
 #: src/locales.js:348 src/page/settings/account.vue:64
 #: src/page/settings/account.vue:66
 msgid "Display Name"
@@ -1386,10 +1478,11 @@ msgstr "Képaláírások megjelenítése a keresési eredményekben."
 msgid "Display picture titles in search results."
 msgstr "Képcímek megjelenítése a keresési eredményekben."
 
-#: src/common/util.js:911 src/component/photo/view/cards.vue:115
+#: src/common/util.js:965 src/component/photo/export/dialog.vue:273
+#: src/component/photo/view/cards.vue:115
 #: src/component/photo/view/cards.vue:239
 #: src/component/photo/view/mosaic.vue:70 src/model/thumb.js:247
-#: src/options/options.js:373
+#: src/options/options.js:376
 msgid "Document"
 msgstr "Dokumentum"
 
@@ -1409,8 +1502,9 @@ msgstr "Ne használd az ImageMagick programot képek konvertálására."
 msgid "Don't use RawTherapee to convert RAW images."
 msgstr "Ne használja a RawTherapee-t RAW képek konvertálására."
 
+#: src/component/client/add/dialog.vue:39
+#: src/component/client/edit/dialog.vue:40
 #: src/component/lightbox/sidebar.vue:195 src/component/settings/apps.vue:94
-#: src/component/share/dialog.vue:171
 msgid "Done"
 msgstr "Kész"
 
@@ -1421,7 +1515,7 @@ msgstr "Kész."
 
 #: src/component/album/clipboard.vue:46 src/component/album/toolbar.vue:185
 #: src/component/file/clipboard.vue:24 src/component/label/clipboard.vue:21
-#: src/component/lightbox.vue:1784 src/component/people/clipboard.vue:23
+#: src/component/lightbox.vue:1820 src/component/people/clipboard.vue:23
 #: src/component/photo/clipboard.vue:84 src/component/photo/edit/files.vue:67
 #: src/page/settings/collections.vue:31 src/page/settings/content.vue:174
 #: src/page/settings/general.vue:230
@@ -1436,10 +1530,15 @@ msgstr "Csak eredeti médiafájlok letöltése, automatikusan generált fájlok 
 msgid "Download remote files"
 msgstr "Távoli fájlok letöltése"
 
+#: src/component/photo/export/dialog.vue:73
+msgid "Download starts after transcoding."
+msgstr "A letöltés az átkódolás után kezdődik."
+
 #: src/component/album/clipboard.vue:203 src/component/album/toolbar.vue:234
 #: src/component/file/clipboard.vue:138 src/component/label/clipboard.vue:149
-#: src/component/lightbox.vue:3307 src/component/people/clipboard.vue:125
-#: src/component/photo/clipboard.vue:414 src/component/photo/edit/files.vue:523
+#: src/component/lightbox.vue:3372 src/component/people/clipboard.vue:125
+#: src/component/photo/clipboard.vue:403 src/component/photo/clipboard.vue:421
+#: src/component/photo/edit/files.vue:531
 #: src/component/photo/view/cards.vue:449 src/component/photo/view/list.vue:284
 #: src/page/library/browse.vue:237
 msgid "Downloading…"
@@ -1473,15 +1572,18 @@ msgstr "Dinamikus előnézetek"
 msgid "Dynamic Size Limit: %{n}px"
 msgstr "Dinamikus méretkorlát: %{n}px"
 
-#: src/component/cluster/node/users.vue:85 src/page/cluster/nodes.vue:53
+#: src/page/admin/users.vue:94 src/component/cluster/node/users.vue:85
+#: src/page/admin/users.vue:162 src/page/cluster/nodes.vue:53
+#: src/page/admin/clients.vue:110 src/page/admin/users.vue:159
 #: src/component/album/clipboard.vue:35 src/component/album/toolbar.vue:156
-#: src/component/lightbox.vue:1688 src/component/lightbox.vue:1689
+#: src/component/lightbox.vue:1713 src/component/lightbox.vue:1714
 #: src/component/lightbox/sidebar.vue:111
 #: src/component/lightbox/sidebar.vue:132
 #: src/component/lightbox/sidebar.vue:165
 #: src/component/lightbox/sidebar.vue:195
 #: src/component/lightbox/sidebar/toolbar.vue:32
-#: src/component/photo/clipboard.vue:60 src/page/settings/general.vue:260
+#: src/component/photo/clipboard.vue:60 src/page/services.vue:77
+#: src/page/settings/general.vue:275
 msgid "Edit"
 msgstr "Szerkesztés"
 
@@ -1497,11 +1599,15 @@ msgstr "%{s} szerkesztése"
 msgid "Edit Account"
 msgstr "Fiók szerkesztése"
 
+#: src/component/client/edit/dialog.vue:17
+msgid "Edit Client"
+msgstr "Ügyfél szerkesztése"
+
 #: src/component/photo/edit/dialog.vue:170
 msgid "Edit Photo"
 msgstr "Fénykép szerkesztése"
 
-#: src/component/photo/batch-edit.vue:649
+#: src/component/photo/batch-edit.vue:650
 msgid "Edit Photos (%{n})"
 msgstr "Fotók szerkesztése (%{n})"
 
@@ -1512,7 +1618,7 @@ msgstr "Szerkesztette"
 #: src/component/user/add/dialog.vue:86 src/component/user/edit/dialog.vue:123
 #: src/component/cluster/node/user-edit.vue:97
 #: src/component/user/add/dialog.vue:92 src/component/user/edit/dialog.vue:130
-#: src/page/settings/account.vue:91 src/page/settings/account.vue:320
+#: src/page/settings/account.vue:91 src/page/settings/account.vue:333
 #: src/page/settings/account.vue:79
 msgid "Email"
 msgstr "E-mail"
@@ -1541,9 +1647,13 @@ msgstr "Az arcfelismerés és az Emberek nézet bekapcsolásával könnyedén me
 msgid "Enable new features that may be incomplete or unstable."
 msgstr "Engedélyezze az új funkciókat, amelyek hiányosak vagy instabilak lehetnek."
 
-#: src/page/settings/general.vue:365
+#: src/page/settings/general.vue:380
 msgid "Enable the file browser to navigate the Originals folder structure."
 msgstr "Engedélyezze a fájlböngésző használatát az Eredeti mappaszerkezetben való navigáláshoz."
+
+#: src/component/client/edit/dialog.vue:144 src/page/admin/clients.vue:215
+msgid "Enabled"
+msgstr "Engedélyezve"
 
 #: src/page/settings/advanced.vue:373
 msgid "Enables RAW converter presets. May reduce performance."
@@ -1573,7 +1683,7 @@ msgstr "Adja meg a tétel nevét..."
 msgid "Enter the code generated by your authenticator app:"
 msgstr "Írja be a hitelesítési alkalmazás által generált kódot:"
 
-#: src/common/api.js:126 src/locales.js:296 src/locales.js:432
+#: src/common/api.js:170 src/locales.js:296 src/locales.js:432
 msgid "Enter verification code"
 msgstr "Adja meg a megerősítő kódot"
 
@@ -1585,16 +1695,16 @@ msgstr "Adja meg jelszavát a művelet megerősítéséhez, és folytassa:"
 msgid "Entity not found"
 msgstr "Entitás nem található"
 
-#: src/page/connect.vue:14 src/component/lightbox.vue:561
+#: src/page/connect.vue:14 src/component/lightbox.vue:585
 #: src/page/library/errors.vue:361
 msgid "Error"
 msgstr "Hiba"
 
-#: src/app/routes.js:543 src/component/navigation.vue:511
+#: src/app/routes.js:547 src/component/navigation.vue:511
 msgid "Errors"
 msgstr "Hibák"
 
-#: src/common/util.js:931
+#: src/common/util.js:985
 msgid "Estimate"
 msgstr "Becslés"
 
@@ -1606,7 +1716,7 @@ msgstr "Becsült helyszínek"
 msgid "Estimate the approximate location of pictures without GPS coordinates."
 msgstr "A képek hozzávetőleges helyének becslése GPS-koordináták nélkül."
 
-#: src/options/options.js:430
+#: src/options/options.js:433
 msgid "Every two days"
 msgstr "Kétnaponta"
 
@@ -1626,18 +1736,31 @@ msgstr "Teljes képernyős módból kilépés"
 msgid "Experimental Features"
 msgstr "Kísérleti jellemzők"
 
-#: src/page/admin/sessions.vue:163 src/page/admin/sessions.vue:226
-#: src/page/admin/sessions.vue:203 src/page/admin/sessions.vue:299
-#: src/page/admin/sessions.vue:297 src/component/service/edit.vue:69
-#: src/component/settings/apps.vue:144 src/component/settings/apps.vue:301
-#: src/component/share/dialog.vue:204
+#: src/page/admin/sessions.vue:165 src/page/admin/sessions.vue:228
+#: src/page/admin/sessions.vue:205 src/page/admin/sessions.vue:301
+#: src/page/admin/sessions.vue:299 src/component/service/edit.vue:69
+#: src/component/settings/apps.vue:144 src/component/settings/apps.vue:302
+#: src/component/share/dialog.vue:177
 msgid "Expires"
 msgstr "Lejár"
 
+#: src/component/lightbox.vue:1809 src/component/photo/export/dialog.vue:18
+#: src/page/settings/general.vue:245
+msgid "Export"
+msgstr "Exportálás"
+
+#: src/component/photo/export/dialog.vue:135
+msgid "Export %{n} Files"
+msgstr "%{n} fájl exportálása"
+
+#: src/component/photo/export/dialog.vue:135
+msgid "Export 1 File"
+msgstr "1 fájl exportálása"
+
 #: src/component/meta/camera/dialog.vue:79
 #: src/component/meta/camera/dialog.vue:83
-#: src/component/photo/edit/details.vue:230
-#: src/component/photo/edit/details.vue:234
+#: src/component/photo/edit/details.vue:231
+#: src/component/photo/edit/details.vue:235
 msgid "Exposure"
 msgstr "Kitettség"
 
@@ -1646,7 +1769,7 @@ msgid "Extract still images and generate thumbnails while indexing."
 msgstr "Állóképek kivonása és miniatűrök készítése indexelés közben."
 
 #: src/component/meta/camera/dialog.vue:93
-#: src/component/photo/edit/details.vue:263
+#: src/component/photo/edit/details.vue:264
 msgid "F Number"
 msgstr "F Szám"
 
@@ -1666,6 +1789,10 @@ msgstr "Arc nem található"
 msgid "Faces"
 msgstr "Arcok"
 
+#: src/component/photo/export/dialog.vue:316
+msgid "Failed"
+msgstr "Sikertelen"
+
 #: src/locales.js:429
 msgid "Failed creating file, please check permissions"
 msgstr "Sikertelen fájl létrehozása, kérjük ellenőrizze a jogosultságokat"
@@ -1674,7 +1801,7 @@ msgstr "Sikertelen fájl létrehozása, kérjük ellenőrizze a jogosultságokat
 msgid "Failed creating folder, please check permissions"
 msgstr "Mappa létrehozása sikertelen, kérjük, ellenőrizze a jogosultságokat"
 
-#: src/component/share/dialog.vue:251
+#: src/component/share/dialog.vue:224
 msgid "Failed removing link"
 msgstr "Nem sikerült eltávolítani a linket"
 
@@ -1686,6 +1813,10 @@ msgstr "Nem sikerült csatlakoztatni a fiókot."
 msgid "Failed to create zip file"
 msgstr "Nem sikerült létrehozni a zip fájlt"
 
+#: src/component/photo/export/dialog.vue:28
+msgid "Failed to load files. Please try again."
+msgstr "A fájlok betöltése nem sikerült. Kérjük, próbálja meg újra."
+
 #: src/component/pdf-viewer.vue:298
 msgid "Failed to load the PDF document."
 msgstr "A PDF-dokumentum betöltése nem sikerült."
@@ -1694,11 +1825,11 @@ msgstr "A PDF-dokumentum betöltése nem sikerült."
 msgid "Failed to load users."
 msgstr "A felhasználók betöltése nem sikerült."
 
-#: src/component/lightbox.vue:2291
+#: src/component/lightbox.vue:2329
 msgid "Failed to remove face marker"
 msgstr "Nem sikerült eltávolítani az arcjelzőt"
 
-#: src/component/lightbox.vue:2224
+#: src/component/lightbox.vue:2262
 msgid "Failed to remove name"
 msgstr "Nem sikerült eltávolítani a nevet"
 
@@ -1706,27 +1837,27 @@ msgstr "Nem sikerült eltávolítani a nevet"
 msgid "Failed to restart server"
 msgstr "A szerver újraindítása nem sikerült"
 
-#: src/component/lightbox/sidebar.vue:1702
-#: src/component/lightbox/sidebar.vue:1946
-#: src/component/lightbox/sidebar.vue:1987
-#: src/component/lightbox/sidebar.vue:2045
-#: src/component/lightbox/sidebar.vue:2065
-#: src/component/lightbox/sidebar.vue:2172
-#: src/component/lightbox/sidebar.vue:2195
-#: src/component/lightbox/sidebar.vue:2225
-#: src/component/photo/batch-edit.vue:1505
+#: src/component/lightbox/sidebar.vue:1707
+#: src/component/lightbox/sidebar.vue:1951
+#: src/component/lightbox/sidebar.vue:1992
+#: src/component/lightbox/sidebar.vue:2050
+#: src/component/lightbox/sidebar.vue:2070
+#: src/component/lightbox/sidebar.vue:2168
+#: src/component/lightbox/sidebar.vue:2191
+#: src/component/lightbox/sidebar.vue:2221
+#: src/component/photo/batch-edit.vue:1506
 msgid "Failed to save changes"
 msgstr "A módosítások mentése sikertelen"
 
-#: src/component/lightbox.vue:2196
+#: src/component/lightbox.vue:2234
 msgid "Failed to save face marker"
 msgstr "Nem sikerült megmenteni az arcjelzőt"
 
-#: src/component/lightbox/sidebar.vue:1453
+#: src/component/lightbox/sidebar.vue:1458
 msgid "Failed to save name"
 msgstr "Nem sikerült elmenteni a nevet"
 
-#: src/component/share/dialog.vue:225
+#: src/component/share/dialog.vue:198
 msgid "Failed updating link"
 msgstr "Nem sikerült frissíteni a linket"
 
@@ -1739,25 +1870,25 @@ msgstr "Nem sikerült frissíteni a linket"
 msgid "Family Name"
 msgstr "Családnév"
 
-#: src/options/options.js:278
+#: src/options/options.js:281
 msgid "Fast"
 msgstr "Gyors"
 
 #: src/component/album/edit/dialog.vue:77
 #: src/component/label/edit/dialog.vue:37
 #: src/component/people/edit/dialog.vue:52
-#: src/component/photo/batch-edit.vue:1562
+#: src/component/photo/batch-edit.vue:1563
 #: src/component/photo/edit/info.vue:159
 msgid "Favorite"
 msgstr "Kedvenc"
 
-#: src/app/routes.js:388 src/component/navigation.vue:316
-#: src/options/options.js:262 src/page/albums.vue:401
+#: src/app/routes.js:392 src/component/navigation.vue:316
+#: src/options/options.js:265 src/page/albums.vue:401
 #: src/page/settings/general.vue:96
 msgid "Favorites"
 msgstr "Kedvencek"
 
-#: src/options/options.js:466
+#: src/options/options.js:469
 msgid "Feature Request"
 msgstr "Funkciókérés"
 
@@ -1769,16 +1900,16 @@ msgstr "Funkció letiltva"
 msgid "Features"
 msgstr "Jellemzők"
 
-#: src/options/options.js:490
+#: src/options/options.js:493
 msgid "Female"
 msgstr "Női"
 
-#: src/common/util.js:933 src/component/lightbox/sidebar.vue:1101
-#: src/component/photo/edit/info.vue:94 src/model/file.js:274
+#: src/common/util.js:987 src/component/lightbox/sidebar.vue:1106
+#: src/component/photo/edit/info.vue:94 src/model/file.js:278
 msgid "File"
 msgstr "Fájl"
 
-#: src/app/routes.js:512
+#: src/app/routes.js:516
 msgid "File Browser"
 msgstr "Fájl böngésző"
 
@@ -1786,13 +1917,13 @@ msgstr "Fájl böngésző"
 msgid "File Conversion"
 msgstr "Fájl átalakítás"
 
-#: src/component/photo/batch-edit.vue:620
-#: src/component/photo/batch-edit.vue:640 src/component/photo/view/list.vue:34
-#: src/options/options.js:517
+#: src/component/photo/batch-edit.vue:621
+#: src/component/photo/batch-edit.vue:641 src/component/photo/view/list.vue:34
+#: src/options/options.js:520
 msgid "File Name"
 msgstr "Fájlnév"
 
-#: src/options/options.js:518
+#: src/options/options.js:521
 msgid "File Size"
 msgstr "Fájl méret"
 
@@ -1843,14 +1974,14 @@ msgid "Fisheye"
 msgstr "Fisheye"
 
 #: src/component/meta/camera/dialog.vue:105
-#: src/component/photo/edit/details.vue:276
+#: src/component/photo/edit/details.vue:277
 msgid "Focal Length"
 msgstr "Gyújtótávolság"
 
 #: src/component/photo/edit/info.vue:44 src/component/service/edit.vue:44
 #: src/component/service/edit.vue:95 src/component/service/edit.vue:100
 #: src/component/service/upload.vue:42 src/component/service/upload.vue:48
-#: src/model/folder.js:181 src/page/library/browse.vue:77
+#: src/model/folder.js:185 src/page/library/browse.vue:77
 msgid "Folder"
 msgstr "Mappa"
 
@@ -1862,8 +1993,8 @@ msgstr "A mappa %{n} fájlt tartalmaz"
 msgid "Folder is empty"
 msgstr "A mappa üres"
 
-#: src/app/routes.js:368 src/component/navigation.vue:463
-#: src/options/options.js:267 src/page/settings/collections.vue:128
+#: src/app/routes.js:372 src/component/navigation.vue:463
+#: src/options/options.js:270 src/page/settings/collections.vue:128
 #: src/page/settings/general.vue:111
 msgid "Folders"
 msgstr "Mappák"
@@ -1876,12 +2007,29 @@ msgstr "Elfelejtett jelszó?"
 msgid "Frames"
 msgstr "Keretek"
 
-#: src/options/auth.js:84 src/options/auth.js:94
+#: src/component/client/add/dialog.vue:94 src/component/client/scope.vue:59
+#: src/page/admin/clients.vue:282 src/options/auth.js:89 src/options/auth.js:99
 msgid "Full Access"
 msgstr "Teljes hozzáférés"
 
-#: src/common/map.js:128 src/component/lightbox.vue:1634
-#: src/component/lightbox.vue:1635
+#: src/component/photo/export/dialog.vue:299
+msgid "Full HD"
+msgstr "Full HD"
+
+#: src/component/photo/export/dialog.vue:299
+msgid "Full Size"
+msgstr "Teljes méret"
+
+#: src/component/photo/export/dialog.vue:299
+msgid "Full-Size Preview"
+msgstr "Teljes méretű előnézet"
+
+#: src/component/photo/export/dialog.vue:299
+msgid "Full-Size Preview (First Page)"
+msgstr "Teljes méretű előnézet (első oldal)"
+
+#: src/common/map.js:128 src/component/lightbox.vue:1659
+#: src/component/lightbox.vue:1660
 msgid "Fullscreen"
 msgstr "Teljes képernyő"
 
@@ -1930,15 +2078,15 @@ msgstr "Ugrás a %{n} oldalra"
 msgid "Go to page {0}"
 msgstr "Menj az oldalra {0}"
 
-#: src/options/options.js:451
+#: src/options/options.js:454
 msgid "Gold"
 msgstr "Arany"
 
-#: src/options/options.js:454
+#: src/options/options.js:457
 msgid "Green"
 msgstr "Zöld"
 
-#: src/options/options.js:460
+#: src/options/options.js:463
 msgid "Grey"
 msgstr "Szürke"
 
@@ -1959,7 +2107,7 @@ msgstr "Hash"
 msgid "Help"
 msgstr "Segítség"
 
-#: src/app/routes.js:109
+#: src/app/routes.js:101
 msgid "Help & Support"
 msgstr "Segítség & Támogatás"
 
@@ -1967,7 +2115,7 @@ msgstr "Segítség & Támogatás"
 msgid "Hidden"
 msgstr "Rejtett"
 
-#: src/app/routes.js:527
+#: src/app/routes.js:531
 msgid "Hidden Files"
 msgstr "Rejtett fájlok"
 
@@ -1975,7 +2123,7 @@ msgstr "Rejtett fájlok"
 msgid "Hide"
 msgstr "Elrejt"
 
-#: src/component/lightbox.vue:1806
+#: src/component/lightbox.vue:1842
 msgid "Hide Caption"
 msgstr "Felirat elrejtése"
 
@@ -1983,12 +2131,11 @@ msgstr "Felirat elrejtése"
 #: src/component/service/add.vue:59 src/component/service/edit.vue:193
 #: src/component/settings/apps.vue:46 src/component/settings/passcode.vue:50
 #: src/component/settings/passcode.vue:191
-#: src/component/settings/password.vue:41 src/component/share/dialog.vue:93
-#: src/page/auth/login.vue:116
+#: src/component/settings/password.vue:41 src/page/auth/login.vue:116
 msgid "Hide Password"
 msgstr "Jelszó elrejtése"
 
-#: src/page/settings/general.vue:464
+#: src/page/settings/general.vue:479
 msgid "Hide Scrollbar"
 msgstr "Görgetősáv elrejtése"
 
@@ -2000,11 +2147,11 @@ msgstr "Arcjelzők elrejtése"
 msgid "Hide private content from global views while keeping it accessible in the Private section."
 msgstr "A privát elemek elrejtése a globális nézetekből, miközben a Privát szekcióban elérhetőek maradnak."
 
-#: src/page/settings/general.vue:465
+#: src/page/settings/general.vue:480
 msgid "Hide the permanent scrollbar shown by some desktop browsers."
 msgstr "Elrejti az egyes asztali böngészők által megjelenített állandó görgetősávot."
 
-#: src/options/options.js:384
+#: src/options/options.js:387
 msgid "High"
 msgstr "Magas"
 
@@ -2012,7 +2159,7 @@ msgstr "Magas"
 msgid "High Dynamic Range (HDR)"
 msgstr "Nagy dinamikatartomány (HDR)"
 
-#: src/options/options.js:307
+#: src/options/options.js:310
 msgid "Hybrid"
 msgstr "Hibrid"
 
@@ -2025,9 +2172,10 @@ msgstr "IP-cím"
 msgid "If you lose access to your authenticator app or device, you can use your recovery code to regain access to your account."
 msgstr "Ha elveszíti hozzáférését hitelesítő alkalmazásához vagy eszközéhez, a helyreállítási kód segítségével visszaszerezheti a hozzáférést fiókjához."
 
-#: src/common/util.js:897 src/common/util.js:939
-#: src/component/photo/view/cards.vue:246 src/model/file.js:201
-#: src/options/options.js:345
+#: src/common/util.js:951 src/common/util.js:993
+#: src/component/photo/export/dialog.vue:273
+#: src/component/photo/view/cards.vue:246 src/model/file.js:205
+#: src/options/options.js:348
 msgid "Image"
 msgstr "Kép"
 
@@ -2036,7 +2184,7 @@ msgid "Image Quality"
 msgstr "Képminőség"
 
 #: src/page/library.vue:66 src/page/library/import.vue:75
-#: src/page/settings/general.vue:245
+#: src/page/settings/general.vue:260
 msgid "Import"
 msgstr "Importálás"
 
@@ -2119,7 +2267,7 @@ msgstr "Média- és oldalsó fájlok indexelése…"
 msgid "Indexing originals..."
 msgstr "Eredeti dokumentumok indexelése..."
 
-#: src/component/lightbox.vue:1582 src/component/lightbox.vue:1583
+#: src/component/lightbox.vue:1607 src/component/lightbox.vue:1608
 #: src/component/lightbox/sidebar.vue:8
 msgid "Information"
 msgstr "Információ"
@@ -2129,7 +2277,7 @@ msgid "Inherit"
 msgstr "Örököl"
 
 #: src/component/cluster/node/groups.vue:146 src/options/admin.js:37
-#: src/options/admin.js:38 src/locales.js:387
+#: src/options/admin.js:38 src/locales.js:387 src/options/auth.js:14
 msgid "Instance"
 msgstr "Példa"
 
@@ -2142,8 +2290,8 @@ msgid "Instance unreachable. Try again once it's back online."
 msgstr "Az példány nem érhető el. Kérjük, próbálja meg újra, miután újra elérhetővé válik."
 
 #: src/component/navigation.vue:168 src/component/navigation.vue:452
-#: src/component/user/edit/dialog.vue:27 src/page/admin/users.vue:286
-#: src/app/routes.js:257 src/locales.js:388
+#: src/component/user/edit/dialog.vue:27 src/page/admin/users.vue:303
+#: src/app/routes.js:261 src/locales.js:388
 msgid "Instances"
 msgstr "Instances"
 
@@ -2159,23 +2307,23 @@ msgstr "Elégtelen tárolás."
 msgid "Interval"
 msgstr "Intervallum"
 
-#: src/common/form.js:234 src/common/form.js:236 src/common/form.js:243
-#: src/common/form.js:245 src/common/form.js:319 src/common/form.js:322
-#: src/common/form.js:333 src/common/form.js:336 src/common/form.js:362
-#: src/common/form.js:364 src/common/form.js:371 src/common/form.js:373
-#: src/common/form.js:388 src/common/form.js:390 src/model/link.js:41
+#: src/common/form.js:249 src/common/form.js:251 src/common/form.js:258
+#: src/common/form.js:260 src/common/form.js:339 src/common/form.js:342
+#: src/common/form.js:353 src/common/form.js:356 src/common/form.js:382
+#: src/common/form.js:384 src/common/form.js:391 src/common/form.js:393
+#: src/common/form.js:408 src/common/form.js:410 src/model/link.js:39
 msgid "Invalid"
 msgstr "Érvénytelen"
 
-#: src/common/form.js:270 src/common/form.js:272
+#: src/common/form.js:285 src/common/form.js:287
 msgid "Invalid URL"
 msgstr "Érvénytelen URL"
 
-#: src/common/form.js:261 src/common/form.js:263
+#: src/common/form.js:276 src/common/form.js:278
 msgid "Invalid address"
 msgstr "Érvénytelen cím"
 
-#: src/common/form.js:351 src/common/form.js:352 src/common/form.js:355
+#: src/common/form.js:371 src/common/form.js:372 src/common/form.js:375
 msgid "Invalid country"
 msgstr "Érvénytelen ország"
 
@@ -2183,11 +2331,12 @@ msgstr "Érvénytelen ország"
 msgid "Invalid credentials"
 msgstr "Érvénytelen belépési adatok"
 
-#: src/component/photo/edit/details.vue:626
+#: src/component/photo/edit/details.vue:661
+#: src/component/photo/edit/details.vue:677
 msgid "Invalid date"
 msgstr "Érvénytelen dátum"
 
-#: src/component/share/dialog.vue:232 src/locales.js:441
+#: src/component/share/dialog.vue:205 src/locales.js:441
 msgid "Invalid link"
 msgstr "Érvénytelen hivatkozás"
 
@@ -2204,11 +2353,11 @@ msgstr "Érvénytelen paraméterek"
 msgid "Invalid password, please try again"
 msgstr "Érvénytelen jelszó, próbálkozzon újra"
 
-#: src/component/photo/edit/dialog.vue:293 src/model/thumb.js:272
+#: src/component/photo/edit/dialog.vue:294 src/model/thumb.js:272
 msgid "Invalid photo selected"
 msgstr "Érvénytelen fénykép kiválasztva"
 
-#: src/common/form.js:252 src/common/form.js:254
+#: src/common/form.js:267 src/common/form.js:269
 msgid "Invalid time"
 msgstr "Érvénytelen idő"
 
@@ -2221,7 +2370,7 @@ msgstr "Érvénytelen ellenőrző kód. Kérjük, próbálja újra"
 msgid "It is a one-time use code that will disable 2FA for your account when you use it."
 msgstr "Ez egy egyszer használatos kód, amely letiltja a 2FA-t a fiókjában, amikor azt használja."
 
-#: src/model/rest.js:242
+#: src/model/rest.js:232
 msgid "Item"
 msgstr "Tétel"
 
@@ -2241,17 +2390,17 @@ msgstr "JPEG méretkorlát: %{n}px"
 msgid "JPEGs and thumbnails are automatically rendered as needed."
 msgstr "A JPEG-fájlok és miniatűrök szükség szerint automatikusan megjelennek."
 
-#: src/common/util.js:951
+#: src/common/util.js:1005
 msgid "Keyword"
 msgstr "Kulcsszó"
 
-#: src/component/lightbox/sidebar.vue:876
-#: src/component/photo/edit/details.vue:347
-#: src/component/photo/edit/details.vue:350
+#: src/component/lightbox/sidebar.vue:877
+#: src/component/photo/edit/details.vue:348
+#: src/component/photo/edit/details.vue:351
 msgid "Keywords"
 msgstr "Kulcsszavak"
 
-#: src/options/auth.js:49
+#: src/options/auth.js:53
 msgid "LDAP/AD"
 msgstr "LDAP/AD"
 
@@ -2268,12 +2417,12 @@ msgstr "Címke nem található"
 msgid "Label saved"
 msgstr "Címkék mentve"
 
-#: src/component/cluster/node/overview.vue:63 src/app/routes.js:558
+#: src/component/cluster/node/overview.vue:63 src/app/routes.js:562
 #: src/component/lightbox/sidebar.vue:351 src/component/navigation.vue:436
 #: src/component/photo/batch-edit.vue:444
 #: src/component/photo/edit/dialog.vue:50
 #: src/component/photo/edit/dialog.vue:53 src/locales.js:352
-#: src/options/options.js:266 src/page/settings/general.vue:186
+#: src/options/options.js:269 src/page/settings/general.vue:186
 msgid "Labels"
 msgstr "Címkék"
 
@@ -2285,22 +2434,23 @@ msgstr "Címkék törölve"
 msgid "Language"
 msgstr "Nyelv"
 
-#: src/page/admin/sessions.vue:157 src/page/admin/sessions.vue:225
-#: src/page/admin/sessions.vue:197 src/page/admin/sessions.vue:298
-#: src/page/admin/sessions.vue:296
+#: src/page/admin/sessions.vue:159 src/page/admin/sessions.vue:227
+#: src/page/admin/sessions.vue:199 src/page/admin/sessions.vue:300
+#: src/page/admin/clients.vue:216 src/page/admin/sessions.vue:298
 msgid "Last Active"
 msgstr "Utolsó aktív"
 
-#: src/page/admin/users.vue:187 src/page/admin/users.vue:295
-#: src/page/admin/users.vue:279 src/locales.js:362
+#: src/page/admin/users.vue:202 src/page/admin/users.vue:312
+#: src/page/admin/users.vue:296 src/locales.js:362
 msgid "Last Login"
 msgstr "Utolsó bejelentkezés"
 
-#: src/page/services.vue:181
+#: src/page/services.vue:183
 msgid "Last Sync"
 msgstr "Utolsó szinkronizálás"
 
-#: src/component/settings/apps.vue:292
+#: src/component/client/edit/dialog.vue:304 src/component/settings/apps.vue:293
+#: src/component/settings/connected-apps.vue:107
 msgid "Last Used"
 msgstr "Utoljára használt"
 
@@ -2312,9 +2462,10 @@ msgstr "Utolsó oldal"
 msgid "Latitude"
 msgstr "Szélességi kör"
 
-#: src/page/admin/sessions.vue:345 src/page/admin/users.vue:404
-#: src/page/admin/sessions.vue:343 src/page/admin/users.vue:333
-#: src/page/labels.vue:335 src/page/services.vue:237
+#: src/page/admin/sessions.vue:347 src/page/admin/users.vue:422
+#: src/page/admin/clients.vue:258 src/page/admin/sessions.vue:345
+#: src/page/admin/users.vue:351 src/page/labels.vue:335
+#: src/page/services.vue:239
 msgid "Learn More"
 msgstr "Tudjon meg többet"
 
@@ -2330,7 +2481,7 @@ msgstr "Jogi információk"
 
 #: src/component/lightbox/sidebar.vue:140
 #: src/component/meta/camera/dialog.vue:46
-#: src/component/photo/edit/details.vue:243
+#: src/component/photo/edit/details.vue:244
 #: src/component/photo/view/cards.vue:213
 msgid "Lens"
 msgstr "Lencse"
@@ -2339,25 +2490,25 @@ msgstr "Lencse"
 msgid "Lens not found"
 msgstr "A lencse nem található"
 
-#: src/app/routes.js:612 src/app/routes.js:628 src/app/routes.js:644
-#: src/component/navigation.vue:483 src/page/settings/general.vue:349
+#: src/app/routes.js:616 src/app/routes.js:632 src/app/routes.js:648
+#: src/component/navigation.vue:483 src/page/settings/general.vue:364
 msgid "Library"
 msgstr "Könyvtár"
 
-#: src/page/connect.vue:5 src/app/routes.js:103
-#: src/component/lightbox/sidebar.vue:862 src/component/navigation.vue:575
+#: src/page/connect.vue:5 src/app/routes.js:95
+#: src/component/lightbox/sidebar.vue:863 src/component/navigation.vue:575
 #: src/component/photo/batch-edit.vue:409
 #: src/component/photo/batch-edit.vue:412
-#: src/component/photo/edit/details.vue:332
-#: src/component/photo/edit/details.vue:335 src/page/about/license.vue:5
+#: src/component/photo/edit/details.vue:333
+#: src/component/photo/edit/details.vue:336 src/page/about/license.vue:5
 msgid "License"
 msgstr "Engedély"
 
-#: src/component/lightbox.vue:1652 src/component/lightbox.vue:1653
+#: src/component/lightbox.vue:1677 src/component/lightbox.vue:1678
 msgid "Like"
 msgstr "Kedvelés"
 
-#: src/options/options.js:453
+#: src/options/options.js:456
 msgid "Lime"
 msgstr "Mész"
 
@@ -2365,7 +2516,7 @@ msgstr "Mész"
 msgid "Limit reached, showing first %{n} files"
 msgstr "Elérte a korlátot, az első %{n} fájl látható"
 
-#: src/model/link.js:106 src/options/auth.js:50 src/options/auth.js:51
+#: src/model/link.js:104 src/options/auth.js:54 src/options/auth.js:55
 msgid "Link"
 msgstr "Link"
 
@@ -2377,15 +2528,19 @@ msgstr "Lista"
 msgid "List View"
 msgstr "Lista nézet"
 
-#: src/common/util.js:901 src/component/photo/batch-edit.vue:65
+#: src/common/util.js:955 src/component/photo/batch-edit.vue:65
 #: src/component/photo/batch-edit.vue:124
 #: src/component/photo/view/cards.vue:112
 #: src/component/photo/view/cards.vue:224 src/component/photo/view/list.vue:81
-#: src/component/photo/view/mosaic.vue:67 src/options/options.js:353
+#: src/component/photo/view/mosaic.vue:67 src/options/options.js:356
 msgid "Live"
 msgstr "Élő"
 
-#: src/app/routes.js:402 src/component/navigation.vue:247
+#: src/component/photo/export/dialog.vue:273
+msgid "Live Photo"
+msgstr "Élő fotó"
+
+#: src/app/routes.js:406 src/component/navigation.vue:247
 msgid "Live Photos"
 msgstr "Fényképek"
 
@@ -2401,27 +2556,31 @@ msgstr "Tételek betöltése..."
 msgid "Loading..."
 msgstr "Betöltés..."
 
-#: src/locales.js:368 src/options/auth.js:42 src/options/auth.js:47
+#: src/component/photo/export/dialog.vue:25
+msgid "Loading…"
+msgstr "Betöltés…"
+
+#: src/locales.js:368 src/options/auth.js:45 src/options/auth.js:51
 #: src/options/options.js:94 src/page/settings/general.vue:46
 msgid "Local"
 msgstr "Helyi"
 
-#: src/component/meta/datetime/dialog.vue:165
+#: src/component/meta/datetime/dialog.vue:170
 #: src/component/photo/edit/details.vue:109
 msgid "Local Time"
 msgstr "Helyi idő"
 
-#: src/page/settings/account.vue:359 src/page/settings/account.vue:361
-#: src/common/util.js:941 src/component/album/edit/dialog.vue:38
+#: src/page/settings/account.vue:372 src/page/settings/account.vue:374
+#: src/common/util.js:995 src/component/album/edit/dialog.vue:38
 #: src/component/lightbox/sidebar.vue:150
 #: src/component/photo/batch-edit.vue:267
-#: src/component/photo/batch-edit.vue:595
-#: src/component/photo/edit/details.vue:449
-#: src/component/photo/edit/details.vue:573
-#: src/component/photo/edit/details.vue:678
+#: src/component/photo/batch-edit.vue:596
+#: src/component/photo/edit/details.vue:452
+#: src/component/photo/edit/details.vue:597
+#: src/component/photo/edit/details.vue:719
 #: src/component/photo/view/cards.vue:255 src/component/photo/view/list.vue:43
-#: src/page/albums.vue:403 src/page/settings/account.vue:276
-#: src/page/settings/account.vue:278
+#: src/page/albums.vue:403 src/page/settings/account.vue:289
+#: src/page/settings/account.vue:291
 msgid "Location"
 msgstr "Elhelyezkedés"
 
@@ -2439,7 +2598,7 @@ msgid "Login"
 msgstr "Belépés"
 
 #: src/component/navigation.vue:764 src/page/library.vue:79
-#: src/page/settings/general.vue:379
+#: src/page/settings/general.vue:394
 msgid "Logs"
 msgstr "Naplók"
 
@@ -2451,11 +2610,11 @@ msgstr "Hosszúság"
 msgid "Lost server connection"
 msgstr "Elveszett szerverkapcsolat"
 
-#: src/options/options.js:388
+#: src/options/options.js:391
 msgid "Low"
 msgstr "Alacsony"
 
-#: src/options/options.js:447
+#: src/options/options.js:450
 msgid "Magenta"
 msgstr "Bíborvörös"
 
@@ -2463,7 +2622,7 @@ msgstr "Bíborvörös"
 msgid "Main Color"
 msgstr "Fő szín"
 
-#: src/options/options.js:489
+#: src/options/options.js:492
 msgid "Male"
 msgstr "Férfi"
 
@@ -2478,7 +2637,7 @@ msgstr "Számla kezelése"
 msgid "Manager"
 msgstr "Menedzser"
 
-#: src/common/util.js:963
+#: src/common/util.js:1017
 msgid "Manual"
 msgstr "Kézi"
 
@@ -2498,15 +2657,15 @@ msgstr "Térképjelölő"
 msgid "Map Style"
 msgstr "Térképstílus"
 
-#: src/page/settings/general.vue:505
+#: src/page/settings/general.vue:520
 msgid "Maps"
 msgstr "Térképek"
 
-#: src/component/map.vue:118 src/page/places.vue:430 src/page/places.vue:435
+#: src/component/map.vue:109 src/page/places.vue:431 src/page/places.vue:436
 msgid "Maps are unavailable. Try another browser or device."
 msgstr "A térképek nem érhetők el. Próbálja meg egy másik böngészővel vagy eszközzel!"
 
-#: src/common/util.js:943 src/model/marker.js:132
+#: src/common/util.js:997 src/model/marker.js:132
 msgid "Marker"
 msgstr "Jelző"
 
@@ -2514,12 +2673,12 @@ msgstr "Jelző"
 msgid "Maximum number of accounts has been reached."
 msgstr "A számlák maximális száma elérte a határt."
 
-#: src/app/routes.js:395 src/component/navigation.vue:225
-#: src/options/options.js:259 src/page/settings/general.vue:126
+#: src/app/routes.js:399 src/component/navigation.vue:225
+#: src/options/options.js:262 src/page/settings/general.vue:126
 msgid "Media"
 msgstr "Média"
 
-#: src/options/options.js:282
+#: src/options/options.js:285
 msgid "Medium"
 msgstr "Közepes"
 
@@ -2536,11 +2695,11 @@ msgstr "Összevonja %{a}-t a %{b}-val?"
 msgid "Message"
 msgstr "Üzenet"
 
-#: src/common/util.js:953
+#: src/common/util.js:1007
 msgid "Metadata"
 msgstr "Metaadatok"
 
-#: src/options/auth.js:86 src/options/auth.js:102
+#: src/options/auth.js:91 src/options/auth.js:107
 msgid "Metrics"
 msgstr "Metrikák"
 
@@ -2548,7 +2707,7 @@ msgstr "Metrikák"
 msgid "Minimize"
 msgstr "Minimalizálja"
 
-#: src/component/photo/edit/files.vue:334 src/component/photo/edit/info.vue:218
+#: src/component/photo/edit/files.vue:337 src/component/photo/edit/info.vue:218
 msgid "Missing"
 msgstr "Hiányzó"
 
@@ -2556,28 +2715,28 @@ msgstr "Hiányzó"
 msgid "Missing or invalid configuration"
 msgstr "Hiányzó vagy érvénytelen konfiguráció"
 
-#: src/common/util.js:935
+#: src/common/util.js:989
 msgid "Modified"
 msgstr "Módosított"
 
-#: src/app/routes.js:329 src/component/navigation.vue:423
-#: src/options/options.js:265 src/page/settings/collections.vue:143
+#: src/app/routes.js:333 src/component/navigation.vue:423
+#: src/options/options.js:268 src/page/settings/collections.vue:143
 #: src/page/settings/general.vue:171
 msgid "Moments"
 msgstr "Pillanatok"
 
-#: src/component/navigation.vue:112
+#: src/component/navigation.vue:112 src/component/photo/edit/files.vue:324
 msgid "Monochrome"
 msgstr "Monokróm"
 
-#: src/page/settings/account.vue:240 src/component/meta/datetime/dialog.vue:50
+#: src/page/settings/account.vue:253 src/component/meta/datetime/dialog.vue:50
 #: src/component/photo/batch-edit.vue:217
 #: src/component/photo/edit/details.vue:67 src/component/photo/toolbar.vue:207
-#: src/page/settings/account.vue:224
+#: src/page/settings/account.vue:237
 msgid "Month"
 msgstr "Hónap"
 
-#: src/component/lightbox.vue:1707
+#: src/component/lightbox.vue:1732
 msgid "More options"
 msgstr "További lehetőségek"
 
@@ -2585,7 +2744,7 @@ msgstr "További lehetőségek"
 msgid "Mosaic"
 msgstr "Mozaik"
 
-#: src/options/options.js:521
+#: src/options/options.js:524
 msgid "Most Relevant"
 msgstr "Legrelevánsabb"
 
@@ -2601,15 +2760,19 @@ msgstr "Fájlok áthelyezése innen: %s"
 msgid "Must have at least %{n} characters."
 msgstr "Legalább %{n} karakteresnek kell lennie."
 
-#: src/component/lightbox.vue:1601 src/component/lightbox.vue:1602
+#: src/component/lightbox.vue:1626 src/component/lightbox.vue:1627
 msgid "Mute"
 msgstr "Mute"
 
 #: src/component/cluster/instance-access.vue:83
 #: src/component/cluster/node/overview.vue:4
 #: src/component/cluster/node/overview.vue:25
-#: src/component/cluster/node/overview.vue:75 src/page/cluster/nodes.vue:155
-#: src/common/util.js:937 src/component/album/edit/dialog.vue:30
+#: src/component/cluster/node/overview.vue:75 src/page/cluster/nodes.vue:156
+#: src/component/client/add/dialog.vue:61
+#: src/component/client/add/dialog.vue:62
+#: src/component/client/edit/dialog.vue:77
+#: src/component/client/edit/dialog.vue:78 src/common/util.js:991
+#: src/component/album/edit/dialog.vue:30
 #: src/component/album/edit/dialog.vue:31
 #: src/component/input/chip-selector.vue:277
 #: src/component/label/edit/dialog.vue:30
@@ -2619,28 +2782,30 @@ msgstr "Mute"
 #: src/component/people/edit/dialog.vue:31
 #: src/component/people/edit/dialog.vue:32
 #: src/component/photo/album/dialog.vue:143
-#: src/component/photo/edit/files.vue:417 src/component/photo/edit/info.vue:52
+#: src/component/photo/edit/files.vue:421 src/component/photo/edit/info.vue:52
 #: src/component/photo/edit/labels.vue:51
 #: src/component/photo/edit/labels.vue:135
 #: src/component/photo/edit/labels.vue:299
 #: src/component/photo/edit/people.vue:51 src/component/photo/view/list.vue:43
 #: src/component/service/edit.vue:173 src/component/settings/apps.vue:118
-#: src/component/settings/apps.vue:281 src/locales.js:346
+#: src/component/settings/apps.vue:282
+#: src/component/settings/connected-apps.vue:105 src/locales.js:346
 #: src/page/albums.vue:402 src/page/auth/login.vue:80
-#: src/page/people/new.vue:51 src/page/services.vue:177
+#: src/page/people/new.vue:51 src/page/services.vue:179
 msgid "Name"
 msgstr "Név"
 
-#: src/component/lightbox/sidebar.vue:1922
-#: src/component/lightbox/sidebar.vue:1971
-#: src/component/lightbox/sidebar.vue:2020
-#: src/component/lightbox/sidebar.vue:2087
+#: src/component/lightbox/sidebar.vue:1927
+#: src/component/lightbox/sidebar.vue:1976
+#: src/component/lightbox/sidebar.vue:2025
+#: src/component/lightbox/sidebar.vue:2092
 msgid "Name too long"
 msgstr "A név túl hosszú"
 
-#: src/page/admin/users.vue:261 src/page/admin/users.vue:458
-#: src/page/admin/users.vue:402 src/options/options.js:425
-#: src/options/options.js:435 src/page/services.vue:251
+#: src/page/admin/users.vue:286 src/page/admin/users.vue:485
+#: src/component/client/edit/dialog.vue:440 src/page/admin/clients.vue:309
+#: src/page/admin/users.vue:429 src/options/options.js:428
+#: src/options/options.js:438 src/page/services.vue:253
 msgid "Never"
 msgstr "Soha"
 
@@ -2652,12 +2817,13 @@ msgstr "Új"
 msgid "New Password"
 msgstr "Új jelszó"
 
-#: src/options/options.js:511 src/page/albums.vue:404
+#: src/options/options.js:514 src/page/albums.vue:404
 msgid "Newest First"
 msgstr "Először a legújabb"
 
-#: src/component/lightbox.vue:560 src/component/pdf-viewer.vue:127
-#: src/component/pdf-viewer.vue:128 src/locales.js:324
+#: src/component/lightbox.vue:583 src/component/lightbox.vue:584
+#: src/component/pdf-viewer.vue:127 src/component/pdf-viewer.vue:128
+#: src/locales.js:324
 msgid "Next"
 msgstr "Következő"
 
@@ -2683,16 +2849,12 @@ msgstr "Jövőre"
 
 #: src/component/people/merge/dialog.vue:19
 #: src/component/photo/archive/dialog.vue:19
-#: src/component/photo/batch-edit.vue:1134
+#: src/component/photo/batch-edit.vue:1135
 #: src/component/photo/edit/info.vue:152 src/component/photo/edit/info.vue:166
 #: src/component/photo/edit/info.vue:180 src/component/photo/edit/info.vue:194
 #: src/component/photo/edit/info.vue:208
 msgid "No"
 msgstr "Nem"
-
-#: src/options/admin.js:26
-msgid "No Access"
-msgstr "Nincs hozzáférés"
 
 #: src/component/photo/batch-edit.vue:434
 msgid "No albums assigned"
@@ -2706,10 +2868,16 @@ msgstr "Nem találhatók albumok"
 msgid "No albums selected"
 msgstr "Nincsenek kiválasztott albumok"
 
+#: src/component/settings/connected-apps.vue:115
+msgid "No apps are connected to your account."
+msgstr "A fiókodhoz nincs csatlakoztatva egyetlen alkalmazás sem."
+
 #: src/locales.js:280
 msgid "No data available"
 msgstr "Nincs adat"
 
+#: src/component/lightbox.vue:3374 src/component/lightbox.vue:3382
+#: src/component/photo/clipboard.vue:405 src/component/photo/clipboard.vue:413
 #: src/locales.js:438
 msgid "No files available for download"
 msgstr "Nincsenek letölthető fájlok"
@@ -2744,12 +2912,16 @@ msgstr "Nem több"
 msgid "No people found"
 msgstr "Nem találhatók személyek"
 
-#: src/component/lightbox.vue:665 src/component/photo/view/cards.vue:9
+#: src/component/lightbox.vue:689 src/component/photo/view/cards.vue:9
 #: src/component/photo/view/list.vue:9 src/component/photo/view/mosaic.vue:9
 #: src/page/album/photos.vue:582 src/page/library/browse.vue:31
-#: src/page/photos.vue:720 src/page/places.vue:758 src/page/places.vue:883
+#: src/page/photos.vue:720 src/page/places.vue:759 src/page/places.vue:885
 msgid "No pictures found"
 msgstr "Nem találhatók képek"
+
+#: src/component/photo/export/dialog.vue:62
+msgid "No preview image available."
+msgstr "Nem érhető el előnézeti kép."
 
 #: src/component/photo/view/cards.vue:6 src/component/photo/view/list.vue:6
 #: src/component/photo/view/mosaic.vue:6
@@ -2775,6 +2947,10 @@ msgstr "Nincsenek konfigurálva szerverek."
 #: src/page/services.vue:38
 msgid "No services configured."
 msgstr "Nincsenek konfigurálva szolgáltatások."
+
+#: src/component/photo/export/dialog.vue:45
+msgid "No supported files available for export."
+msgstr "Nincs exportálható, támogatott fájl."
 
 #: src/component/confirm/sponsor.vue:30
 msgid "No thanks"
@@ -2802,11 +2978,11 @@ msgstr "Csomópontok"
 msgid "Non-photographic and low-quality images require a review before they appear in search results."
 msgstr "A rossz minőségű képek ellenörzésre kerülnek, mielőtt megjelennének a keresési eredmények között."
 
-#: src/options/auth.js:52 src/options/options.js:274 src/options/options.js:392
+#: src/options/auth.js:56 src/options/options.js:277 src/options/options.js:395
 msgid "None"
 msgstr "Egyik sem"
 
-#: src/component/lightbox.vue:1152 src/component/service/upload.vue:146
+#: src/component/lightbox.vue:1176 src/component/service/upload.vue:146
 #: src/component/service/upload.vue:158
 msgid "Not allowed"
 msgstr "Nem megengedett"
@@ -2819,7 +2995,7 @@ msgstr "Nyilvános módban nem elérhető"
 msgid "Not available in read-only mode"
 msgstr "nem érhető el csak olvasható módban"
 
-#: src/component/lightbox.vue:1149 src/locales.js:402
+#: src/component/lightbox.vue:1173 src/locales.js:402
 msgid "Not found"
 msgstr "Nem található"
 
@@ -2827,7 +3003,7 @@ msgstr "Nem található"
 msgid "Not sorted."
 msgstr "Nem rendezett."
 
-#: src/component/lightbox.vue:1146 src/component/lightbox.vue:1260
+#: src/component/lightbox.vue:1170 src/component/lightbox.vue:1284
 msgid "Not supported"
 msgstr "Nem támogatott"
 
@@ -2835,7 +3011,7 @@ msgstr "Nem támogatott"
 msgid "Note you may manually manage your originals folder and importing is optional."
 msgstr "Vegye figyelembe, hogy manuálisan is kezelheti az eredeti mappát, és az importálás nem kötelező."
 
-#: src/page/services.vue:89
+#: src/page/services.vue:91
 msgid "Note:"
 msgstr "Megjegyzés:"
 
@@ -2843,9 +3019,9 @@ msgstr "Megjegyzés:"
 msgid "Note: Only WebDAV servers, like Nextcloud or PhotoPrism, can be configured as remote service for backup and file upload."
 msgstr "Megjegyzés: Csak a WebDAV-kiszolgálók, például a Nextcloud vagy a PhotoPrism konfigurálhatók távoli szolgáltatásként biztonsági mentéshez és fájlfeltöltéshez."
 
-#: src/component/lightbox/sidebar.vue:890
-#: src/component/photo/edit/details.vue:362
-#: src/component/photo/edit/details.vue:365
+#: src/component/lightbox/sidebar.vue:891
+#: src/component/photo/edit/details.vue:363
+#: src/component/photo/edit/details.vue:366
 msgid "Notes"
 msgstr "Megjegyzések"
 
@@ -2857,7 +3033,8 @@ msgstr "Itt még nincs látnivaló. Legyél türelmes."
 #: src/component/cluster/node/groups.vue:23 src/page/admin/groups.vue:25
 #: src/page/admin/sessions.vue:47 src/page/admin/users.vue:56
 #: src/page/cluster/activity.vue:60 src/page/cluster/nodes.vue:44
-#: src/page/admin/activity.vue:60 src/component/settings/apps.vue:176
+#: src/component/client/edit/dialog.vue:162 src/page/admin/activity.vue:60
+#: src/page/admin/clients.vue:48 src/component/settings/apps.vue:176
 msgid "Nothing was found."
 msgstr "Semmit sem találtak."
 
@@ -2865,11 +3042,11 @@ msgstr "Semmit sem találtak."
 msgid "OK"
 msgstr "OK"
 
-#: src/options/options.js:334
+#: src/options/options.js:337
 msgid "Offline"
 msgstr "Offline"
 
-#: src/options/options.js:512 src/page/albums.vue:405
+#: src/options/options.js:515 src/page/albums.vue:405
 msgid "Oldest First"
 msgstr "Először a legidősebb"
 
@@ -2881,7 +3058,7 @@ msgstr "Windows alatt adja meg a következő erőforrást a kapcsolat párbeszé
 msgid "On-demand generation of thumbnails may cause high CPU and memory usage. It is not recommended for resource-constrained servers and NAS devices."
 msgstr "A miniatűrök igény szerinti generálása magas CPU- és memóriahasználatot okozhat. Erőforrás-korlátozott szerverek és NAS-eszközök esetében nem ajánlott."
 
-#: src/options/options.js:431
+#: src/options/options.js:434
 msgid "Once a week"
 msgstr "Hetente egyszer"
 
@@ -2917,6 +3094,10 @@ msgstr "Egy személyt találtak"
 msgid "One picture found"
 msgstr "Egy kép található"
 
+#: src/page/auth/consent.vue:30
+msgid "Only allow access if you started connecting this app yourself."
+msgstr "Csak akkor engedélyezd a hozzáférést, ha te magad kezdeményezted az alkalmazás csatlakozását."
+
 #: src/component/settings/passcode.vue:213
 msgid "Only locally managed accounts can be set up for authentication with 2FA."
 msgstr "Csak helyileg kezelt fiókok állíthatók be a 2FA-val történő hitelesítéshez."
@@ -2927,19 +3108,19 @@ msgstr "Csak helyileg kezelt fiókok állíthatók be a 2FA-val történő hitel
 msgid "Open"
 msgstr "Nyissa meg a  címet."
 
-#: src/page/settings/general.vue:435
+#: src/page/settings/general.vue:450
 msgid "Open menus on hover instead of on click when using a desktop browser."
 msgstr "Asztali böngésző használata esetén a menüket kattintás helyett egérmutatóval való áthúzáskor nyissa meg."
 
-#: src/page/settings/general.vue:434
+#: src/page/settings/general.vue:449
 msgid "Open on Hover"
 msgstr "Megnyitás egérmutatóval"
 
-#: src/options/options.js:450
+#: src/options/options.js:453
 msgid "Orange"
 msgstr "Narancssárga"
 
-#: src/page/settings/account.vue:305 src/page/settings/account.vue:307
+#: src/page/settings/account.vue:318 src/page/settings/account.vue:320
 msgid "Organization"
 msgstr "Orientáció"
 
@@ -2947,8 +3128,12 @@ msgstr "Orientáció"
 msgid "Orientation"
 msgstr "Orientáció"
 
+#: src/component/photo/export/dialog.vue:299
+msgid "Original"
+msgstr "Eredeti"
+
 #: src/component/photo/edit/files.vue:158 src/component/photo/edit/info.vue:60
-#: src/options/options.js:505
+#: src/options/options.js:508
 msgid "Original Name"
 msgstr "Eredeti Név"
 
@@ -2956,10 +3141,10 @@ msgstr "Eredeti Név"
 msgid "Original file names will be stored and indexed."
 msgstr "Az eredeti fájlneveket a rendszer tárolja és indexeli."
 
-#: src/component/navigation.vue:497 src/model/file.js:182
-#: src/options/options.js:477 src/page/library/browse.vue:7
+#: src/component/navigation.vue:497 src/model/file.js:186
+#: src/options/options.js:480 src/page/library/browse.vue:7
 #: src/page/settings/collections.vue:42 src/page/settings/content.vue:185
-#: src/page/settings/general.vue:364
+#: src/page/settings/general.vue:379
 msgid "Originals"
 msgstr "Eredetiek"
 
@@ -2967,7 +3152,7 @@ msgstr "Eredetiek"
 msgid "Originals folder is empty"
 msgstr "Az „Originals” mappa üres"
 
-#: src/options/options.js:468 src/options/options.js:491
+#: src/options/options.js:471 src/options/options.js:494
 msgid "Other"
 msgstr "Egyéb"
 
@@ -2976,7 +3161,7 @@ msgstr "Egyéb"
 msgid "Our mission is to provide the most user- and privacy-friendly solution to keep your pictures organized and accessible."
 msgstr "Küldetésünk, hogy a legfelhasználó- és adatvédelmi szempontból legkedvezőbb megoldást nyújtsuk képeinek rendszerezésére és elérhetőségére."
 
-#: src/options/options.js:319
+#: src/options/options.js:322
 msgid "Outdoor"
 msgstr "Szabadtéri"
 
@@ -2992,7 +3177,7 @@ msgstr "PNG méretkorlát: %{n}px"
 msgid "Page {0}, Current page"
 msgstr "Oldal {0}, Jelenlegi oldal"
 
-#: src/component/photo/edit/files.vue:182 src/model/photo.js:937
+#: src/component/photo/edit/files.vue:182 src/model/photo.js:1043
 msgid "Pages"
 msgstr "Oldalak"
 
@@ -3000,7 +3185,7 @@ msgstr "Oldalak"
 msgid "Pagination Navigation"
 msgstr "Oldalszámozás Navigáció"
 
-#: src/component/photo/batch-edit.vue:1564
+#: src/component/photo/batch-edit.vue:1565
 #: src/component/photo/edit/info.vue:201
 msgid "Panorama"
 msgstr "Panoráma"
@@ -3021,8 +3206,8 @@ msgstr "Néhány kiválasztott fotó egy része"
 #: src/component/user/add/dialog.vue:57 src/component/user/add/dialog.vue:58
 #: src/component/service/add.vue:52 src/component/service/edit.vue:186
 #: src/component/settings/apps.vue:33 src/component/settings/passcode.vue:36
-#: src/component/settings/passcode.vue:177 src/component/share/dialog.vue:169
-#: src/options/auth.js:121 src/page/auth/login.vue:101
+#: src/component/settings/passcode.vue:177 src/options/auth.js:126
+#: src/page/auth/login.vue:101
 msgid "Password"
 msgstr "Jelszó"
 
@@ -3038,19 +3223,23 @@ msgstr "Szünet"
 msgid "Payment required"
 msgstr "Fizetés szükséges"
 
-#: src/app/routes.js:573 src/app/routes.js:597
+#: src/component/photo/export/dialog.vue:316
+msgid "Pending"
+msgstr "Függőben"
+
+#: src/app/routes.js:577 src/app/routes.js:601
 #: src/component/lightbox/sidebar.vue:178 src/component/navigation.vue:289
 #: src/component/navigation.vue:740 src/component/photo/edit/dialog.vue:59
-#: src/component/photo/edit/dialog.vue:62 src/options/options.js:261
+#: src/component/photo/edit/dialog.vue:62 src/options/options.js:264
 #: src/page/settings/general.vue:141
 msgid "People"
 msgstr "Személyek"
 
-#: src/component/share/dialog.vue:122
+#: src/component/share/dialog.vue:103
 msgid "People you share a link with will be able to view public contents."
 msgstr "Azok, akikkel megoszt egy linket, nyilvános tartalmakat tekinthetnek meg."
 
-#: src/component/photo/clipboard.vue:303 src/component/photo/toolbar.vue:532
+#: src/component/photo/clipboard.vue:304 src/component/photo/toolbar.vue:532
 #: src/locales.js:494
 msgid "Permanently deleted"
 msgstr "Véglegesen törölve"
@@ -3063,7 +3252,7 @@ msgstr "Engedély megtagadva"
 msgid "Person"
 msgstr "Személy"
 
-#: src/component/photo/edit/people.vue:296
+#: src/component/photo/edit/people.vue:297
 msgid "Person cover updated"
 msgstr "Személyi fedezet frissítve"
 
@@ -3071,8 +3260,8 @@ msgstr "Személyi fedezet frissítve"
 msgid "Person deleted"
 msgstr "Személy törölve"
 
-#: src/component/photo/edit/people.vue:248
-#: src/component/photo/edit/people.vue:282 src/locales.js:418
+#: src/component/photo/edit/people.vue:249
+#: src/component/photo/edit/people.vue:283 src/locales.js:418
 msgid "Person not found"
 msgstr "Személy nem található"
 
@@ -3080,11 +3269,11 @@ msgstr "Személy nem található"
 msgid "Person saved"
 msgstr "Személy mentve"
 
-#: src/options/auth.js:72
+#: src/options/auth.js:76
 msgid "Personal"
 msgstr "Személyes"
 
-#: src/model/photo.js:1385
+#: src/model/photo.js:1530
 msgid "Photo"
 msgstr "Fénykép"
 
@@ -3096,20 +3285,20 @@ msgstr "A PhotoPrism 100%-ban önfinanszírozó és független."
 msgid "PhotoPrism+ Membership"
 msgstr "PhotoPrism+ tagság"
 
-#: src/app/routes.js:322
+#: src/app/routes.js:326
 msgid "Photos"
 msgstr "Fényképek"
 
-#: src/component/photo/batch-edit.vue:614
-#: src/component/photo/batch-edit.vue:634
+#: src/component/photo/batch-edit.vue:615
+#: src/component/photo/batch-edit.vue:635
 msgid "Picture"
 msgstr "Kép"
 
-#: src/options/options.js:516
+#: src/options/options.js:519
 msgid "Picture Title"
 msgstr "Kép címe"
 
-#: src/options/options.js:448
+#: src/options/options.js:451
 msgid "Pink"
 msgstr "Rózsaszín"
 
@@ -3125,11 +3314,11 @@ msgstr "Hely"
 msgid "Place & Time"
 msgstr "Hely és idő"
 
-#: src/app/routes.js:472 src/app/routes.js:478 src/app/routes.js:484
-#: src/app/routes.js:499 src/component/navigation.vue:352
-#: src/component/navigation.vue:746 src/options/options.js:263
+#: src/app/routes.js:476 src/app/routes.js:482 src/app/routes.js:488
+#: src/app/routes.js:503 src/component/navigation.vue:352
+#: src/component/navigation.vue:746 src/options/options.js:266
 #: src/page/places.vue:7 src/page/settings/collections.vue:158
-#: src/page/settings/general.vue:409 src/page/settings/general.vue:493
+#: src/page/settings/general.vue:424 src/page/settings/general.vue:508
 msgid "Places"
 msgstr "Helyek"
 
@@ -3170,7 +3359,7 @@ msgid "Please wait…"
 msgstr "Kérjük, várjon…"
 
 #: src/component/cluster/node/groups.vue:150 src/options/admin.js:36
-#: src/locales.js:350
+#: src/locales.js:350 src/options/auth.js:16
 msgid "Portal"
 msgstr "Portál"
 
@@ -3210,8 +3399,9 @@ msgstr "Előnézet"
 msgid "Preview Images"
 msgstr "Képek előnézete"
 
-#: src/component/lightbox.vue:559 src/component/pdf-viewer.vue:115
-#: src/component/pdf-viewer.vue:116 src/locales.js:325
+#: src/component/lightbox.vue:583 src/component/lightbox.vue:584
+#: src/component/pdf-viewer.vue:115 src/component/pdf-viewer.vue:116
+#: src/locales.js:325
 msgid "Previous"
 msgstr "Előző"
 
@@ -3236,13 +3426,13 @@ msgid "Previous year"
 msgstr "Előző év"
 
 #: src/component/photo/edit/files.vue:79 src/component/photo/edit/files.vue:226
-#: src/component/photo/edit/files.vue:410
+#: src/component/photo/edit/files.vue:414
 msgid "Primary"
 msgstr "Elsődleges"
 
-#: src/app/routes.js:437 src/component/album/edit/dialog.vue:80
+#: src/app/routes.js:441 src/component/album/edit/dialog.vue:80
 #: src/component/navigation.vue:176 src/component/people/edit/dialog.vue:68
-#: src/component/photo/batch-edit.vue:1563
+#: src/component/photo/batch-edit.vue:1564
 #: src/component/photo/edit/info.vue:173 src/page/settings/general.vue:200
 msgid "Private"
 msgstr "Privát"
@@ -3251,7 +3441,7 @@ msgstr "Privát"
 msgid "Processing upload..."
 msgstr "Feltöltés feldolgozása..."
 
-#: src/options/options.js:465
+#: src/options/options.js:468
 msgid "Product Feedback"
 msgstr "Termék visszajelzés"
 
@@ -3259,7 +3449,7 @@ msgstr "Termék visszajelzés"
 msgid "Projection"
 msgstr "Kivetítés"
 
-#: src/options/options.js:446
+#: src/options/options.js:449
 msgid "Purple"
 msgstr "Lila"
 
@@ -3275,6 +3465,7 @@ msgstr "Minőségi mutató"
 msgid "Quota exceeded"
 msgstr "A kvóta túllépése"
 
+#: src/component/photo/export/dialog.vue:273
 #: src/component/photo/view/cards.vue:111
 #: src/component/photo/view/mosaic.vue:66 src/page/settings/collections.vue:57
 #: src/page/settings/content.vue:200
@@ -3289,7 +3480,7 @@ msgstr "Véletlen"
 msgid "Rating {0} of {1}"
 msgstr "A {0} minősítés {1}"
 
-#: src/common/util.js:899 src/options/options.js:349
+#: src/common/util.js:953 src/options/options.js:352
 msgid "Raw"
 msgstr "Nyers"
 
@@ -3305,15 +3496,15 @@ msgstr "Az XMP-metadatokból kiolvassa az arcok területeit és a neveket, hogy 
 msgid "Read-Only Mode"
 msgstr "Csak olvasható mód"
 
-#: src/options/options.js:513 src/page/albums.vue:406
+#: src/options/options.js:516 src/page/albums.vue:406
 msgid "Recently Added"
 msgstr "Nemrég hozzáadott"
 
-#: src/options/options.js:514
+#: src/options/options.js:517
 msgid "Recently Archived"
 msgstr "Nemrégiben archiválva"
 
-#: src/options/options.js:515 src/page/albums.vue:407
+#: src/options/options.js:518 src/page/albums.vue:407
 msgid "Recently Edited"
 msgstr "Nemrég szerkesztve"
 
@@ -3330,32 +3521,32 @@ msgstr "Elismert"
 msgid "Recovery Code"
 msgstr "Helyreállítási kód"
 
-#: src/options/options.js:449
+#: src/options/options.js:452
 msgid "Red"
 msgstr "Piros"
 
-#: src/page/settings/general.vue:449
+#: src/page/settings/general.vue:464
 msgid "Reduce Motion"
 msgstr "Mozgáscsökkentés"
 
-#: src/page/settings/general.vue:450
+#: src/page/settings/general.vue:465
 msgid "Reduce interface animations and motion effects."
 msgstr "Csökkentse az interfész animációit és mozgáshatásait."
 
 #: src/component/cluster/node/groups.vue:6
 #: src/component/cluster/node/users.vue:25 src/page/admin/groups.vue:7
-#: src/page/admin/sessions.vue:336 src/page/admin/users.vue:395
+#: src/page/admin/sessions.vue:338 src/page/admin/users.vue:413
 #: src/page/cluster/activity.vue:42 src/page/cluster/nodes.vue:26
-#: src/page/admin/activity.vue:42 src/page/admin/sessions.vue:334
-#: src/page/admin/users.vue:324 src/component/album/toolbar.vue:146
-#: src/component/photo/toolbar.vue:439 src/locales.js:343
-#: src/page/albums.vue:488 src/page/labels.vue:270
+#: src/page/admin/activity.vue:42 src/page/admin/clients.vue:249
+#: src/page/admin/sessions.vue:336 src/page/admin/users.vue:342
+#: src/component/album/toolbar.vue:146 src/component/photo/toolbar.vue:439
+#: src/locales.js:343 src/page/albums.vue:488 src/page/labels.vue:270
 #: src/page/library/browse.vue:16 src/page/library/errors.vue:194
 #: src/page/people/new.vue:7 src/page/people/recognized.vue:35
 msgid "Refresh"
 msgstr "Frissítés"
 
-#: src/app/routes.js:506 src/component/navigation.vue:330
+#: src/app/routes.js:510 src/component/navigation.vue:330
 #: src/component/navigation.vue:367
 msgid "Regions"
 msgstr "Régiók"
@@ -3369,13 +3560,13 @@ msgid "Registration disabled"
 msgstr "Regisztráció letiltva"
 
 #: src/component/navigation.vue:422 src/component/navigation.vue:692
-#: src/component/update.vue:28 src/page/services.vue:228
+#: src/component/update.vue:28 src/page/services.vue:230
 msgid "Reload"
 msgstr "Újratöltés"
 
 #: src/component/navigation.vue:599 src/component/navigation.vue:908
-#: src/component/update.vue:62 src/page/settings/general.vue:642
-#: src/page/settings/general.vue:659
+#: src/component/update.vue:62 src/page/settings/general.vue:658
+#: src/page/settings/general.vue:675
 msgid "Reloading…"
 msgstr "Újratöltés…"
 
@@ -3383,11 +3574,12 @@ msgstr "Újratöltés…"
 msgid "Remote Sync"
 msgstr "Távoli szinkronizálás"
 
+#: src/component/client/redirect-uris.vue:22
 #: src/component/lightbox/sidebar.vue:309
 #: src/component/lightbox/sidebar.vue:310
 #: src/component/lightbox/sidebar.vue:374
 #: src/component/lightbox/sidebar.vue:375
-#: src/component/meta/face/markers.vue:83
+#: src/component/meta/face/markers.vue:82
 #: src/component/photo/edit/people.vue:20
 msgid "Remove"
 msgstr "Távolítsa el"
@@ -3396,7 +3588,7 @@ msgstr "Távolítsa el"
 msgid "Remove Location"
 msgstr "Hely eltávolítása"
 
-#: src/component/lightbox.vue:1739 src/component/photo/clipboard.vue:120
+#: src/component/lightbox.vue:1764 src/component/photo/clipboard.vue:120
 msgid "Remove from Album"
 msgstr "Eltávolítás az albumból"
 
@@ -3412,11 +3604,11 @@ msgstr "Eltávolítás az összes kiválasztott fotóról"
 msgid "Remove imported files to save storage. Unsupported file types will never be deleted, they remain in their current location."
 msgstr "Távolítsa el az importált fájlokat a tárhely megtakarításához. A nem támogatott fájltípusok soha nem törlődnek, a jelenlegi helyükön maradnak."
 
-#: src/page/cluster/nodes.vue:107 src/locales.js:389
+#: src/page/cluster/nodes.vue:108 src/locales.js:389
 msgid "Remove the selected instance from the cluster registry?"
 msgstr "A kiválasztott példány eltávolítása a fürtregiszterből?"
 
-#: src/page/cluster/nodes.vue:269 src/locales.js:353
+#: src/page/cluster/nodes.vue:270 src/locales.js:353
 msgid "Removed"
 msgstr "Eltávolított"
 
@@ -3433,17 +3625,25 @@ msgstr "A %{name} eltávolítva"
 msgid "Repeated"
 msgstr "Ismételt"
 
-#: src/common/api.js:103 src/component/lightbox.vue:1256
+#: src/common/api.js:147 src/component/lightbox.vue:1280
 msgid "Request failed - are you offline?"
 msgstr "A kérés sikertelen - offline vagy?"
 
-#: src/common/api.js:75
+#: src/common/api.js:115
 msgid "Request failed - invalid response"
 msgstr "Sikertelen kérés – érvénytelen válasz"
 
 #: src/page/settings/content.vue:18
 msgid "Require non-photographic and low-quality images to be reviewed before they appear in search results."
 msgstr "A nem fényképes és gyenge minőségű képeket a keresési eredményekben való megjelenésük előtt felül kell vizsgálni."
+
+#: src/component/client/edit/dialog.vue:202
+msgid "Reset Secret"
+msgstr "Titkos kód visszaállítása"
+
+#: src/component/photo/export/dialog.vue:290
+msgid "Resized JPEGs"
+msgstr "Átméretezett JPEG-fájlok"
 
 #: src/component/photo/edit/info.vue:125
 msgid "Resolution"
@@ -3454,19 +3654,24 @@ msgstr "Felbontás"
 msgid "Restart"
 msgstr "Újraindítás"
 
-#: src/component/user/edit/dialog.vue:344
-#: src/component/user/edit/dialog.vue:330 src/component/lightbox.vue:1769
-#: src/component/photo/clipboard.vue:48
+#: src/component/user/edit/dialog.vue:354 src/page/admin/users.vue:137
+#: src/component/user/edit/dialog.vue:340 src/page/admin/users.vue:134
+#: src/component/lightbox.vue:1794 src/component/photo/clipboard.vue:48
 msgid "Restore"
 msgstr "Visszaállítás"
 
-#: src/component/lightbox.vue:3286
+#: src/component/lightbox.vue:3345
 msgid "Restored"
 msgstr "Visszaállított"
 
-#: src/component/upload/dialog.vue:122
+#: src/component/photo/export/dialog.vue:29
+#: src/component/photo/export/dialog.vue:41 src/component/upload/dialog.vue:122
 msgid "Retry"
 msgstr "Újrapróbálás"
+
+#: src/component/photo/export/dialog.vue:41
+msgid "Retry %{filename}"
+msgstr "%{filename} újrapróbálása"
 
 #: src/component/service/edit.vue:241
 msgid "Retry Limit"
@@ -3476,20 +3681,22 @@ msgstr "Újrapróbálkozási korlát"
 msgid "Retype Password"
 msgstr "Gépelje be újra a jelszót"
 
-#: src/app/routes.js:430 src/component/navigation.vue:169
+#: src/app/routes.js:434 src/component/navigation.vue:169
 msgid "Review"
 msgstr "Felülvizsgálat"
 
 #: src/component/user/add/dialog.vue:99 src/component/user/edit/dialog.vue:172
-#: src/page/admin/sessions.vue:105 src/page/admin/users.vue:179
+#: src/page/admin/sessions.vue:107 src/page/admin/users.vue:194
 #: src/component/cluster/instance-access.vue:84
 #: src/component/cluster/node/groups.vue:77
 #: src/component/cluster/node/user-edit.vue:128
 #: src/component/cluster/node/users.vue:154
 #: src/component/user/add/dialog.vue:105 src/component/user/edit/dialog.vue:181
-#: src/page/admin/groups.vue:77 src/page/admin/sessions.vue:145
-#: src/page/admin/users.vue:284 src/component/user/edit/dialog.vue:174
-#: src/page/admin/users.vue:271 src/locales.js:363
+#: src/page/admin/groups.vue:77 src/page/admin/sessions.vue:147
+#: src/page/admin/users.vue:301 src/component/client/add/dialog.vue:86
+#: src/component/client/edit/dialog.vue:100
+#: src/component/user/edit/dialog.vue:174 src/page/admin/clients.vue:213
+#: src/page/admin/users.vue:288 src/locales.js:363
 msgid "Role"
 msgstr "Szerepvállalás"
 
@@ -3505,33 +3712,34 @@ msgstr "Forgatott"
 msgid "Rows per page:"
 msgstr "Sorok oldalanként:"
 
-#: src/options/options.js:313
+#: src/options/options.js:316
 msgid "Satellite"
 msgstr "Műholdas"
 
-#: src/component/user/edit/dialog.vue:307
+#: src/component/user/edit/dialog.vue:317
 #: src/component/cluster/node/user-edit.vue:264
-#: src/component/user/edit/dialog.vue:344
-#: src/component/user/edit/dialog.vue:330
+#: src/component/user/edit/dialog.vue:354
+#: src/component/client/edit/dialog.vue:215
+#: src/component/user/edit/dialog.vue:340
 #: src/component/album/edit/dialog.vue:89
 #: src/component/label/edit/dialog.vue:46
 #: src/component/lightbox/sidebar/toolbar.vue:22
 #: src/component/meta/camera/dialog.vue:121
-#: src/component/meta/datetime/dialog.vue:123
+#: src/component/meta/datetime/dialog.vue:124
 #: src/component/people/edit/dialog.vue:77
 #: src/component/photo/batch-edit.vue:497
-#: src/component/photo/edit/details.vue:396 src/component/service/edit.vue:259
-#: src/component/settings/password.vue:94 src/component/share/dialog.vue:111
+#: src/component/photo/edit/details.vue:397 src/component/service/edit.vue:259
+#: src/component/settings/password.vue:94 src/component/share/dialog.vue:92
 msgid "Save"
 msgstr "Mentés"
 
 #: src/component/meta/camera/dialog.vue:120
-#: src/component/meta/datetime/dialog.vue:122
-#: src/component/photo/edit/details.vue:391
+#: src/component/meta/datetime/dialog.vue:123
+#: src/component/photo/edit/details.vue:392
 msgid "Save changes"
 msgstr "Változások mentése"
 
-#: src/component/photo/batch-edit.vue:1561
+#: src/component/photo/batch-edit.vue:1562
 #: src/component/photo/edit/info.vue:187
 msgid "Scan"
 msgstr "Szkennelt"
@@ -3544,10 +3752,12 @@ msgstr "Olvassa be a QR-kódot a hitelesítő alkalmazással, vagy használja az
 msgid "Scans"
 msgstr "Szkennel"
 
-#: src/page/admin/sessions.vue:139 src/page/admin/sessions.vue:223
-#: src/page/admin/sessions.vue:179 src/page/admin/sessions.vue:296
-#: src/page/admin/sessions.vue:294 src/component/settings/apps.vue:135
-#: src/component/settings/apps.vue:283 src/locales.js:366
+#: src/page/admin/sessions.vue:141 src/page/admin/sessions.vue:225
+#: src/page/admin/sessions.vue:181 src/page/admin/sessions.vue:298
+#: src/component/client/edit/dialog.vue:303 src/component/client/scope.vue:10
+#: src/page/admin/clients.vue:214 src/page/admin/sessions.vue:296
+#: src/component/settings/apps.vue:135 src/component/settings/apps.vue:284
+#: src/component/settings/connected-apps.vue:106 src/locales.js:366
 msgid "Scope"
 msgstr "Terjedelem"
 
@@ -3558,18 +3768,27 @@ msgstr "Területek"
 #: src/component/cluster/node/users.vue:11 src/page/admin/sessions.vue:13
 #: src/page/admin/users.vue:13 src/page/cluster/activity.vue:13
 #: src/page/cluster/nodes.vue:13 src/page/admin/activity.vue:13
-#: src/component/meta/location/dialog.vue:60 src/component/navigation.vue:91
-#: src/component/navigation.vue:728 src/component/photo/toolbar.vue:32
-#: src/locales.js:342 src/options/options.js:257 src/page/albums.vue:19
-#: src/page/labels.vue:15 src/page/library/errors.vue:18
-#: src/page/people/recognized.vue:14 src/page/places.vue:22
-#: src/page/services.vue:15 src/page/settings/content.vue:117
+#: src/page/admin/clients.vue:13 src/component/meta/location/dialog.vue:60
+#: src/component/navigation.vue:91 src/component/navigation.vue:728
+#: src/component/photo/toolbar.vue:32 src/locales.js:342
+#: src/options/options.js:260 src/page/albums.vue:19 src/page/labels.vue:15
+#: src/page/library/errors.vue:18 src/page/people/recognized.vue:14
+#: src/page/places.vue:22 src/page/services.vue:15
+#: src/page/settings/content.vue:117
 msgid "Search"
 msgstr "Keresés"
 
 #: src/component/photo/toolbar.vue:51 src/page/albums.vue:39
 msgid "Search Filters"
 msgstr "Keresési szűrők"
+
+#: src/page/auth/consent.vue:169
+msgid "Search and view your photos"
+msgstr "Fényképeid keresése és megtekintése"
+
+#: src/page/auth/consent.vue:170
+msgid "Search and view your videos"
+msgstr "Videóid keresése és megtekintése"
 
 #: src/page/discover.vue:13
 msgid "Season"
@@ -3583,7 +3802,7 @@ msgstr "Titok"
 msgid "Security and Access"
 msgstr "Biztonság és hozzáférés"
 
-#: src/component/lightbox.vue:1670 src/component/lightbox.vue:1671
+#: src/component/lightbox.vue:1695 src/component/lightbox.vue:1696
 msgid "Select"
 msgstr "Kiválasztás"
 
@@ -3646,6 +3865,10 @@ msgstr "Válassza ki az indexelendő mappát…"
 msgid "Select year"
 msgstr "Válasszon évet"
 
+#: src/component/photo/export/dialog.vue:59
+msgid "Selected"
+msgstr "Kiválasztott"
+
 #: src/component/photo/batch-edit.vue:89
 msgid "Selection"
 msgstr "Kiválasztás"
@@ -3654,11 +3877,11 @@ msgstr "Kiválasztás"
 msgid "Selection added to %s"
 msgstr "Választék hozzáadva a következőhöz: %s"
 
-#: src/component/photo/clipboard.vue:251 src/locales.js:488
+#: src/component/photo/clipboard.vue:252 src/locales.js:488
 msgid "Selection approved"
 msgstr "Kiválasztás jóváhagyva"
 
-#: src/component/photo/clipboard.vue:282 src/locales.js:489
+#: src/component/photo/clipboard.vue:283 src/locales.js:489
 msgid "Selection archived"
 msgstr "A kijelölés archiválva"
 
@@ -3670,7 +3893,7 @@ msgstr "A kijelölés privátként megjelölve"
 msgid "Selection not found"
 msgstr "Kiválasztás nem található"
 
-#: src/component/photo/clipboard.vue:318 src/locales.js:490
+#: src/component/photo/clipboard.vue:319 src/locales.js:490
 msgid "Selection restored"
 msgstr "Kiválasztás visszaállítva"
 
@@ -3678,54 +3901,55 @@ msgstr "Kiválasztás visszaállítva"
 msgid "Sequential Name"
 msgstr "Sorozati név"
 
-#: src/options/admin.js:39 src/locales.js:385
+#: src/options/admin.js:39 src/locales.js:385 src/options/auth.js:15
 msgid "Service"
 msgstr "Szolgáltatás"
 
 #: src/component/service/add.vue:27 src/component/service/edit.vue:176
-#: src/component/share/dialog.vue:167
 msgid "Service URL"
 msgstr "Szolgáltatás URL-je"
 
 #: src/component/navigation.vue:569 src/locales.js:386
-#: src/page/settings/general.vue:305
+#: src/page/settings/general.vue:320
 msgid "Services"
 msgstr "Szolgáltatások"
 
-#: src/locales.js:369 src/model/session.js:83 src/options/auth.js:71
-#: src/options/auth.js:120
+#: src/locales.js:369 src/model/session.js:83 src/options/auth.js:75
+#: src/options/auth.js:125
 msgid "Session"
 msgstr "Ülés"
 
-#: src/page/admin/sessions.vue:220 src/page/admin/sessions.vue:293
-#: src/page/admin/sessions.vue:291
+#: src/page/admin/sessions.vue:222 src/page/admin/sessions.vue:295
+#: src/page/admin/sessions.vue:293
 msgid "Session ID"
 msgstr "Munkamenet azonosítója"
 
 #: src/page/admin.vue:67 src/component/navigation.vue:252
-#: src/component/navigation.vue:479 src/page/admin.vue:65 src/locales.js:370
+#: src/component/navigation.vue:479 src/page/admin.vue:77
+#: src/page/admin/clients.vue:217 src/locales.js:370
 msgid "Sessions"
 msgstr "Ülések"
 
-#: src/component/lightbox.vue:1729
+#: src/component/lightbox.vue:1754
 msgid "Set as Album Cover"
 msgstr "Album borítóként beállítva"
 
-#: src/component/photo/edit/people.vue:225
+#: src/component/photo/edit/people.vue:226
 msgid "Set as Cover Image"
 msgstr "Beállítás borítóképként"
 
 #: src/component/navigation.vue:308 src/component/navigation.vue:439
-#: src/component/navigation.vue:494 src/app/routes.js:214 src/app/routes.js:661
-#: src/app/routes.js:673 src/app/routes.js:685 src/app/routes.js:702
-#: src/app/routes.js:714 src/app/routes.js:734 src/component/navigation.vue:533
-#: src/component/navigation.vue:706 src/options/options.js:268
+#: src/component/navigation.vue:494 src/component/client/edit/dialog.vue:52
+#: src/app/routes.js:206 src/app/routes.js:665 src/app/routes.js:677
+#: src/app/routes.js:689 src/app/routes.js:706 src/app/routes.js:718
+#: src/app/routes.js:738 src/component/navigation.vue:533
+#: src/component/navigation.vue:706 src/options/options.js:271
 msgid "Settings"
 msgstr "Beállítások"
 
-#: src/page/settings/account.vue:532 src/page/settings/account.vue:561
+#: src/page/settings/account.vue:558 src/page/settings/account.vue:587
 #: src/component/settings/passcode.vue:378 src/locales.js:467
-#: src/page/settings/account.vue:440 src/page/settings/account.vue:469
+#: src/page/settings/account.vue:466 src/page/settings/account.vue:495
 msgid "Settings saved"
 msgstr "Beállítások elmentve"
 
@@ -3740,7 +3964,7 @@ msgid "Severity"
 msgstr "Súlyosság"
 
 #: src/component/album/clipboard.vue:24 src/component/album/toolbar.vue:165
-#: src/component/photo/clipboard.vue:24 src/page/settings/general.vue:290
+#: src/component/photo/clipboard.vue:24 src/page/settings/general.vue:305
 msgid "Share"
 msgstr "Megosztás"
 
@@ -3748,7 +3972,7 @@ msgstr "Megosztás"
 msgid "Share %{s}"
 msgstr "%{s} megosztása"
 
-#: src/options/options.js:506
+#: src/options/options.js:509
 msgid "Share Friendly"
 msgstr "Megosztásbarát"
 
@@ -3760,7 +3984,7 @@ msgstr "Előadás"
 msgid "Show All Labels"
 msgstr "Minden címke megjelenítése"
 
-#: src/component/lightbox.vue:1795
+#: src/component/lightbox.vue:1831
 msgid "Show Caption"
 msgstr "Felirat megjelenítése"
 
@@ -3776,8 +4000,7 @@ msgstr "Csak a fontosak megjelenítése"
 #: src/component/service/add.vue:59 src/component/service/edit.vue:193
 #: src/component/settings/apps.vue:46 src/component/settings/passcode.vue:50
 #: src/component/settings/passcode.vue:191
-#: src/component/settings/password.vue:41 src/component/share/dialog.vue:93
-#: src/page/auth/login.vue:116
+#: src/component/settings/password.vue:41 src/page/auth/login.vue:116
 msgid "Show Password"
 msgstr "Jelszó megjelenítése"
 
@@ -3797,7 +4020,7 @@ msgstr "Arcjelzők megjelenítése"
 msgid "Show hidden"
 msgstr "Rejtett megjelenítése"
 
-#: src/page/settings/general.vue:380
+#: src/page/settings/general.vue:395
 msgid "Show logs in the web interface to monitor activity and troubleshoot problems."
 msgstr "Naplók megjelenítése a webes felületen a tevékenység nyomon követése és a problémák elhárítása érdekében."
 
@@ -3805,7 +4028,7 @@ msgstr "Naplók megjelenítése a webes felületen a tevékenység nyomon követ
 msgid "Show smart albums that group pictures by occasion, trip, or location."
 msgstr "Olyan intelligens albumok megjelenítése, amelyek a képeket alkalom, utazás vagy helyszín szerint csoportosítják."
 
-#: src/page/settings/general.vue:395
+#: src/page/settings/general.vue:410
 msgid "Show the Account page so users can manage their profile and security settings."
 msgstr "A Fiók oldal megjelenítése, hogy a felhasználók kezelhessék profiljukat és biztonsági beállításaikat."
 
@@ -3829,7 +4052,7 @@ msgstr "Jelenítsd meg a „Mappák” részt, hogy a képeket a könyvtárszerk
 msgid "Show the Labels section to view and manage AI-generated labels."
 msgstr "A Címkék szakasz megjelenítése az AI által generált címkék megtekintéséhez és kezeléséhez."
 
-#: src/page/settings/general.vue:350
+#: src/page/settings/general.vue:365
 msgid "Show the Library section to index, manage, and monitor the media library."
 msgstr "A Könyvtár szakasz megjelenítése a médiatár indexeléséhez, kezeléséhez és felügyeletéhez."
 
@@ -3837,11 +4060,11 @@ msgstr "A Könyvtár szakasz megjelenítése a médiatár indexeléséhez, kezel
 msgid "Show the Media section to browse videos, live photos, and animations."
 msgstr "Nyissa meg a „Média” részt a videók, élő fotók és animációk böngészéséhez."
 
-#: src/page/settings/general.vue:410
+#: src/page/settings/general.vue:425
 msgid "Show the Places view with interactive maps so you can browse photos by location."
 msgstr "Mutassa meg a Helyek nézetet interaktív térképekkel, hogy a fényképeket hely szerint böngészhesse."
 
-#: src/common/util.js:913 src/model/file.js:197
+#: src/common/util.js:967 src/model/file.js:201
 #: src/page/settings/collections.vue:72 src/page/settings/content.vue:215
 msgid "Sidecar"
 msgstr "Oldalkocsi"
@@ -3868,15 +4091,15 @@ msgid "Site URL"
 msgstr "Webhely URL címe"
 
 #: src/component/photo/edit/files.vue:174
-#: src/component/photo/edit/files.vue:431 src/component/service/edit.vue:58
+#: src/component/photo/edit/files.vue:435 src/component/service/edit.vue:58
 msgid "Size"
 msgstr "Méret"
 
-#: src/component/lightbox.vue:1617 src/component/lightbox.vue:1618
+#: src/component/lightbox.vue:1642 src/component/lightbox.vue:1643
 msgid "Slideshow"
 msgstr "Diavetítés"
 
-#: src/options/options.js:286
+#: src/options/options.js:289
 msgid "Slow"
 msgstr "Lassú"
 
@@ -3897,11 +4120,17 @@ msgid "Some albums could not be created. Please edit the names and try again."
 msgstr "Néhány albumot nem lehetett létrehozni. Kérjük, szerkessze a neveket, és próbálja meg újra."
 
 #: src/component/file/clipboard.vue:124 src/component/label/clipboard.vue:115
-#: src/component/people/clipboard.vue:113 src/component/photo/clipboard.vue:347
+#: src/component/people/clipboard.vue:113 src/component/photo/clipboard.vue:348
 msgid "Some albums could not be updated"
 msgstr "Néhány albumot nem lehetett frissíteni"
 
-#: src/component/lightbox.vue:1253 src/locales.js:397
+#: src/component/photo/export/dialog.vue:89
+msgid "Some files could not be exported. Please try again."
+msgstr "Néhány fájlt nem sikerült exportálni. Kérjük, próbálja meg újra."
+
+#: src/component/client/edit/dialog.vue:162 src/component/lightbox.vue:1277
+#: src/component/settings/connected-apps.vue:115 src/locales.js:397
+#: src/page/auth/consent.vue:216 src/page/auth/consent.vue:226
 msgid "Something went wrong, try again"
 msgstr "Valami rosszul ment, próbálja újra"
 
@@ -3973,7 +4202,7 @@ msgstr "Kezdőlap"
 msgid "Static Size Limit: %{n}px"
 msgstr "Statikus méretkorlát: %{n}px"
 
-#: src/component/photo/edit/files.vue:445
+#: src/component/photo/edit/files.vue:449
 msgid "Status"
 msgstr "Állapot"
 
@@ -3989,15 +4218,15 @@ msgstr "Vess véget a szereposztásnak"
 msgid "Storage"
 msgstr "Tárhely"
 
-#: src/options/options.js:301
+#: src/options/options.js:304
 msgid "Streets"
 msgstr "Utcák"
 
-#: src/common/util.js:955 src/component/lightbox/sidebar.vue:820
+#: src/common/util.js:1009 src/component/lightbox/sidebar.vue:821
 #: src/component/photo/batch-edit.vue:337
 #: src/component/photo/batch-edit.vue:340
-#: src/component/photo/edit/details.vue:291
-#: src/component/photo/edit/details.vue:294
+#: src/component/photo/edit/details.vue:292
+#: src/component/photo/edit/details.vue:295
 msgid "Subject"
 msgstr "Tárgy"
 
@@ -4022,7 +4251,9 @@ msgid "Successfully activated"
 msgstr "Sikeres aktiválás"
 
 #: src/component/session/remove/dialog.vue:60
-#: src/component/settings/apps.vue:450
+#: src/component/client/edit/dialog.vue:530 src/page/admin/clients.vue:395
+#: src/component/settings/apps.vue:451
+#: src/component/settings/connected-apps.vue:187
 msgid "Successfully deleted"
 msgstr "Sikeresen törölve"
 
@@ -4030,9 +4261,9 @@ msgstr "Sikeresen törölve"
 msgid "Successfully verified"
 msgstr "Sikeresen ellenőrizve"
 
-#: src/component/user/edit/dialog.vue:262 src/page/admin/users.vue:220
+#: src/component/user/edit/dialog.vue:262 src/page/admin/users.vue:236
 #: src/common/user-format.js:30 src/component/cluster/node/user-edit.vue:212
-#: src/component/user/edit/dialog.vue:278 src/page/admin/users.vue:361
+#: src/component/user/edit/dialog.vue:278 src/page/admin/users.vue:379
 msgid "Super Admin"
 msgstr "Super Admin"
 
@@ -4044,7 +4275,7 @@ msgstr "Támogassa küldetésünket"
 msgid "Support for additional services, like Google Drive, will be added over time."
 msgstr "A további szolgáltatások, például a Google Drive támogatása jelenleg fejlesztés alatt áll."
 
-#: src/page/services.vue:179
+#: src/page/services.vue:181
 msgid "Sync"
 msgstr "Szinkronizálás"
 
@@ -4062,15 +4293,15 @@ msgstr "Nyers és videofájlok szinkronizálása"
 msgid "Taken"
 msgstr "Felvett"
 
-#: src/options/options.js:455
+#: src/options/options.js:458
 msgid "Teal"
 msgstr "A zöldeskék"
 
-#: src/options/options.js:325
+#: src/options/options.js:328
 msgid "Terrain"
 msgstr "Terep"
 
-#: src/common/form.js:282
+#: src/common/form.js:302
 msgid "Text"
 msgstr "Szöveg"
 
@@ -4112,10 +4343,14 @@ msgstr "Téma"
 msgid "This account is missing an ID and can't be edited."
 msgstr "Ennek a fióknak nincs azonosítója, ezért nem szerkeszthető."
 
-#: src/common/form.js:234 src/common/form.js:243 src/common/form.js:252
-#: src/common/form.js:261 src/common/form.js:270 src/common/form.js:289
-#: src/common/form.js:340 src/common/form.js:350 src/common/form.js:362
-#: src/common/form.js:371 src/common/form.js:388
+#: src/page/auth/consent.vue:15
+msgid "This authorization request has expired or is invalid. Please return to the app and try again."
+msgstr "Ez az engedélyezési kérelem lejárt vagy érvénytelen. Kérjük, térjen vissza az alkalmazásba, és próbálja meg újra."
+
+#: src/common/form.js:249 src/common/form.js:258 src/common/form.js:267
+#: src/common/form.js:276 src/common/form.js:285 src/common/form.js:309
+#: src/common/form.js:360 src/common/form.js:370 src/common/form.js:382
+#: src/common/form.js:391 src/common/form.js:408
 msgid "This field is required"
 msgstr "Ez a mező kötelező"
 
@@ -4123,7 +4358,7 @@ msgstr "Ez a mező kötelező"
 msgid "This instance has no site URL configured."
 msgstr "Ehhez az példányhoz nincs beállítva webhely-URL."
 
-#: src/component/settings/webdav.vue:58 src/page/services.vue:92
+#: src/component/settings/webdav.vue:58 src/page/services.vue:94
 msgid "This mounts the originals folder as a network drive and allows you to open, edit, and delete files from your computer or smartphone as if they were local."
 msgstr "Ez hálózati meghajtóként csatlakoztatja az eredeti mappát, és lehetővé teszi a fájlok megnyitását, szerkesztését és törlését számítógépéről vagy okostelefonjáról, mintha azok helyi lennének."
 
@@ -4132,14 +4367,9 @@ msgstr "Ez hálózati meghajtóként csatlakoztatja az eredeti mappát, és lehe
 msgid "Time"
 msgstr "Idő"
 
-#: src/component/meta/datetime/dialog.vue:163
-#: src/component/photo/edit/details.vue:109
-msgid "Time UTC"
-msgstr "Idő UTC"
-
-#: src/component/meta/datetime/dialog.vue:106
+#: src/component/meta/datetime/dialog.vue:107
 #: src/component/photo/batch-edit.vue:255
-#: src/component/photo/edit/details.vue:126 src/page/settings/general.vue:47
+#: src/component/photo/edit/details.vue:127 src/page/settings/general.vue:47
 msgid "Time Zone"
 msgstr "Időzóna"
 
@@ -4147,7 +4377,7 @@ msgstr "Időzóna"
 msgid "Timeout"
 msgstr "Időtúllépés"
 
-#: src/common/util.js:957 src/component/photo/view/list.vue:34
+#: src/common/util.js:1011 src/component/photo/view/list.vue:34
 msgid "Title"
 msgstr "Cím"
 
@@ -4161,7 +4391,7 @@ msgctxt "Account"
 msgid "Title"
 msgstr "Cím"
 
-#: src/component/lightbox/sidebar.vue:795
+#: src/component/lightbox/sidebar.vue:796
 #: src/component/photo/batch-edit.vue:158
 #: src/component/photo/batch-edit.vue:159
 #: src/component/photo/edit/details.vue:17
@@ -4170,7 +4400,7 @@ msgctxt "Photo"
 msgid "Title"
 msgstr "Cím"
 
-#: src/page/settings/account.vue:291 src/page/settings/account.vue:293
+#: src/page/settings/account.vue:304 src/page/settings/account.vue:306
 msgid "Title / Position"
 msgstr "Cím / Pozíció"
 
@@ -4214,11 +4444,16 @@ msgstr "Nézet váltása"
 msgid "Token"
 msgstr "Jelképes"
 
+#: src/component/client/add/dialog.vue:117
+#: src/component/client/edit/dialog.vue:129
+msgid "Token Limit"
+msgstr "Token-korlát"
+
 #: src/component/upload/dialog.vue:403
 msgid "Too many files selected"
 msgstr "Túl sok fájl van kiválasztva"
 
-#: src/common/api.js:128 src/locales.js:446
+#: src/common/api.js:172 src/locales.js:446
 msgid "Too many requests"
 msgstr "Túl sok kérés"
 
@@ -4239,12 +4474,12 @@ msgstr "A kétlépcsős hitelesítés engedélyezve van fiókjában."
 
 #: src/component/photo/batch-edit.vue:357
 #: src/component/photo/edit/files.vue:166
-#: src/component/photo/edit/files.vue:439 src/component/photo/edit/info.vue:21
+#: src/component/photo/edit/files.vue:443 src/component/photo/edit/info.vue:21
 #: src/component/service/edit.vue:213
 msgid "Type"
 msgstr "Típus"
 
-#: src/page/cluster/nodes.vue:157
+#: src/page/cluster/nodes.vue:158
 msgid "URL"
 msgstr "URL"
 
@@ -4260,14 +4495,14 @@ msgstr "Ezt nem tudom megtenni"
 msgid "Unassign"
 msgstr "Unassign"
 
-#: src/options/auth.js:15
+#: src/options/auth.js:18
 msgid "Unauthorized"
 msgstr "Jogosulatlan"
 
 #: src/component/lightbox/sidebar/toolbar.vue:11
 #: src/component/meta/location/input.vue:40
 #: src/component/meta/location/input.vue:58
-#: src/component/photo/batch-edit.vue:1189
+#: src/component/photo/batch-edit.vue:1190
 #: src/component/photo/edit/people.vue:43
 msgid "Undo"
 msgstr "Visszavonás"
@@ -4276,45 +4511,49 @@ msgstr "Visszavonás"
 msgid "Unique ID"
 msgstr "Egyéni azonosító"
 
-#: src/model/cluster-node.js:47 src/page/settings/account.vue:221
-#: src/page/settings/account.vue:241 src/page/settings/account.vue:261
-#: src/common/util.js:670 src/component/lightbox/sidebar.vue:120
+#: src/model/cluster-node.js:47 src/page/settings/account.vue:234
+#: src/page/settings/account.vue:254 src/page/settings/account.vue:274
+#: src/common/util.js:724 src/component/lightbox/sidebar.vue:120
 #: src/component/lightbox/sidebar.vue:279
-#: src/component/lightbox/sidebar.vue:701
-#: src/component/lightbox/sidebar.vue:713
-#: src/component/lightbox/sidebar.vue:993
-#: src/component/lightbox/sidebar.vue:1742
+#: src/component/lightbox/sidebar.vue:702
+#: src/component/lightbox/sidebar.vue:714
+#: src/component/lightbox/sidebar.vue:994
+#: src/component/lightbox/sidebar.vue:1747
 #: src/component/meta/datetime/dialog.vue:31
 #: src/component/meta/datetime/dialog.vue:51
 #: src/component/meta/datetime/dialog.vue:71
 #: src/component/photo/edit/details.vue:46
 #: src/component/photo/edit/details.vue:68
 #: src/component/photo/edit/details.vue:89
-#: src/component/photo/edit/details.vue:437 src/component/photo/toolbar.vue:385
-#: src/model/album.js:178 src/model/photo.js:333 src/model/photo.js:846
-#: src/model/photo.js:871 src/model/photo.js:894 src/model/photo.js:901
-#: src/model/photo.js:973 src/model/photo.js:981 src/model/photo.js:1063
-#: src/model/photo.js:1085 src/model/photo.js:1122 src/model/photo.js:1152
-#: src/model/user.js:137 src/options/options.js:61 src/options/options.js:107
+#: src/component/photo/edit/details.vue:438 src/component/photo/toolbar.vue:385
+#: src/model/album.js:178 src/model/photo.js:413 src/model/photo.js:952
+#: src/model/photo.js:977 src/model/photo.js:1000 src/model/photo.js:1007
+#: src/model/photo.js:1079 src/model/photo.js:1087 src/model/photo.js:1169
+#: src/model/photo.js:1191 src/model/photo.js:1228 src/model/photo.js:1258
+#: src/model/user.js:138 src/options/options.js:61 src/options/options.js:107
 #: src/options/options.js:125 src/options/options.js:142
 #: src/options/options.js:156 src/options/options.js:168
 #: src/page/library/errors.vue:370 src/page/library/errors.vue:377
-#: src/page/settings/account.vue:205 src/page/settings/account.vue:225
-#: src/page/settings/account.vue:245
+#: src/page/settings/account.vue:218 src/page/settings/account.vue:238
+#: src/page/settings/account.vue:258
 msgid "Unknown"
 msgstr "Ismeretlen"
+
+#: src/page/auth/consent.vue:129
+msgid "Unknown App"
+msgstr "Ismeretlen alkalmazás"
 
 #: src/page/photos.vue:455
 msgid "Unknown location"
 msgstr "Ismeretlen helyszín"
 
-#: src/component/navigation.vue:567 src/page/settings/account.vue:466
-#: src/page/settings/account.vue:474 src/component/navigation.vue:876
-#: src/page/settings/account.vue:374 src/page/settings/account.vue:382
+#: src/component/navigation.vue:567 src/page/settings/account.vue:487
+#: src/page/settings/account.vue:495 src/component/navigation.vue:876
+#: src/page/settings/account.vue:395 src/page/settings/account.vue:403
 msgid "Unregistered"
 msgstr "Nem regisztrált"
 
-#: src/app/routes.js:381 src/component/navigation.vue:212
+#: src/app/routes.js:385 src/component/navigation.vue:212
 msgid "Unsorted"
 msgstr "Rendezés nélkül"
 
@@ -4334,8 +4573,8 @@ msgstr "Nem támogatott formátum"
 msgid "Unsupported type"
 msgstr "Nem támogatott típus"
 
-#: src/component/cluster/node/overview.vue:57 src/page/cluster/nodes.vue:169
-#: src/component/photo/edit/files.vue:352 src/component/photo/edit/info.vue:279
+#: src/component/cluster/node/overview.vue:57 src/page/cluster/nodes.vue:170
+#: src/component/photo/edit/files.vue:355 src/component/photo/edit/info.vue:279
 msgid "Updated"
 msgstr "Frissítve"
 
@@ -4351,8 +4590,8 @@ msgstr "Index frissítése"
 msgid "Updating moments"
 msgstr "Frissítő pillanatok"
 
-#: src/component/user/edit/dialog.vue:507
-#: src/component/user/edit/dialog.vue:591
+#: src/component/user/edit/dialog.vue:530
+#: src/component/user/edit/dialog.vue:614
 msgid "Updating picture…"
 msgstr "Kép frissítése…"
 
@@ -4381,7 +4620,7 @@ msgstr "Frissítés most"
 #: src/component/photo/toolbar.vue:449 src/component/service/upload.vue:63
 #: src/component/upload/dialog.vue:132 src/component/upload/dialog.vue:196
 #: src/page/albums.vue:498 src/page/labels.vue:325
-#: src/page/library/import.vue:71 src/page/services.vue:178
+#: src/page/library/import.vue:71 src/page/services.vue:180
 #: src/page/settings/general.vue:215
 msgid "Upload"
 msgstr "Feltöltés"
@@ -4443,13 +4682,17 @@ msgstr "%{n}/%{t} feltöltése…"
 msgid "Uploading photos…"
 msgstr "Fényképek feltöltése…"
 
-#: src/page/settings/account.vue:554 src/page/settings/account.vue:462
+#: src/page/settings/account.vue:580 src/page/settings/account.vue:488
 msgid "Uploading…"
 msgstr "Feltöltés…"
 
 #: src/component/upload/dialog.vue:108
 msgid "Uploads that may contain such images will be rejected automatically."
 msgstr "Az esetlegesen ilyen képeket tartalmazó feltöltések automatikusan elutasításra kerülnek."
+
+#: src/page/auth/consent.vue:168
+msgid "Use PhotoPrism tools in this app"
+msgstr "Használja a PhotoPrism eszközeit ebben az alkalmazásban"
 
 #: src/page/settings/advanced.vue:372
 msgid "Use Presets"
@@ -4463,11 +4706,11 @@ msgstr "Ha nem tud érvényes ellenőrző kódot generálni a hitelesítő alkal
 msgid "Use your recovery code or contact an administrator for help."
 msgstr "Használja a helyreállítási kódot, vagy forduljon a rendszergazdához segítségért."
 
-#: src/page/admin/sessions.vue:98 src/page/admin/sessions.vue:221
+#: src/page/admin/sessions.vue:100 src/page/admin/sessions.vue:223
 #: src/component/cluster/node/overview.vue:77 src/model/cluster-instance.js:32
-#: src/page/admin/sessions.vue:138 src/page/admin/sessions.vue:294
-#: src/page/admin/sessions.vue:292 src/locales.js:356 src/model/user.js:458
-#: src/options/auth.js:9
+#: src/page/admin/sessions.vue:140 src/page/admin/sessions.vue:296
+#: src/component/client/edit/dialog.vue:135 src/page/admin/sessions.vue:294
+#: src/locales.js:356 src/model/user.js:498 src/options/auth.js:9
 msgid "User"
 msgstr "Felhasználó"
 
@@ -4483,24 +4726,28 @@ msgstr "Felhasználói felület"
 msgid "User not found"
 msgstr "Felhasználó nem található"
 
-#: src/component/user/add/dialog.vue:32 src/component/user/add/dialog.vue:33
-#: src/page/admin/sessions.vue:91 src/page/admin/users.vue:177
-#: src/component/cluster/node/users.vue:152
-#: src/component/user/add/dialog.vue:38 src/component/user/add/dialog.vue:39
-#: src/page/admin/sessions.vue:131 src/page/admin/users.vue:282
-#: src/page/admin/users.vue:269 src/component/service/add.vue:38
-#: src/component/service/edit.vue:179 src/component/share/dialog.vue:168
+#: src/component/user/add/dialog.vue:32 src/page/admin/sessions.vue:93
+#: src/page/admin/users.vue:192 src/component/cluster/node/users.vue:152
+#: src/component/user/add/dialog.vue:38 src/page/admin/sessions.vue:133
+#: src/page/admin/users.vue:299 src/component/client/edit/dialog.vue:302
+#: src/page/admin/users.vue:286 src/common/form.js:293
+#: src/component/service/add.vue:38 src/component/service/edit.vue:179
 #: src/locales.js:347
 msgid "Username"
 msgstr "Felhasználónév"
+
+#: src/common/form.js:293
+msgid "Username may only contain ASCII characters"
+msgstr "A felhasználónév kizárólag ASCII karaktereket tartalmazhat"
 
 #: src/component/navigation.vue:555 src/locales.js:357
 msgid "Users"
 msgstr "Felhasználók"
 
-#: src/common/util.js:909 src/component/photo/view/cards.vue:114
+#: src/common/util.js:963 src/component/photo/export/dialog.vue:273
+#: src/component/photo/view/cards.vue:114
 #: src/component/photo/view/cards.vue:239
-#: src/component/photo/view/mosaic.vue:69 src/options/options.js:369
+#: src/component/photo/view/mosaic.vue:69 src/options/options.js:372
 msgid "Vector"
 msgstr "Vektor"
 
@@ -4524,21 +4771,26 @@ msgstr "Ellenőrzött e-mail cím szükséges"
 msgid "Version"
 msgstr "Verzió"
 
-#: src/common/util.js:903 src/component/photo/batch-edit.vue:69
+#: src/common/util.js:957 src/component/photo/batch-edit.vue:69
 #: src/component/photo/batch-edit.vue:128
+#: src/component/photo/export/dialog.vue:273
 #: src/component/photo/view/cards.vue:122
 #: src/component/photo/view/cards.vue:220 src/component/photo/view/list.vue:83
-#: src/component/photo/view/mosaic.vue:77 src/model/file.js:204
-#: src/model/photo.js:997 src/model/photo.js:1015 src/options/options.js:357
+#: src/component/photo/view/mosaic.vue:77 src/model/file.js:208
+#: src/model/photo.js:1103 src/model/photo.js:1121 src/options/options.js:360
 msgid "Video"
 msgstr "Videó"
 
-#: src/options/options.js:519
+#: src/options/options.js:522
 msgid "Video Duration"
 msgstr "Időtartam"
 
-#: src/app/routes.js:409 src/component/navigation.vue:240
-#: src/options/options.js:260
+#: src/component/photo/export/dialog.vue:299
+msgid "Video Part"
+msgstr "Videó rész"
+
+#: src/app/routes.js:413 src/component/navigation.vue:240
+#: src/options/options.js:263
 msgid "Videos"
 msgstr "Videók"
 
@@ -4547,24 +4799,68 @@ msgstr "Videók"
 msgid "View"
 msgstr "Kilátás"
 
+#: src/page/auth/consent.vue:179
+msgid "View cameras"
+msgstr "Fényképezőgépek megtekintése"
+
+#: src/page/auth/consent.vue:180
+msgid "View lenses"
+msgstr "Objektívek megtekintése"
+
+#: src/page/auth/consent.vue:178
+msgid "View people"
+msgstr "Személyek megtekintése"
+
 #: src/page/settings/content.vue:128
 msgid "View search results as a list."
 msgstr "A keresési eredmények listaként történő megtekintése."
+
+#: src/page/auth/consent.vue:171
+msgid "View your albums"
+msgstr "Az albumok megtekintése"
+
+#: src/page/auth/consent.vue:174
+msgid "View your calendar"
+msgstr "Naptár megtekintése"
+
+#: src/page/auth/consent.vue:172
+msgid "View your favorites"
+msgstr "A kedvencek megtekintése"
+
+#: src/page/auth/consent.vue:181
+msgid "View your files"
+msgstr "Fájlok megtekintése"
+
+#: src/page/auth/consent.vue:175
+msgid "View your folders"
+msgstr "A mappák megtekintése"
+
+#: src/page/auth/consent.vue:177
+msgid "View your labels"
+msgstr "Címkéinek megtekintése"
+
+#: src/page/auth/consent.vue:173
+msgid "View your moments"
+msgstr "Tekintsd meg a pillanataidat"
+
+#: src/page/auth/consent.vue:176
+msgid "View your places"
+msgstr "Helyeid megtekintése"
 
 #: src/model/cluster-instance.js:36 src/options/auth.js:10
 msgid "Viewer"
 msgstr "Viewer"
 
-#: src/common/util.js:965
+#: src/common/util.js:1019
 msgid "Vision"
 msgstr "Vision"
 
-#: src/page/admin/sessions.vue:108 src/model/cluster-instance.js:40
-#: src/page/admin/sessions.vue:148 src/options/auth.js:14
+#: src/page/admin/sessions.vue:110 src/model/cluster-instance.js:40
+#: src/page/admin/sessions.vue:150 src/options/auth.js:17
 msgid "Visitor"
 msgstr "Látogató"
 
-#: src/options/options.js:520
+#: src/options/options.js:523
 msgid "Visual Similarity"
 msgstr "Csoportosítás hasonlóság szerint"
 
@@ -4573,24 +4869,24 @@ msgid "Warning"
 msgstr "Figyelmeztetés"
 
 #: src/component/user/add/dialog.vue:140 src/component/user/edit/dialog.vue:272
-#: src/page/admin/users.vue:186 src/component/cluster/node/user-edit.vue:222
+#: src/page/admin/users.vue:201 src/component/cluster/node/user-edit.vue:222
 #: src/component/cluster/node/users.vue:155
 #: src/component/user/add/dialog.vue:146 src/component/user/edit/dialog.vue:295
-#: src/page/admin/users.vue:294 src/component/user/edit/dialog.vue:288
-#: src/page/admin/users.vue:278 src/locales.js:361
+#: src/page/admin/users.vue:311 src/component/user/edit/dialog.vue:288
+#: src/page/admin/users.vue:295 src/locales.js:361
 msgid "Web Login"
 msgstr "Webes bejelentkezés"
 
 #: src/component/user/add/dialog.vue:149 src/component/user/edit/dialog.vue:282
-#: src/page/admin/users.vue:188 src/component/cluster/node/user-edit.vue:232
+#: src/page/admin/users.vue:203 src/component/cluster/node/user-edit.vue:232
 #: src/component/user/add/dialog.vue:155 src/component/user/edit/dialog.vue:305
-#: src/page/admin/users.vue:296 src/component/user/edit/dialog.vue:298
-#: src/page/admin/users.vue:280 src/options/auth.js:85 src/options/auth.js:98
-#: src/options/options.js:501
+#: src/page/admin/users.vue:313 src/component/user/edit/dialog.vue:298
+#: src/page/admin/users.vue:297 src/options/auth.js:90 src/options/auth.js:103
+#: src/options/options.js:504
 msgid "WebDAV"
 msgstr "WebDAV"
 
-#: src/component/service/upload.vue:16 src/component/share/dialog.vue:130
+#: src/component/service/upload.vue:16 src/component/share/dialog.vue:111
 msgid "WebDAV Upload"
 msgstr "WebDAV feltöltés"
 
@@ -4598,42 +4894,42 @@ msgstr "WebDAV feltöltés"
 msgid "WebDAV clients can connect to PhotoPrism using the following URL:"
 msgstr "A WebDAV-kliensek a következő URL-címen csatlakozhatnak a PhotoPrism-hez:"
 
-#: src/page/services.vue:90
+#: src/page/services.vue:92
 msgid "WebDAV clients, like Microsoft’s Windows Explorer or Apple's Finder, can connect directly to PhotoPrism."
 msgstr "A WebDAV-kliensek, mint például a Microsoft Windows Intézője vagy az Apple Finder, közvetlenül csatlakozhatnak a PhotoPrism-hez."
 
-#: src/page/settings/account.vue:335 src/page/settings/account.vue:391
-#: src/page/settings/account.vue:308
+#: src/page/settings/account.vue:348 src/page/settings/account.vue:404
+#: src/page/settings/account.vue:321
 msgid "Website"
 msgstr "Weboldal"
 
-#: src/options/options.js:459
+#: src/options/options.js:462
 msgid "White"
 msgstr "Fehér"
 
-#: src/page/settings/account.vue:279
+#: src/page/settings/account.vue:292
 msgid "Work Details"
 msgstr "Részletek"
 
-#: src/page/settings/account.vue:260 src/component/meta/datetime/dialog.vue:70
+#: src/page/settings/account.vue:273 src/component/meta/datetime/dialog.vue:70
 #: src/component/photo/batch-edit.vue:236
 #: src/component/photo/edit/details.vue:88 src/component/photo/toolbar.vue:188
-#: src/page/albums.vue:66 src/page/settings/account.vue:244
+#: src/page/albums.vue:66 src/page/settings/account.vue:257
 msgid "Year"
 msgstr "Év"
 
-#: src/options/options.js:452
+#: src/options/options.js:455
 msgid "Yellow"
 msgstr "Sárga"
 
 #: src/component/confirm/dialog.vue:26 src/component/people/merge/dialog.vue:22
 #: src/component/photo/archive/dialog.vue:22
-#: src/component/photo/batch-edit.vue:1133
+#: src/component/photo/batch-edit.vue:1134
 #: src/component/photo/clipboard.vue:156 src/component/photo/edit/files.vue:197
 #: src/component/photo/edit/files.vue:229
 #: src/component/photo/edit/files.vue:237
 #: src/component/photo/edit/files.vue:245
-#: src/component/photo/edit/files.vue:337 src/component/photo/edit/info.vue:152
+#: src/component/photo/edit/files.vue:340 src/component/photo/edit/info.vue:152
 #: src/component/photo/edit/info.vue:166 src/component/photo/edit/info.vue:180
 #: src/component/photo/edit/info.vue:194 src/component/photo/edit/info.vue:208
 #: src/component/photo/toolbar.vue:285
@@ -4684,9 +4980,17 @@ msgstr "Újra beolvashatja könyvtárát, hogy további arcokat találjon."
 msgid "Your account could not be connected"
 msgstr "A fiókját nem lehetett csatlakoztatni"
 
+#: src/page/auth/consent.vue:33
+msgid "Your account does not have the permissions this app requires."
+msgstr "A fiókod nem rendelkezik az alkalmazáshoz szükséges jogosultságokkal."
+
 #: src/page/connect.vue:55 src/page/connect.vue:63 src/page/connect.vue:45
 msgid "Your account has been successfully connected."
 msgstr "A fiókját sikeresen csatlakoztattuk."
+
+#: src/component/photo/export/dialog.vue:84
+msgid "Your browser may ask you to allow multiple downloads."
+msgstr "Előfordulhat, hogy a böngésződ megkérdezi, engedélyezed-e a többszörös letöltést."
 
 #: src/page/about/about.vue:48 src/page/about/about.vue:86
 #: src/component/confirm/sponsor.vue:18 src/page/about/about.vue:33
@@ -4712,7 +5016,7 @@ msgstr "Nagyítás"
 msgid "Zoom Out"
 msgstr "Kicsinyítés"
 
-#: src/component/lightbox.vue:558
+#: src/component/lightbox.vue:581
 msgid "Zoom in/out"
 msgstr "Nagyítás/kicsinyítés"
 
@@ -4720,14 +5024,18 @@ msgstr "Nagyítás/kicsinyítés"
 msgid "deleted"
 msgstr "törölve"
 
-#: src/component/photo/edit/files.vue:346
-#: src/component/photo/edit/files.vue:356
+#: src/component/photo/edit/files.vue:349
+#: src/component/photo/edit/files.vue:359
 msgid "in"
 msgstr "-ban/-ben"
 
 #: src/options/options.js:24 src/options/options.js:27
 msgid "mixed"
 msgstr "vegyes"
+
+#: src/page/auth/consent.vue:186
+msgid "not available"
+msgstr "nem elérhető"
 
 #: src/component/service/add.vue:39 src/component/service/add.vue:53
 msgid "optional"
@@ -4737,7 +5045,7 @@ msgstr "opcionális"
 msgid "or"
 msgstr "vagy"
 
-#: src/component/photo/clipboard.vue:359
+#: src/component/photo/clipboard.vue:360
 msgid "remove failed: unknown album"
 msgstr "eltávolítás sikertelen: ismeretlen album"
 
@@ -4772,6 +5080,18 @@ msgstr "{0} kiválasztott"
 #: src/locales.js:253
 msgid "{0}-{1} of {2}"
 msgstr "{0}-{1} of {2}"
+
+#~ msgid "Time UTC"
+#~ msgstr "Idő UTC"
+
+#~ msgid "A unique still preview could not be found."
+#~ msgstr "Nem sikerült megtalálni az adott képkockát."
+
+#~ msgid "Connect App"
+#~ msgstr "Csatlakozz az alkalmazáshoz"
+
+#~ msgid "No Access"
+#~ msgstr "Nincs hozzáférés"
 
 #~ msgid "Advertise URL"
 #~ msgstr "Advertise URL"
@@ -5550,9 +5870,6 @@ msgstr "{0}-{1} of {2}"
 #~ msgid "Change"
 #~ msgstr "Változás"
 
-#~ msgid "Enabled"
-#~ msgstr "Engedélyezve"
-
 #~ msgid "Failure while importing uploaded files"
 #~ msgstr "Hiba történt a feltöltött fájlok importálása során"
 
@@ -5633,9 +5950,6 @@ msgstr "{0}-{1} of {2}"
 
 #~ msgid "Norwegian"
 #~ msgstr "Norvég"
-
-#~ msgid "Original"
-#~ msgstr "Eredeti"
 
 #~ msgid "Polish"
 #~ msgstr "Lengyel"

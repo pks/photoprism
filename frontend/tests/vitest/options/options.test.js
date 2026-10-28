@@ -44,6 +44,18 @@ describe("options/options", () => {
     expect(timezones[1].Name).toBe("UTC");
   });
 
+  it("should label UTC offsets with their own sign", () => {
+    const offsets = options.GmtOffsets.filter((o) => o.ID !== "GMT");
+    expect(offsets).toHaveLength(24);
+
+    for (const o of offsets) {
+      const [, sign, hours] = o.ID.match(/^UTC([+-])(\d+)$/);
+      expect(o.Name).toBe(`UTC${sign}${hours.padStart(2, "0")}:00`);
+    }
+
+    expect(options.TimeZones().slice(-24)).toEqual(offsets);
+  });
+
   it("should get days", () => {
     const Days = options.Days();
     expect(Days[0].text).toBe("01");
@@ -137,6 +149,49 @@ describe("options/options", () => {
     expect(FindLanguage("ZH_TW").text).toBe("繁體中文");
     expect(FindLanguage("zH-tW").value).toBe("zh_TW");
     expect(FindLanguage("zH-tW").text).toBe("繁體中文");
+  });
+
+  it("should follow the default locale for unknown locales", () => {
+    expect(FindLanguage("xx").value).toBe("en");
+    SetDefaultLocale("de");
+    expect(FindLanguage("xx").value).toBe("de");
+    expect(FindLocale("xx")).toBe("de");
+    expect(FindLanguage("fr-FR").value).toBe("fr");
+  });
+
+  describe("with theme locales", () => {
+    const originalLocales = window.__LOCALES__;
+    const english = { text: "English", value: "en" };
+    const arabic = { text: "العربية", value: "ar", rtl: true };
+    const french = { text: "Français", value: "fr" };
+
+    afterEach(() => {
+      window.__LOCALES__ = originalLocales;
+      SetDefaultLocale(originalDefaultLocale);
+    });
+
+    it("should return the default locale if offered", () => {
+      window.__LOCALES__ = [english, arabic];
+      SetDefaultLocale("ar");
+      expect(FindLanguage("de-DE").value).toBe("ar");
+      expect(FindLocale("de_DE")).toBe("ar");
+      expect(FindLanguage("en-US").value).toBe("en");
+    });
+    it("should return the first offered locale if the default is not offered", () => {
+      window.__LOCALES__ = [arabic, french];
+      expect(options.DefaultLocale).toBe("en");
+      expect(FindLanguage("de").value).toBe("ar");
+      expect(FindLocale("de")).toBe("ar");
+      expect(FindLanguage("").value).toBe("ar");
+      expect(FindLanguage("fr-FR").value).toBe("fr");
+    });
+    it("should set the first offered locale as default if the default is not offered", () => {
+      window.__LOCALES__ = [arabic, english];
+      SetDefaultLocale("de");
+      expect(options.DefaultLocale).toBe("ar");
+      expect(FindLanguage("de-DE").value).toBe("ar");
+      expect(FindLanguage("en-US").value).toBe("en");
+    });
   });
 
   it("should return default locale", () => {

@@ -36,6 +36,7 @@ export class User extends RestModel {
       BasePath: "",
       UploadPath: "",
       WebDAV: false,
+      MCP: 0,
       Thumb: "",
       ThumbSrc: "",
       Settings: {
@@ -328,6 +329,27 @@ export class User extends RestModel {
     return WebDavRoles.includes(this.Role);
   }
 
+  // canEnableMCP reports whether the account role may use MCP, based on the roles in the client config.
+  canEnableMCP() {
+    if (this.AuthProvider === "none" || !this.Name) {
+      return false;
+    }
+
+    const roles = $config.get("mcpRoles");
+
+    return Array.isArray(roles) && roles.includes(this.Role);
+  }
+
+  // hasMCP reports whether MCP is usable for the account: the setting allows it and the role permits it.
+  hasMCP() {
+    return this.flagEnabled("MCP", true) && this.canEnableMCP();
+  }
+
+  // setMCP switches the MCP setting, restoring the saved value when switched back.
+  setMCP(enabled) {
+    this.setFlag("MCP", enabled, true);
+  }
+
   // Checks if the user role supports a custom base path.
   canHaveBasePath() {
     return !NoBasePathRoles.includes(this.Role);
@@ -444,6 +466,24 @@ export class User extends RestModel {
         params,
       })
       .then((response) => Promise.resolve(response.data));
+  }
+
+  // findGrants returns the apps connected to this account with the OAuth app flow.
+  findGrants() {
+    if (!this.UID) {
+      return Promise.reject();
+    }
+
+    return $api.get(this.getEntityResource() + "/grants").then((response) => Promise.resolve(response.data));
+  }
+
+  // revokeGrant disconnects an app from this account.
+  revokeGrant(grantUID) {
+    if (!this.UID || !grantUID) {
+      return Promise.reject();
+    }
+
+    return $api.delete(this.getEntityResource() + "/grants/" + encodeURIComponent(grantUID)).then((response) => Promise.resolve(response.data));
   }
 
   static batchSize() {

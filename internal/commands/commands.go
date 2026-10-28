@@ -32,16 +32,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 
 	"github.com/manifoldco/promptui"
 	"github.com/mattn/go-isatty"
-	"github.com/sevlyar/go-daemon"
 	"github.com/urfave/cli/v2"
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/event"
-	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/log/status"
 )
 
@@ -165,6 +163,7 @@ var PhotoPrism = []*cli.Command{
 	VideosCommands,
 	MigrateCommand,
 	MigrationsCommands,
+	DatabaseCommands,
 	BackupCommand,
 	RestoreCommand,
 	ResetCommand,
@@ -196,28 +195,36 @@ func LogErr(err error) {
 	}
 }
 
-// childAlreadyRunning tests if a .pid file at filePath is a running process.
-// it returns the pid value and the running status (true or false).
-func childAlreadyRunning(filePath string) (pid int, running bool) {
-	if !fs.FileExists(filePath) {
-		return pid, false
-	}
+// childAlreadyRunning reports whether a running daemon holds the pid file at filePath, and returns the pid in the file.
+// A missing or empty pid file means that no daemon is running, as does invalid content no other process holds
+// locked, which the next daemon overwrites. A pid file that cannot be read or is too large is an error.
+func childAlreadyRunning(filePath string) (pid int, running bool, err error) {
+	pid, info, err := readPidFile(filePath)
 
-	pid, err := daemon.ReadPidFile(filePath)
+	switch {
+	case errors.Is(err, errPidFileEmpty) || daemonNotRunning(err):
+		return 0, false, nil
+	case errors.Is(err, errPidFileInvalid):
+		if held, _ := pidFileLocked(filePath, info); held {
+			return 0, false, fmt.Errorf("%w, and another process holds it locked", err)
+		}
 
-	// Failed?
-	if err != nil {
-		return pid, false
+		log.Warnf("%s, and will be overwritten", clean.Error(err))
+
+		return 0, false, nil
+	case err != nil:
+		return 0, false, err
 	}
 
 	process, err := os.FindProcess(pid)
 
-	// Failed?
 	if err != nil {
-		return pid, false
+		return pid, false, err
 	}
 
-	return pid, process.Signal(syscall.Signal(0)) == nil
+	running, _, err = daemonHoldsPidFile(process, filePath, info)
+
+	return pid, running, err
 }
 
 // ExitCode returns the process exit status for an error that app.Run returned without exiting.
@@ -246,6 +253,47 @@ func ExitCode(err error) int {
 	}
 }
 
+// HandleExitErr prints the message of a cli.Exit error like cli.HandleExitCoder, with the message passed
+// through clean.DisplayLines, and exits with its code. A cli.MultiError is handled the same way.
+func HandleExitErr(_ *cli.Context, err error) {
+	switch e := err.(type) { //nolint:errorlint // matches cli.HandleExitCoder
+	case cli.ExitCoder:
+		if err.Error() != "" {
+			msg := err.Error()
+
+			if _, ok := e.(cli.ErrorFormatter); ok {
+				msg = fmt.Sprintf("%+v", err)
+			}
+
+			_, _ = fmt.Fprintln(cli.ErrWriter, clean.DisplayLines(msg))
+		}
+
+		cli.OsExiter(e.ExitCode())
+	case cli.MultiError:
+		cli.OsExiter(printMultiError(e))
+	}
+}
+
+// printMultiError prints the errors of a cli.MultiError like cli.HandleExitCoder and returns the exit code
+// of the last cli.ExitCoder, or 1.
+func printMultiError(multiErr cli.MultiError) int {
+	code := 1
+
+	for _, err := range multiErr.Errors() {
+		if nested, ok := err.(cli.MultiError); ok { //nolint:errorlint // matches cli.HandleExitCoder
+			code = printMultiError(nested)
+		} else if err != nil {
+			_, _ = fmt.Fprintln(cli.ErrWriter, clean.DisplayLines(err.Error()))
+
+			if exitErr, ok := err.(cli.ExitCoder); ok { //nolint:errorlint // matches cli.HandleExitCoder
+				code = exitErr.ExitCode()
+			}
+		}
+	}
+
+	return code
+}
+
 // ShowUsageError prints the command help and returns a usage error, e.g. for a missing argument.
 func ShowUsageError(ctx *cli.Context) error {
 	if err := cli.ShowSubcommandHelp(ctx); err != nil {
@@ -253,6 +301,27 @@ func ShowUsageError(ctx *cli.Context) error {
 	}
 
 	return cli.Exit("", 2)
+}
+
+// CallWithCoreDependencies calls a command action with a config that is initialized without the node
+// bootstrap and a database connection, for commands that only read options and call other services.
+func CallWithCoreDependencies(ctx *cli.Context, action func(conf *config.Config) error) error {
+	conf, err := InitCoreConfig(ctx, false)
+
+	if err != nil {
+		var exit cli.ExitCoder
+
+		if errors.As(err, &exit) {
+			return err
+		}
+
+		return cli.Exit(err, 1)
+	}
+
+	// Apply the configured log level, as Config.Propagate does after a database connection.
+	config.SetAppLogLevel(conf.LogLevel())
+
+	return action(conf)
 }
 
 // CallWithDependencies calls a command action with initialized dependencies.

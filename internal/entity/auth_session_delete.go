@@ -2,9 +2,12 @@ package entity
 
 import (
 	"fmt"
+	"time"
+
+	"gorm.io/gorm/clause"
 
 	"github.com/dustin/go-humanize/english"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/pkg/authn"
@@ -34,7 +37,36 @@ func DeleteSession(s *Session) error {
 	// token is dropped while still in use.
 	PreviewToken.Unset(s.ID)
 
-	return UnscopedDb().Delete(s).Error
+	if err := UnscopedDb().Delete(s).Error; err != nil {
+		return err
+	}
+
+	invalidateSessionCache(s.ID)
+
+	return nil
+}
+
+// invalidateSessionCache removes a deleted session from the cache and records its ID with a new cache version
+// under the lock CacheSession takes, so a lookup that read the session before it was deleted does not cache it.
+func invalidateSessionCache(id string) {
+	authCacheState.Lock()
+	defer authCacheState.Unlock()
+
+	now := time.Now()
+	authCacheState.version++
+	authCacheState.deleted[id] = sessionTombstone{version: authCacheState.version, at: now}
+	sessionCache.Delete(id)
+
+	// Forget deleted IDs no lookup in progress can still have read.
+	if now.Sub(authCacheState.pruned) > sessionTombstoneTTL {
+		for k, t := range authCacheState.deleted {
+			if now.Sub(t.at) > sessionTombstoneTTL {
+				delete(authCacheState.deleted, k)
+			}
+		}
+
+		authCacheState.pruned = now
+	}
 }
 
 // DeleteChildSessions deletes sessions that authenticated via the provided parent session ID.
@@ -92,8 +124,8 @@ func DeleteClientSessions(client *Client, authMethod authn.MethodType, limit int
 		q = q.Where("auth_method = ?", authMethod.String())
 	}
 
-	q = q.Order(gorm.Expr("created_at DESC, CASE WHEN id = ? THEN 1 ELSE 0 END DESC, id DESC", keepID))
-	q = q.Limit(1000000000).Offset(limit)
+	q = q.Order(clause.OrderBy{Expression: gorm.Expr("created_at DESC, CASE WHEN id = ? THEN 1 ELSE 0 END DESC, id DESC", keepID)})
+	q = q.Limit(1000000000).Offset(int(limit))
 
 	found := Sessions{}
 

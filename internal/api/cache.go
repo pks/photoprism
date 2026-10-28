@@ -12,16 +12,15 @@ import (
 	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/internal/thumb"
+	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/http/header"
 	"github.com/photoprism/photoprism/pkg/rnd"
 )
 
 // ThumbCache describes files persisted on disk for cached thumbnails and share images.
-// ShareName is set by the thumbnail endpoint only; cover entries leave it empty.
 type ThumbCache struct {
-	FileName  string
-	ShareName string
+	FileName string
 }
 
 // ByteCache wraps in-memory cached byte slices for fast responses.
@@ -68,7 +67,7 @@ func RemoveFromFolderCache(rootName string) {
 	cache.Delete(cacheKey)
 
 	if err := query.UpdateAlbumFolderCovers(); err != nil {
-		log.Error(err)
+		log.Errorf("covers: %s (update folders)", clean.Error(err))
 	}
 
 	log.Debugf("removed %s from cache", cacheKey)
@@ -101,7 +100,7 @@ func RemoveFromAlbumCoverCache(uid string) {
 	album, err := query.AlbumByUID(uid)
 
 	if err != nil {
-		log.Error(err)
+		log.Errorf("covers: %s (find album %s)", clean.Error(err), clean.Log(uid))
 		return
 	}
 
@@ -111,7 +110,7 @@ func RemoveFromAlbumCoverCache(uid string) {
 	}
 
 	if err = query.UpdateAlbumCovers(album); err != nil {
-		log.Error(err)
+		log.Errorf("covers: %s (update album %s)", clean.Error(err), clean.Log(uid))
 	}
 }
 
@@ -137,7 +136,7 @@ func FlushCoverCache() {
 	get.CoverCache().Flush()
 
 	if err := query.UpdateCovers(); err != nil {
-		log.Error(err)
+		log.Errorf("covers: %s (update)", clean.Error(err))
 	}
 
 	log.Debugf("albums: flushed cover cache")

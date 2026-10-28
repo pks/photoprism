@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/config"
@@ -67,6 +70,16 @@ func TestUpdateUser(t *testing.T) {
 		conf.SetAuthMode(config.AuthModePasswd)
 		defer conf.SetAuthMode(config.AuthModePublic)
 		UpdateUser(router)
+
+		// The display name and upload path are restored, so later tests see the fixture.
+		stored := entity.FindUserByUID("uqxetse3cy5eo9z2")
+		require.NotNil(t, stored)
+		t.Cleanup(func() {
+			assert.NoError(t, entity.Db().Model(&entity.User{}).Where("user_uid = ?", stored.UserUID).
+				UpdateColumns(entity.Values{"display_name": stored.DisplayName, "upload_path": stored.UploadPath}).Error)
+			entity.FlushUserSessionCache(stored.UserUID)
+		})
+
 		sessId := AuthenticateUser(app, router, "alice", "Alice123!")
 
 		f := form.User{
@@ -255,6 +268,29 @@ func TestUpdateUser_Guards(t *testing.T) {
 		r := AuthenticatedRequestWithBody(app, "PUT", "/api/v1/users/"+entity.Admin.UserUID, body, sessId)
 		assert.Equal(t, http.StatusOK, r.Code, "unchanged privilege flags must not block own-profile edits; body=%s", r.Body.String())
 	})
+	t.Run("MCPSetting", func(t *testing.T) {
+		// Revoking sessions and grants on a change is covered by the edition suites, where admins manage all accounts.
+		app, router, conf := NewApiTest()
+		conf.SetAuthMode(config.AuthModePasswd)
+		defer conf.SetAuthMode(config.AuthModePublic)
+		UpdateUser(router)
+		sessId := AuthenticateAdmin(app, router)
+		t.Cleanup(func() {
+			if m := entity.FindUserByUID(entity.Admin.UserUID); m != nil && m.MCP != 0 {
+				m.MCP = 0
+				_ = m.Save()
+			}
+		})
+
+		r := AuthenticatedRequestWithBody(app, "PUT", "/api/v1/users/"+entity.Admin.UserUID, `{"MCP":-1}`, sessId)
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, int64(-1), gjson.Get(r.Body.String(), "MCP").Int())
+		assert.Equal(t, -1, entity.FindUserByUID(entity.Admin.UserUID).MCP)
+
+		r = AuthenticatedRequestWithBody(app, "PUT", "/api/v1/users/"+entity.Admin.UserUID, `{"MCP":0}`, sessId)
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, 0, entity.FindUserByUID(entity.Admin.UserUID).MCP)
+	})
 	t.Run("SystemAccountForbidden", func(t *testing.T) {
 		app, router, conf := NewApiTest()
 		conf.SetAuthMode(config.AuthModePasswd)
@@ -394,4 +430,101 @@ func TestUpdateUserAuditFields(t *testing.T) {
 	assert.True(t, strings.HasPrefix(fields[1], "session sess"), fields[1])
 	assert.Equal(t, "'alice'", fields[3])
 	assert.Equal(t, status.Denied, fields[5])
+}
+
+func TestUpdateUserSharedEmail(t *testing.T) {
+	audit := captureAuditLog(t)
+	app, router, conf := NewApiTest()
+	conf.SetAuthMode(config.AuthModePasswd)
+	defer conf.SetAuthMode(config.AuthModePublic)
+	UpdateUser(router)
+
+	alice := entity.FindUserByName("alice")
+	require.NotNil(t, alice)
+	other := newSharedEmailUser(t, "update-shared-email", "update-shared-email@example.com", false)
+	t.Cleanup(func() {
+		assert.NoError(t, entity.UnscopedDb().Model(&entity.User{}).Where("user_uid = ?", alice.UserUID).Updates(entity.Values{
+			"user_email":   alice.UserEmail,
+			"verified_at":  alice.VerifiedAt,
+			"verify_token": alice.VerifyToken,
+		}).Error)
+	})
+
+	sessId := AuthenticateUser(app, router, "alice", "Alice123!")
+
+	// reported returns whether the audit log reports the email address of alice as shared.
+	reported := func() (found bool) {
+		for _, entry := range audit.AllEntries() {
+			if strings.Contains(entry.Message, "'alice' › email is also assigned to 1 other account") {
+				found = entry.Level == logrus.InfoLevel
+			}
+		}
+
+		return found
+	}
+
+	body, _ := json.Marshal(form.User{UserName: "alice", UserEmail: other.UserEmail, UserRole: alice.UserRole}) //nolint:gosec // test marshals a form with a password field to build the request body
+	audit.Reset()
+
+	r := AuthenticatedRequestWithBody(app, "PUT", "/api/v1/users/"+alice.UserUID, string(body), sessId)
+	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+	assert.Equal(t, other.UserEmail, entity.FindUserByUID(alice.UserUID).UserEmail)
+	assert.True(t, reported(), "an email address another account holds is reported")
+
+	// Saving the account again without changing the address is not reported.
+	audit.Reset()
+
+	r = AuthenticatedRequestWithBody(app, "PUT", "/api/v1/users/"+alice.UserUID, string(body), sessId)
+	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+	assert.False(t, reported(), "an unchanged address is not reported again")
+}
+
+// TestUpdateUser_DetailsSaveFailed checks that a details change that was not stored is reported as a failure.
+func TestUpdateUser_DetailsSaveFailed(t *testing.T) {
+	app, router, conf := NewApiTest()
+	conf.SetAuthMode(config.AuthModePasswd)
+	defer conf.SetAuthMode(config.AuthModePublic)
+	UpdateUser(router)
+	sessId := AuthenticateUser(app, router, "alice", "Alice123!")
+
+	const aliceUid = "uqxetse3cy5eo9z2"
+	reqUrl := "/api/v1/users/" + aliceUid
+	location := entity.FindUserByUID(aliceUid).Details().UserLocation
+	displayName := entity.FindUserByUID(aliceUid).DisplayName
+
+	t.Cleanup(func() {
+		assert.NoError(t, entity.UnscopedDb().Model(&entity.UserDetails{}).Where("user_uid = ?", aliceUid).
+			UpdateColumn("user_location", location).Error)
+		assert.NoError(t, entity.UnscopedDb().Model(&entity.User{}).Where("user_uid = ?", aliceUid).
+			UpdateColumn("display_name", displayName).Error)
+		entity.FlushUserSessionCache(aliceUid)
+	})
+
+	t.Run("Success", func(t *testing.T) {
+		r := AuthenticatedRequestWithBody(app, "PUT", reqUrl, `{"Details":{"Location":"Berlin\u0000"}}`, sessId)
+		assert.Equal(t, http.StatusOK, r.Code)
+		assert.Equal(t, "Berlin", entity.FindUserByUID(aliceUid).Details().UserLocation)
+	})
+	t.Run("Failed", func(t *testing.T) {
+		name := "test:fail_update_user_details"
+		fail := func(db *gorm.DB) {
+			if db.Statement.Table == (entity.UserDetails{}).TableName() {
+				_ = db.AddError(errors.New("details write failed"))
+			}
+		}
+
+		require.NoError(t, entity.Db().Callback().Create().Before("gorm:create").Register(name, fail))
+		require.NoError(t, entity.Db().Callback().Update().Before("gorm:update").Register(name, fail))
+		t.Cleanup(func() {
+			_ = entity.Db().Callback().Create().Remove(name)
+			_ = entity.Db().Callback().Update().Remove(name)
+		})
+
+		before := entity.FindUserByUID(aliceUid)
+		r := AuthenticatedRequestWithBody(app, "PUT", reqUrl, `{"DisplayName":"Not Stored","Details":{"Location":"Hamburg"}}`, sessId)
+		assert.Equal(t, http.StatusInternalServerError, r.Code)
+		after := entity.FindUserByUID(aliceUid)
+		assert.Equal(t, before.Details().UserLocation, after.Details().UserLocation)
+		assert.Equal(t, before.DisplayName, after.DisplayName)
+	})
 }

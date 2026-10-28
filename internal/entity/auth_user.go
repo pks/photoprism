@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jinzhu/gorm"
 	"github.com/ulule/deepcopier"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
@@ -46,13 +46,13 @@ type Users []User
 
 // User represents an account that can authenticate with PhotoPrism.
 type User struct {
-	ID           int           `gorm:"primary_key" json:"ID" yaml:"-"`
-	UUID         string        `gorm:"type:VARBINARY(64);column:user_uuid;index;" json:"UUID,omitempty" yaml:"UUID,omitempty"`
-	UserUID      string        `gorm:"type:VARBINARY(42);column:user_uid;unique_index;" json:"UID" yaml:"UID"`
-	AuthProvider string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
-	AuthMethod   string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
-	AuthIssuer   string        `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
-	AuthID       string        `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
+	ID           int           `gorm:"primaryKey;size:32" json:"ID" yaml:"-"`
+	UUID         string        `gorm:"type:bytes;size:64;column:user_uuid;index:idx_auth_users_user_uuid;" json:"UUID,omitempty" yaml:"UUID,omitempty"`
+	UserUID      string        `gorm:"type:bytes;size:42;column:user_uid;uniqueIndex:uix_auth_users_user_uid;" json:"UID" yaml:"UID"`
+	AuthProvider string        `gorm:"type:bytes;size:128;default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
+	AuthMethod   string        `gorm:"type:bytes;size:128;default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
+	AuthIssuer   string        `gorm:"type:bytes;size:255;default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
+	AuthID       string        `gorm:"type:bytes;size:255;index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
 	UserName     string        `gorm:"size:200;index;" json:"Name" yaml:"Name,omitempty"`
 	DisplayName  string        `gorm:"size:200;" json:"DisplayName" yaml:"DisplayName,omitempty"`
 	UserEmail    string        `gorm:"size:255;index;" json:"Email" yaml:"Email,omitempty"`
@@ -63,28 +63,29 @@ type User struct {
 	SuperAdmin   bool          `json:"SuperAdmin" yaml:"SuperAdmin,omitempty"`
 	CanLogin     bool          `json:"CanLogin" yaml:"CanLogin,omitempty"`
 	LoginAt      *time.Time    `json:"LoginAt" yaml:"LoginAt,omitempty"`
-	ExpiresAt    *time.Time    `sql:"index" json:"ExpiresAt,omitempty" yaml:"ExpiresAt,omitempty"`
+	ExpiresAt    *time.Time    `gorm:"index" json:"ExpiresAt,omitempty" yaml:"ExpiresAt,omitempty"`
 	WebDAV       bool          `gorm:"column:webdav;" json:"WebDAV" yaml:"WebDAV,omitempty"`
-	BasePath     string        `gorm:"type:VARBINARY(1024);" json:"BasePath" yaml:"BasePath,omitempty"`
-	UploadPath   string        `gorm:"type:VARBINARY(1024);" json:"UploadPath" yaml:"UploadPath,omitempty"`
+	MCP          int           `gorm:"column:mcp;type:int;size:16;default:0;" json:"MCP" yaml:"MCP,omitempty"`
+	BasePath     string        `gorm:"type:bytes;size:1024;" json:"BasePath" yaml:"BasePath,omitempty"`
+	UploadPath   string        `gorm:"type:bytes;size:1024;" json:"UploadPath" yaml:"UploadPath,omitempty"`
 	CanInvite    bool          `json:"CanInvite" yaml:"CanInvite,omitempty"`
-	InviteToken  string        `gorm:"type:VARBINARY(64);index;" json:"-" yaml:"-"`
+	InviteToken  string        `gorm:"type:bytes;size:64;index;" json:"-" yaml:"-"`
 	InvitedBy    string        `gorm:"size:64;" json:"-" yaml:"-"`
-	VerifyToken  string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
+	VerifyToken  string        `gorm:"type:bytes;size:64;" json:"-" yaml:"-"`
 	VerifiedAt   *time.Time    `json:"VerifiedAt,omitempty" yaml:"VerifiedAt,omitempty"`
 	ConsentAt    *time.Time    `json:"ConsentAt,omitempty" yaml:"ConsentAt,omitempty"`
-	BornAt       *time.Time    `sql:"index" json:"BornAt,omitempty" yaml:"BornAt,omitempty"`
-	UserDetails  *UserDetails  `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Details,omitempty" yaml:"Details,omitempty"`
-	UserSettings *UserSettings `gorm:"PRELOAD:true;foreignkey:UserUID;association_foreignkey:UserUID;" json:"Settings,omitempty" yaml:"Settings,omitempty"`
+	BornAt       *time.Time    `gorm:"index" json:"BornAt,omitempty" yaml:"BornAt,omitempty"`
+	UserDetails  *UserDetails  `gorm:"foreignKey:UserUID;references:UserUID;-:migration" json:"Details,omitempty" yaml:"Details,omitempty"`
+	UserSettings *UserSettings `gorm:"foreignKey:UserUID;references:UserUID;-:migration" json:"Settings,omitempty" yaml:"Settings,omitempty"`
 	UserShares   UserShares    `gorm:"-" json:"Shares,omitempty" yaml:"Shares,omitempty"`
-	ResetToken   string        `gorm:"type:VARBINARY(64);" json:"-" yaml:"-"`
-	PreviewToken string        `gorm:"type:VARBINARY(64);column:preview_token;" json:"-" yaml:"-"`
-	Thumb        string        `gorm:"type:VARBINARY(128);index;default:'';" json:"Thumb" yaml:"Thumb,omitempty"`
-	ThumbSrc     string        `gorm:"type:VARBINARY(8);default:'';" json:"ThumbSrc" yaml:"ThumbSrc,omitempty"`
-	RefID        string        `gorm:"type:VARBINARY(16);" json:"-" yaml:"-"`
+	ResetToken   string        `gorm:"type:bytes;size:64;" json:"-" yaml:"-"`
+	PreviewToken string        `gorm:"type:bytes;size:64;column:preview_token;" json:"-" yaml:"-"`
+	Thumb        string        `gorm:"type:bytes;size:128;index;default:'';" json:"Thumb" yaml:"Thumb,omitempty"`
+	ThumbSrc     string        `gorm:"type:bytes;size:8;default:'';" json:"ThumbSrc" yaml:"ThumbSrc,omitempty"`
+	RefID        string        `gorm:"type:bytes;size:16;" json:"-" yaml:"-"`
 	CreatedAt    time.Time     `json:"CreatedAt" yaml:"-"`
 	UpdatedAt    time.Time     `json:"UpdatedAt" yaml:"-"`
-	DeletedAt    *time.Time    `sql:"index" json:"DeletedAt,omitempty" yaml:"-"`
+	DeletedAt    DeletedAt     `gorm:"index" json:"DeletedAt,omitzero" yaml:"-"`
 }
 
 // TableName returns the entity table name.
@@ -116,19 +117,10 @@ func OidcUser(userInfo *oidc.UserInfo, issuer, userName string) User {
 	return User{
 		UserName:     userName,
 		DisplayName:  userInfo.Name,
-		UserEmail:    clean.Email(userInfo.Email),
+		UserEmail:    authn.VerifiedEmail(userInfo.Email, bool(userInfo.EmailVerified)),
 		AuthProvider: authn.ProviderOIDC.String(),
 		AuthIssuer:   clean.Uri(issuer),
 		AuthID:       authId,
-	}
-}
-
-// LdapUser creates a new LDAP user entity.
-func LdapUser(username, dn string) User {
-	return User{
-		UserName:     clean.Username(username),
-		AuthID:       dn,
-		AuthProvider: authn.ProviderLDAP.String(),
 	}
 }
 
@@ -154,8 +146,6 @@ func FindUser(find User) *User {
 		stmt = stmt.Where("auth_provider = ? AND auth_id = ? OR user_name = ?", find.AuthProvider, find.AuthID, find.UserName)
 	} else if find.UserName != "" {
 		stmt = stmt.Where("user_name = ?", find.UserName)
-	} else if find.UserEmail != "" {
-		stmt = stmt.Where("user_email = ?", find.UserEmail)
 	} else if find.AuthProvider != "" && find.AuthID != "" {
 		stmt = stmt.Where("auth_provider = ? AND auth_id = ?", find.AuthProvider, find.AuthID)
 	} else {
@@ -198,18 +188,137 @@ func FindUserByName(userName string) *User {
 	return FindUser(User{UserName: userName})
 }
 
-// UserEmailAvailable reports whether email is unused or only held by the account
-// with exceptUID. The email field is informational — not verified, and not unique
-// as an identity — so external (OIDC/LDAP) provisioning skips a colliding email
-// instead of letting Validate reject the account and block the login.
-func UserEmailAvailable(email, exceptUID string) bool {
-	if email = clean.Email(email); email == "" {
-		return false
+// FindRestorableUser returns the deleted account whose stored username is identical to the sanitized
+// name, unless an active account has that name, and reports whether any account has it; held is false
+// if the lookup fails. The username is compared byte for byte.
+func FindRestorableUser(userName string) (m *User, held bool) {
+	name := clean.Username(userName)
+
+	if name == "" {
+		return nil, false
 	}
 
-	found := FindUser(User{UserEmail: email})
+	var found []User
 
-	return found == nil || found.UserUID == exceptUID
+	if err := UnscopedDb().Where("user_name = ?", name).Order("id").Find(&found).Error; err != nil || len(found) == 0 {
+		return nil, false
+	}
+
+	for i := range found {
+		if !found[i].IsDeleted() {
+			return nil, true
+		} else if m == nil && found[i].UserName == name {
+			m = &found[i]
+		}
+	}
+
+	if m == nil {
+		return nil, true
+	}
+
+	return m.LoadRelated(), true
+}
+
+// CountNonASCIIUsernames returns the number of active accounts whose usernames contain characters other than ASCII.
+func CountNonASCIIUsernames() int {
+	var names []string
+
+	if err := Db().Model(&User{}).Where("id > 0 AND user_name <> ''").Pluck("user_name", &names).Error; err != nil {
+		log.Debugf("users: %s", clean.Error(err))
+		return 0
+	}
+
+	count := 0
+
+	for _, name := range names {
+		if !authn.IsASCIIUsername(name) {
+			count++
+		}
+	}
+
+	return count
+}
+
+// FindUserByExactName returns the account whose sanitized username equals the sanitized name, or nil if there
+// is none. It prefers an active account to a deleted one and, among either, a stored name identical to the
+// sanitized one. The usernames are compared byte for byte.
+func FindUserByExactName(userName string) *User {
+	name := clean.Username(userName)
+
+	if name == "" {
+		return nil
+	}
+
+	var found []User
+
+	if err := UnscopedDb().Where("user_name = ?", name).Order("id").Find(&found).Error; err != nil {
+		return nil
+	}
+
+	return exactUserMatch(found, name)
+}
+
+// exactUserMatch returns the account whose sanitized username equals name, ranking an active account before a
+// deleted one and, among either, a stored name identical to name first; found must be ordered by id.
+func exactUserMatch(found []User, name string) *User {
+	best, bestRank := -1, 4
+
+	for i := range found {
+		if clean.Username(found[i].UserName) != name {
+			continue
+		}
+
+		rank := 0
+
+		if found[i].IsDeleted() {
+			rank += 2
+		}
+
+		if found[i].UserName != name {
+			rank++
+		}
+
+		if rank < bestRank {
+			best, bestRank = i, rank
+		}
+	}
+
+	if best < 0 {
+		return nil
+	}
+
+	return found[best].LoadRelated()
+}
+
+// CheckRestore returns an error if another active account has the account's username, as stored or
+// sanitized.
+func (m *User) CheckRestore() error {
+	var holder User
+
+	names := []string{m.UserName}
+
+	if s := clean.Username(m.UserName); s != "" && s != m.UserName {
+		names = append(names, s)
+	}
+
+	if err := Db().Where("user_name IN (?) AND id <> ?", names, m.ID).First(&holder).Error; err == nil {
+		return fmt.Errorf("user %s already exists", clean.LogQuote(m.UserName))
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	return nil
+}
+
+// SetEmail sets the email address and clears its verification if the address changes.
+func (m *User) SetEmail(email string) {
+	if email == m.UserEmail {
+		return
+	}
+
+	m.UserEmail = email
+	m.VerifiedAt = nil
+	m.VerifyToken = GenerateToken()
 }
 
 // EmailVerified reports whether the account's email address has been verified,
@@ -220,7 +329,8 @@ func (m *User) EmailVerified() bool {
 	return clean.TimeSet(m.VerifiedAt)
 }
 
-// FindLocalUser returns the matching local user or nil if it was not found.
+// FindLocalUser returns the local account with exactly the sanitized name, as FindUserByExactName does, or nil
+// if there is none.
 func FindLocalUser(userName string) *User {
 	name := clean.Username(userName)
 
@@ -228,18 +338,15 @@ func FindLocalUser(userName string) *User {
 		return nil
 	}
 
-	m := &User{}
-	providers := authn.LocalProviders
+	var found []User
 
-	// Build query.
 	if err := UnscopedDb().
-		Where("user_name = ? AND auth_provider IN (?)", name, providers).
-		First(m).Error; err != nil {
+		Where("user_name = ? AND auth_provider IN (?)", name, authn.LocalProviders).
+		Order("id").Find(&found).Error; err != nil {
 		return nil
 	}
 
-	// Return with related records.
-	return m.LoadRelated()
+	return exactUserMatch(found, name)
 }
 
 // FindUserByUID returns the matching user or nil if it was not found.
@@ -338,8 +445,17 @@ func (m *User) InitAccount(initName, initPasswd, scope string) (updated bool) {
 
 // Create new entity in the database.
 func (m *User) Create() (err error) {
-	// The initial admin account is exempt, so that it can always be created from the config.
-	if m.ID != 1 && m.UserName != "" && !m.ValidHandle() {
+	return m.create(false)
+}
+
+// create inserts the account; keepName exempts an existing name, e.g. one migrated from a legacy
+// table, from the ASCII rule for new usernames.
+func (m *User) create(keepName bool) (err error) {
+	// The initial admin account is exempt from the handle check, so that it can always be created from
+	// the config.
+	if !keepName && m.UserName != "" && !authn.IsASCIIUsername(m.UserName) {
+		return m.usernameASCIIError(m.UserName)
+	} else if m.ID != 1 && m.UserName != "" && (!m.ValidHandle() || !keepName && !authn.PortableUsername(m.UserName)) {
 		return fmt.Errorf("username %s is not supported", clean.LogQuote(m.UserName))
 	}
 
@@ -347,6 +463,7 @@ func (m *User) Create() (err error) {
 
 	if err == nil {
 		m.SaveRelated()
+		m.WarnExistingBasePath()
 	}
 
 	return err
@@ -374,7 +491,9 @@ func (m *User) Delete() (err error) {
 		return fmt.Errorf("uid is required to delete user")
 	}
 
-	if err = UnscopedDb().Delete(Session{}, "user_uid = ?", m.UserUID).Error; err != nil {
+	m.RevokeGrants()
+
+	if err = UnscopedDb().Delete(&Session{}, "user_uid = ?", m.UserUID).Error; err != nil {
 		event.AuditErr([]string{"user %s", "delete", "failed to remove sessions", status.Error(err)}, m.RefID)
 	}
 
@@ -389,11 +508,11 @@ func (m *User) Delete() (err error) {
 func (m *User) IsDeleted() bool {
 	if m == nil {
 		return true
-	} else if m.DeletedAt == nil {
+	} else if !m.DeletedAt.Valid {
 		return false
 	}
 
-	return !m.DeletedAt.IsZero()
+	return !m.DeletedAt.Time.IsZero()
 }
 
 // LoadRelated loads related settings and details.
@@ -407,14 +526,23 @@ func (m *User) LoadRelated() *User {
 
 // SaveRelated saves related settings and details.
 func (m *User) SaveRelated() *User {
-	if err := m.Settings().Save(); err != nil {
-		event.AuditErr([]string{"user %s", "failed to save settings", status.Error(err)}, m.RefID)
-	}
-	if err := m.Details().Save(); err != nil {
-		event.AuditErr([]string{"user %s", "failed to save details", status.Error(err)}, m.RefID)
-	}
+	_ = m.saveRelated()
 
 	return m
+}
+
+// saveRelated saves related settings and details, and returns the errors it audit-logged.
+func (m *User) saveRelated() error {
+	var settingsErr, detailsErr error
+
+	if settingsErr = m.Settings().Save(); settingsErr != nil {
+		event.AuditErr([]string{"user %s", "failed to save settings", status.Error(settingsErr)}, m.RefID)
+	}
+	if detailsErr = m.Details().Save(); detailsErr != nil {
+		event.AuditErr([]string{"user %s", "failed to save details", status.Error(detailsErr)}, m.RefID)
+	}
+
+	return errors.Join(settingsErr, detailsErr)
 }
 
 // Updates multiple properties in the database.
@@ -423,7 +551,7 @@ func (m *User) Updates(values any) error {
 }
 
 // BeforeCreate sets a random UID if needed before inserting a new row to the database.
-func (m *User) BeforeCreate(scope *gorm.Scope) error {
+func (m *User) BeforeCreate(tx *gorm.DB) error {
 	if m.UserSettings != nil {
 		m.UserSettings.UserUID = m.UserUID
 	}
@@ -436,7 +564,7 @@ func (m *User) BeforeCreate(scope *gorm.Scope) error {
 
 	if rnd.InvalidRefID(m.RefID) {
 		m.RefID = rnd.RefID(UserPrefix)
-		Log("user", "set ref id", scope.SetColumn("RefID", m.RefID))
+		tx.Statement.SetColumn("RefID", m.RefID)
 	}
 
 	if rnd.IsUnique(m.UserUID, UserUID) {
@@ -444,7 +572,9 @@ func (m *User) BeforeCreate(scope *gorm.Scope) error {
 	}
 
 	m.UserUID = rnd.GenerateUID(UserUID)
-	return scope.SetColumn("UserUID", m.UserUID)
+	tx.Statement.SetColumn("UserUID", m.UserUID)
+
+	return nil
 }
 
 // IsExpired checks if the user account has expired.
@@ -536,6 +666,15 @@ func (m *User) CanUseWebDAV() bool {
 		// Check if the ACL allows downloading files via WebDAV based on the user role.
 		return acl.Rules.Allow(acl.ResourceWebDAV, m.AclRole(), acl.ActionDownload)
 	}
+}
+
+// CanUseMCP checks whether the user may use the MCP server, which the MCP setting allows unless it is -1.
+func (m *User) CanUseMCP() bool {
+	if m == nil || m.MCP < 0 || m.IsSystemOrInvalid() || m.IsDisabled() || m.IsUnknown() || !m.IsRegistered() || m.HasProvider(authn.ProviderNone) {
+		return false
+	}
+
+	return acl.Rules.Allow(acl.ResourceMCP, m.AclRole(), acl.ActionView)
 }
 
 // CanUpload checks if the user is allowed to upload files.
@@ -719,7 +858,7 @@ func (m *User) SetAuthID(id, issuer string) *User {
 	// Make sure other users do not use the same identifier.
 	if m.HasUID() && m.AuthProvider != "" {
 		if err := UnscopedDb().Model(&User{}).
-			Where("user_uid <> ? AND auth_provider = ? AND auth_id = ? AND super_admin = 0", m.UserUID, m.AuthProvider, m.AuthID).
+			Where("user_uid <> ? AND auth_provider = ? AND auth_id = ? AND super_admin = FALSE", m.UserUID, m.AuthProvider, m.AuthID).
 			Updates(Values{"auth_id": "", "auth_provider": authn.ProviderNone}).Error; err != nil {
 			event.AuditErr([]string{"user %s", "failed to resolve auth id conflicts", status.Error(err)}, m.RefID)
 		}
@@ -775,6 +914,7 @@ func (m *User) SetUsername(login string) (err error) {
 		return fmt.Errorf("system users cannot be modified")
 	}
 
+	raw := login
 	login = clean.Username(login)
 
 	// Empty?
@@ -782,6 +922,10 @@ func (m *User) SetUsername(login string) (err error) {
 		return fmt.Errorf("username is empty")
 	} else if m.UserName == login {
 		return nil
+	} else if !authn.IsASCIIUsername(raw) {
+		return m.usernameASCIIError(raw)
+	} else if m.ID != 1 && !authn.PortableUsername(raw) {
+		return fmt.Errorf("username %s is not supported", clean.LogQuote(raw))
 	} else if m.UserName != "" && m.ID != 1 {
 		// An account whose stored name the sanitizer no longer accepts may be renamed, since
 		// that is the only way to repair it.
@@ -1085,6 +1229,11 @@ func (m *User) RevokeSessions(omit []string, scope authn.SessionScope) (deleted 
 		// Remove all sessions, including app passwords, client access tokens, and derived sessions.
 	}
 
+	// Grants of connected apps end together with derived sessions, which also removes their access tokens.
+	if scope == authn.RevokeDerivedSessions || scope == authn.RevokeAllSessions {
+		m.RevokeGrants()
+	}
+
 	// Fetch matching sessions from the database.
 	sess := Sessions{}
 
@@ -1122,6 +1271,9 @@ func (m *User) SetPassword(password string) error {
 		return err
 	}
 
+	// A new password ends the connected apps of the account.
+	m.RevokeGrants()
+
 	return m.RegenerateTokens()
 }
 
@@ -1156,9 +1308,30 @@ func (m *User) DeletePassword() (err error) {
 		event.AuditErr([]string{"user %s", "failed to remove password", status.Error(err)}, m.RefID)
 	} else {
 		event.AuditWarn([]string{"user %s", "password has been removed"}, m.RefID)
+		m.RevokeGrants()
 	}
 
 	return err
+}
+
+// RevokeGrants ends the apps connected to the account, with their access tokens and pending authorization codes,
+// and returns the number of revoked grants.
+func (m *User) RevokeGrants() int {
+	if m == nil || m.UserUID == "" {
+		return 0
+	}
+
+	if err := UnscopedDb().Delete(&AuthCode{}, "user_uid = ?", m.UserUID).Error; err != nil {
+		event.AuditErr([]string{"user %s", "failed to remove authorization codes", status.Error(err)}, m.RefID)
+	}
+
+	n := DeleteUserGrants(m.UserUID)
+
+	if n > 0 {
+		event.AuditInfo([]string{"user %s", "revoked %d connected apps", status.Deleted}, m.RefID, n)
+	}
+
+	return n
 }
 
 // InvalidPassword returns true if the specified password is invalid or the account is not registered.
@@ -1266,73 +1439,142 @@ func (m *User) DeactivatePasscode() (passcode *Passcode, err error) {
 	return passcode, err
 }
 
-// Validate checks if username, email and role are valid and returns an error otherwise.
+// Validate checks if username, email and role are valid and returns an error otherwise. A refused value is
+// returned as UserValidationError, a failed database query as is.
 func (m *User) Validate() (err error) {
-	// Validate username. A stored name the sanitizer no longer accepts as written is normalized
-	// rather than refused, so an account provisioned earlier stays editable; a new one is refused,
-	// so the caller sees what was rejected.
-	userName, nameErr := authn.Username(m.UserName)
-
-	if nameErr != nil && m.ID > 0 && userName != "" {
-		userName, nameErr = authn.Username(userName)
-	}
+	// Validate username. A stored name keeps its form if another account holds the normalized one, as with
+	// SetNormalizedUsername.
+	userName, nameErr := m.normalizedUsername()
 
 	if nameErr != nil {
-		return fmt.Errorf("username is %s", nameErr.Error())
+		return UserValidationError{Err: nameErr}
+	} else if m.ID <= 0 || userName == m.UserName || m.checkUsernameHolder(userName) == nil {
+		m.UserName = userName
 	}
-
-	m.UserName = userName
 
 	// Check if username also meets the length requirements.
 	if len(m.Username()) < UsernameLength {
-		return fmt.Errorf("username must have at least %d characters", UsernameLength)
+		return UserValidationError{Err: fmt.Errorf("username must have at least %d characters", UsernameLength)}
 	}
 
 	// Refuse a new username that does not yield a valid handle.
 	if m.ID == 0 && !m.ValidHandle() {
-		return fmt.Errorf("username %s is not supported", clean.LogQuote(m.UserName))
+		return UserValidationError{Err: fmt.Errorf("username %s is not supported", clean.LogQuote(m.UserName))}
 	}
 
 	// Check user role.
 	if acl.UserRoles[m.UserRole] == "" {
-		return fmt.Errorf("unsupported user role")
+		return UserValidationError{Err: fmt.Errorf("unsupported user role")}
 	}
 
-	// Check if the username is unique.
-	var duplicate = User{}
+	// Check if the username, and the normalized form of a kept name, is unique. An existing account is
+	// compared byte for byte, so it stays editable beside an account the database compares as equal.
+	var duplicates []User
 
 	if err = Db().
-		Where("user_name = ? AND id <> ?", m.UserName, m.ID).
-		First(&duplicate).Error; err == nil {
-		return fmt.Errorf("user %s already exists", clean.LogQuote(m.UserName))
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		Where("user_name IN (?) AND id <> ?", []string{m.UserName, userName}, m.ID).
+		Find(&duplicates).Error; err != nil {
 		return err
 	}
 
-	// Skip email check?
-	if m.UserEmail == "" {
+	for i := range duplicates {
+		if m.ID <= 0 || duplicates[i].UserName == m.UserName || duplicates[i].UserName == userName {
+			return UserValidationError{Err: fmt.Errorf("user %s already exists", clean.LogQuote(userName))}
+		}
+	}
+
+	// Check the email address only if it is new or has changed, since it does not have to be unique.
+	if m.UserEmail == "" || m.UserEmail == m.storedEmail() {
 		return nil
 	}
 
 	// Parse and validate email address.
 	if a, err := mail.ParseAddress(m.UserEmail); err != nil {
-		return fmt.Errorf("email %s is invalid", clean.LogQuote(m.UserEmail))
+		return UserValidationError{Err: fmt.Errorf("email %s is invalid", clean.LogQuote(m.UserEmail))}
 	} else if email := a.Address; !strings.ContainsRune(email, '.') {
-		return fmt.Errorf("email %s does not have a fully qualified domain", clean.LogQuote(m.UserEmail))
+		return UserValidationError{Err: fmt.Errorf("email %s does not have a fully qualified domain", clean.LogQuote(m.UserEmail))}
 	} else {
 		m.UserEmail = email
 	}
 
-	// Check if the email is unique.
-	if err = Db().
-		Where("user_email = ? AND id <> ?", m.UserEmail, m.ID).
-		First(&duplicate).Error; err == nil {
-		return fmt.Errorf("email %s already exists", clean.Log(m.UserEmail))
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
+	return nil
+}
+
+// normalizedUsername returns the username in the form Validate stores it. A stored name the sanitizer
+// no longer accepts as written is normalized rather than refused, so an account provisioned earlier
+// stays editable; a new one is refused, so the caller sees what was rejected. Only a new account
+// must have an ASCII name, so existing names are never transliterated.
+func (m *User) normalizedUsername() (string, error) {
+	if m.ID <= 0 {
+		userName, err := authn.NewUsername(m.UserName)
+
+		if errors.Is(err, authn.ErrNotASCII) {
+			return "", m.usernameASCIIError(m.UserName)
+		} else if err != nil {
+			return "", fmt.Errorf("username is %s", err.Error())
+		}
+
+		return userName, nil
 	}
 
-	return nil
+	userName, err := authn.Username(m.UserName)
+
+	if err != nil && userName != "" {
+		userName, err = authn.Username(userName)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("username is %s", err.Error())
+	}
+
+	return userName, nil
+}
+
+// usernameASCIIError returns authn.ErrNotASCII, naming the ASCII form of name as an example if
+// it is a username that no other account holds. If another account holds name itself, it reports that.
+func (m *User) usernameASCIIError(name string) error {
+	if s := clean.Username(name); s != "" && m.exactUsernameHolder(s) {
+		return fmt.Errorf("user %s already exists", clean.LogQuote(s))
+	}
+
+	if s := authn.FoldUsername(name); len(s) >= UsernameLength && len(s) <= txt.ClipUsername &&
+		clean.Handle(s) != "" && m.checkUsernameHolder(s) == nil {
+		return fmt.Errorf("%w, e.g. %s", authn.ErrNotASCII, clean.LogQuote(s))
+	}
+
+	return authn.ErrNotASCII
+}
+
+// exactUsernameHolder reports whether another account, including a deleted one, has exactly the name.
+func (m *User) exactUsernameHolder(name string) bool {
+	var found []User
+
+	if err := UnscopedDb().Where("user_name = ? AND id <> ?", name, m.ID).Find(&found).Error; err != nil {
+		return false
+	}
+
+	for i := range found {
+		if found[i].UserName == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+// storedEmail returns the email address saved for the account, or an empty string if it has not been saved.
+func (m *User) storedEmail() string {
+	if m.ID <= 0 {
+		return ""
+	}
+
+	stored := User{}
+
+	if err := UnscopedDb().Select("user_email").Where("id = ?", m.ID).First(&stored).Error; err != nil {
+		return ""
+	}
+
+	return stored.UserEmail
 }
 
 // SetFormValues sets the values specified in the form.
@@ -1346,6 +1588,7 @@ func (m *User) SetFormValues(frm form.User) *User {
 	m.SuperAdmin = frm.SuperAdmin
 	m.CanLogin = frm.CanLogin
 	m.WebDAV = frm.WebDAV
+	m.MCP = frm.MCPSetting()
 	m.SetRole(frm.Role())
 	if scope := frm.Scope(); scope != "" {
 		m.UserScope = scope
@@ -1522,6 +1765,9 @@ func (m *User) Form() (form.User, error) {
 		return frm, err
 	}
 
+	// The copier skips this field, as its types differ.
+	frm.DeletedAt = m.DeletedAt.Ptr()
+
 	return frm, nil
 }
 
@@ -1531,6 +1777,7 @@ func (m *User) PrivilegeLevelChange(frm form.User) bool {
 		m.SuperAdmin != frm.SuperAdmin ||
 		m.CanLogin != frm.CanLogin ||
 		m.WebDAV != frm.WebDAV ||
+		m.MCP != frm.MCPSetting() ||
 		m.UserAttr != frm.Attr() ||
 		m.AuthProvider != frm.AuthProvider ||
 		m.AuthMethod != frm.AuthMethod ||
@@ -1541,7 +1788,7 @@ func (m *User) PrivilegeLevelChange(frm form.User) bool {
 }
 
 // SaveForm updates the entity using form data and stores it in the database.
-// Privilege-level fields (role, login, WebDAV, paths) are applied only when byAdmin;
+// Privilege-level fields (role, login, WebDAV, MCP, paths) are applied only when byAdmin;
 // the most sensitive ones (super-admin status, auth provider/method such as 2FA,
 // external identity) also require bySuperAdmin. The caller passes both explicitly so a
 // user-less cluster service principal can act despite failing u.IsAdmin()/IsSuperAdmin().
@@ -1578,11 +1825,9 @@ func (m *User) SaveForm(frm form.User, u *User, byAdmin, bySuperAdmin bool) erro
 		m.DisplayName = m.FullName()
 	}
 
-	// Sanitize email address.
-	if email := frm.Email(); email != "" && email != m.UserEmail {
-		m.UserEmail = email
-		m.VerifiedAt = nil
-		m.VerifyToken = GenerateToken()
+	// Only admins may change the email address, since it is not verified.
+	if email := frm.Email(); email != "" && byAdmin {
+		m.SetEmail(email)
 	}
 
 	// Apply privilege-level changes only when the caller is authorized as an
@@ -1591,8 +1836,12 @@ func (m *User) SaveForm(frm form.User, u *User, byAdmin, bySuperAdmin bool) erro
 	// which a user-less token can never satisfy.
 	if u != nil && byAdmin {
 		// Restore account.
-		if frm.DeletedAt == nil {
-			m.DeletedAt = nil
+		if frm.DeletedAt == nil && m.IsDeleted() {
+			if err := m.CheckRestore(); err != nil {
+				return err
+			}
+
+			m.DeletedAt = DeletedAt{}
 		}
 
 		// Prevent admins from locking themselves out: keep their current role
@@ -1607,6 +1856,7 @@ func (m *User) SaveForm(frm form.User, u *User, byAdmin, bySuperAdmin bool) erro
 		}
 
 		m.WebDAV = frm.WebDAV
+		m.MCP = frm.MCPSetting()
 		m.UserAttr = frm.Attr()
 
 		// Only super-admin-level authority may change the auth method or grant super admin:
@@ -1632,7 +1882,20 @@ func (m *User) SaveForm(frm form.User, u *User, byAdmin, bySuperAdmin bool) erro
 	// actually registers; see NormalizeAdminRole.
 	m.NormalizeAdminRole()
 
-	return m.Save()
+	// Settings and details are saved first, so that the account row is not changed when they fail.
+	if err := m.saveRelated(); err != nil {
+		return err
+	}
+
+	m.GenerateTokens(false)
+
+	if err := UnscopedDb().Save(m).Error; err != nil {
+		return err
+	}
+
+	FlushUserSessionCache(m.UserUID)
+
+	return nil
 }
 
 // SetDisplayName sets a new display name and, if possible, splits it into its components.

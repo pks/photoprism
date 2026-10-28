@@ -12,9 +12,11 @@ import (
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/entity/search"
+	"github.com/photoprism/photoprism/internal/ffmpeg/encode"
 	"github.com/photoprism/photoprism/internal/meta"
 	"github.com/photoprism/photoprism/internal/photoprism"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // VideoInfoCommand configures the command name, flags, and action.
@@ -50,7 +52,7 @@ func videoInfoAction(ctx *cli.Context) error {
 		}
 
 		if ctx.Bool("json") {
-			payload, err := json.Marshal(entries)
+			payload, err := report.MarshalJSON(entries)
 			if err != nil {
 				return err
 			}
@@ -153,7 +155,8 @@ func videoIndexSummary(found search.Photo, file entity.File) map[string]any {
 
 // videoRunFFprobe executes ffprobe and returns parsed JSON plus raw output.
 func videoRunFFprobe(ffprobeBin, filePath string) (any, string, error) {
-	cmd := exec.Command(ffprobeBin, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath) //nolint:gosec // args are validated paths
+	args := append([]string{"-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"}, encode.InputFormatArgs(filePath)...)
+	cmd := exec.Command(ffprobeBin, append(args, filePath)...) //nolint:gosec // args are validated paths
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -186,7 +189,7 @@ func (v *videoInfoEntry) ensureRaw() {
 
 // videoPrettyJSON returns indented JSON for human-readable output.
 func videoPrettyJSON(value any) string {
-	data, err := json.MarshalIndent(value, "", "  ")
+	data, err := report.MarshalJSONIndent(value, "", "  ")
 	if err != nil {
 		return ""
 	}

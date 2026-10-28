@@ -64,6 +64,8 @@ func TestClusterGetTheme(t *testing.T) {
 		// Visible files
 		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, "app.js"), []byte("console.log('ok')\n"), fs.ModeFile))
 		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, "style.css"), []byte("body{}\n"), fs.ModeFile))
+		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, "~font.css"), []byte("body{}\n"), fs.ModeFile))
+		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, "$logo.svg"), []byte("<svg/>\n"), fs.ModeFile))
 		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, fs.VersionTxtFile), []byte(" 1.0.0\n"), fs.ModeFile))
 		assert.NoError(t, os.WriteFile(filepath.Join(tempTheme, "sub", "visible.txt"), []byte("ok\n"), fs.ModeFile))
 		// Hidden file
@@ -96,6 +98,8 @@ func TestClusterGetTheme(t *testing.T) {
 
 		// Included
 		assert.Contains(t, names, "style.css")
+		assert.Contains(t, names, "~font.css")
+		assert.Contains(t, names, "$logo.svg")
 		// Subdirectories are not included for security reasons
 		assert.NotContains(t, names, "sub/visible.txt")
 
@@ -192,7 +196,7 @@ func TestClusterGetTheme(t *testing.T) {
 		assert.NoError(t, err)
 
 		name := "pp-node-theme-" + rnd.Base36(10)
-		var existing int
+		var existing int64
 		require.NoError(t, entity.Db().Model(&entity.Client{}).Where("client_name = ?", name).Count(&existing).Error)
 		require.Zero(t, existing)
 		node := &reg.Node{Node: cluster.Node{Name: name, Role: cluster.RoleInstance, UUID: rnd.UUIDv7()}}
@@ -200,7 +204,7 @@ func TestClusterGetTheme(t *testing.T) {
 		require.NotEmpty(t, node.ClientID)
 		t.Cleanup(func() {
 			require.NoError(t, entity.UnscopedDb().Unscoped().Delete(&entity.Client{}, "client_uid = ?", node.ClientID).Error)
-			var remaining int
+			var remaining int64
 			require.NoError(t, entity.UnscopedDb().Unscoped().Model(&entity.Client{}).
 				Where("client_uid = ?", node.ClientID).Count(&remaining).Error)
 			require.Zero(t, remaining)

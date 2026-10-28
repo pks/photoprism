@@ -1,10 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 
 	"github.com/photoprism/photoprism/internal/config"
@@ -320,4 +323,79 @@ func TestApprovePhoto(t *testing.T) {
 		r := PerformRequest(app, "POST", "/api/v1/photos/xxx/approve")
 		assert.Equal(t, http.StatusNotFound, r.Code)
 	})
+}
+
+// createTimeZoneTestPhoto creates a photo with a manual capture time and removes it after the test.
+func createTimeZoneTestPhoto(t *testing.T, zone, taken, local string, year, month, day int) entity.Photo {
+	t.Helper()
+	photo := entity.NewPhoto(false)
+	photo.TakenAt, _ = time.Parse(time.RFC3339, taken)
+	photo.TakenAtLocal, _ = time.Parse(time.RFC3339, local)
+	photo.TimeZone, photo.TakenSrc = zone, entity.SrcManual
+	photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay = year, month, day
+	require.NoError(t, photo.Create())
+	t.Cleanup(func() {
+		entity.UnscopedDb().Delete(&entity.PhotoKeyword{}, "photo_id = ?", photo.ID)
+		entity.UnscopedDb().Delete(&entity.PhotoLabel{}, "photo_id = ?", photo.ID)
+		entity.UnscopedDb().Delete(&entity.Details{}, "photo_id = ?", photo.ID)
+		entity.UnscopedDb().Delete(&photo)
+	})
+	return photo
+}
+
+// TestUpdatePhoto_TimeZone checks the requests the photo editors send for date and zone edits, followed by unrelated saves.
+func TestUpdatePhoto_TimeZone(t *testing.T) {
+	cases := []struct {
+		name, zone, taken, local, body, expectedTaken, expectedLocal string
+		year, month, day                                             int
+	}{
+		{"UTCToBerlin", "UTC", "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", `{"TakenAtLocal":"2025-07-01T01:30:00Z","TimeZone":"Europe/Berlin","Month":7,"Day":1,"TakenSrc":"manual"}`, "2025-06-30T23:30:00Z", "2025-07-01T01:30:00Z", 2025, 7, 1},
+		{"UTCMinus12ToUTC", "UTC-12", "2020-01-01T11:45:00Z", "2019-12-31T23:45:00Z", `{"TakenAt":"2019-12-31T23:45:00Z","TimeZone":"UTC","TakenSrc":"manual"}`, "2019-12-31T23:45:00Z", "2019-12-31T23:45:00Z", 2019, 12, 31},
+		{"UTCToPreviousYear", "UTC", "2020-01-01T00:30:00Z", "2020-01-01T00:30:00Z", `{"TakenAtLocal":"2019-12-31T12:30:00Z","TimeZone":"UTC-12","Year":2019,"Month":12,"Day":31,"TakenSrc":"manual"}`, "2020-01-01T00:30:00Z", "2019-12-31T12:30:00Z", 2019, 12, 31},
+		{"BerlinToUTC", "Europe/Berlin", "2024-02-29T23:30:00Z", "2024-03-01T00:30:00Z", `{"TakenAt":"2024-03-01T00:30:00Z","TimeZone":"UTC","TakenSrc":"manual"}`, "2024-03-01T00:30:00Z", "2024-03-01T00:30:00Z", 2024, 3, 1},
+		{"BerlinToNewYork", "Europe/Berlin", "2025-06-30T12:00:00Z", "2025-06-30T14:00:00Z", `{"TakenAt":"2025-06-30T18:00:00Z","TimeZone":"America/New_York","TakenSrc":"manual"}`, "2025-06-30T18:00:00Z", "2025-06-30T14:00:00Z", 2025, 6, 30},
+		{"RepeatedHour", "UTC", "2025-10-26T00:30:00Z", "2025-10-26T00:30:00Z", `{"TakenAtLocal":"2025-10-26T02:30:00Z","TimeZone":"Europe/Berlin","TakenSrc":"manual"}`, "2025-10-26T00:30:00Z", "2025-10-26T02:30:00Z", 2025, 10, 26},
+		{"ManualDateWithZone", "UTC", "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", `{"TimeZone":"Europe/Berlin","TakenAt":"2025-07-02T01:45:00Z","TakenAtLocal":"2025-07-02T03:45:00Z","Year":2025,"Month":7,"Day":2}`, "2025-07-02T01:45:00Z", "2025-07-02T03:45:00Z", 2025, 7, 2},
+		{"ZoneOnlyKeepsWallTime", "Europe/Berlin", "2025-06-30T12:00:00Z", "2025-06-30T14:00:00Z", `{"TimeZone":"America/New_York"}`, "2025-06-30T18:00:00Z", "2025-06-30T14:00:00Z", 2025, 6, 30},
+		{"ZoneOnlyToUTCKeepsWallTime", "Europe/Berlin", "2025-06-30T12:00:00Z", "2025-06-30T14:00:00Z", `{"TimeZone":"UTC"}`, "2025-06-30T14:00:00Z", "2025-06-30T14:00:00Z", 2025, 6, 30},
+		{"ZoneOnlyFromUTCConverts", "UTC", "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", `{"TimeZone":"Europe/Berlin","TakenSrc":"manual"}`, "2025-06-30T23:30:00Z", "2025-07-01T01:30:00Z", 2025, 7, 1},
+		{"ZoneOnlyFromUTCUnknownDay", "UTC", "2020-01-01T03:00:00Z", "2020-01-01T03:00:00Z", `{"TimeZone":"America/New_York"}`, "2020-01-01T03:00:00Z", "2019-12-31T22:00:00Z", 2020, 1, -1},
+		{"AssignLocalZone", "Local", "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", `{"TakenAt":"2025-06-30T21:30:00Z","TimeZone":"Europe/Berlin"}`, "2025-06-30T21:30:00Z", "2025-06-30T23:30:00Z", 2025, 6, 30},
+		{"LocalTimeEdit", "Local", "2025-06-30T14:00:00Z", "2025-06-30T14:00:00Z", `{"TakenAtLocal":"2025-06-30T16:00:00Z","TakenSrc":"manual"}`, "2025-06-30T16:00:00Z", "2025-06-30T16:00:00Z", 2025, 6, 30},
+		{"RemoveZone", "Europe/Berlin", "2025-06-30T21:30:00Z", "2025-06-30T23:30:00Z", `{"TakenAt":"2025-06-30T23:30:00Z","TimeZone":"Local"}`, "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", 2025, 6, 30},
+		{"UnknownDay", "UTC", "2020-01-01T03:00:00Z", "2020-01-01T03:00:00Z", `{"TakenAtLocal":"2019-12-31T22:00:00Z","TimeZone":"America/New_York"}`, "2020-01-01T03:00:00Z", "2019-12-31T22:00:00Z", 2020, 1, -1},
+		{"UnknownDate", "UTC", "2025-06-30T23:30:00Z", "2025-06-30T23:30:00Z", `{"TakenAtLocal":"2025-07-01T01:30:00Z","TimeZone":"Europe/Berlin"}`, "2025-06-30T23:30:00Z", "2025-07-01T01:30:00Z", -1, -1, -1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, router, _ := NewApiTest()
+			UpdatePhoto(router)
+			local, _ := time.Parse(time.RFC3339, tc.local)
+			year, month, day := local.Year(), int(local.Month()), local.Day()
+			if tc.year <= 0 {
+				year = tc.year
+			}
+			if tc.month <= 0 {
+				month = tc.month
+			}
+			if tc.day <= 0 {
+				day = tc.day
+			}
+			photo := createTimeZoneTestPhoto(t, tc.zone, tc.taken, tc.local, year, month, day)
+			uri := "/api/v1/photos/" + photo.PhotoUID
+			for _, body := range []string{tc.body, `{"Caption":"Updated caption"}`, `{"Title":"Updated title","TitleSrc":"manual"}`} {
+				r := PerformRequestWithBody(app, "PUT", uri, body)
+				require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+				var result entity.Photo
+				require.NoError(t, json.Unmarshal(r.Body.Bytes(), &result))
+				assert.Equal(t, tc.expectedTaken, result.TakenAt.Format(time.RFC3339), body)
+				assert.Equal(t, tc.expectedLocal, result.TakenAtLocal.Format(time.RFC3339), body)
+				assert.Equal(t, []int{tc.year, tc.month, tc.day}, []int{result.PhotoYear, result.PhotoMonth, result.PhotoDay}, body)
+				var stored entity.Photo
+				require.NoError(t, entity.Db().First(&stored, photo.ID).Error)
+				assert.True(t, stored.TakenAt.Equal(result.TakenAt))
+				assert.True(t, stored.TakenAtLocal.Equal(result.TakenAtLocal))
+			}
+		})
+	}
 }

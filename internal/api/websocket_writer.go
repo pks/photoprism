@@ -78,9 +78,8 @@ func wsRelease(connId string) {
 	delete(wsAuth.client, connId)
 }
 
-// wsSessionClient returns the client a session authenticates, using the same predicate the REST
-// handlers apply. It is read before the role, because resolving the role loads the client entity onto
-// the session and rewrites the provider the predicate reads.
+// wsSessionClient returns the client a session authenticates and its role, using the same predicate
+// the REST handlers apply.
 func wsSessionClient(s *entity.Session) wsClientRole {
 	if s == nil || !s.IsClient() {
 		return wsClientRole{}
@@ -126,9 +125,40 @@ func wsDelivery(topic, sid string, user entity.User, client wsClientRole) (ev st
 	return ev, false
 }
 
+// wsActivityChannels lists the channels whose events report indexing, import and upload progress.
+var wsActivityChannels = map[acl.Resource]bool{
+	acl.ChannelIndex:  true,
+	acl.ChannelImport: true,
+	acl.ChannelUpload: true,
+}
+
+// wsPayload returns the fields a recipient receives with the event. Progress events keep their fields
+// only for roles with access to all files; other recipients receive the event name alone.
+func wsPayload(topic string, user entity.User, fields event.Data) event.Data {
+	ch := strings.Split(topic, ".")
+	progress := wsActivityChannels[acl.Resource(ch[0])] || len(ch) == 4 && wsActivityChannels[acl.Resource(ch[2])]
+
+	if !progress || acl.Rules.Allow(acl.ResourceFiles, user.AclRole(), acl.AccessAll) {
+		return fields
+	}
+
+	return event.Data{}
+}
+
+// wsOutgoing returns the event name and fields a connection receives for a message, and reports
+// whether it receives the message at all.
+func wsOutgoing(topic, sid string, user entity.User, client wsClientRole, fields event.Data) (ev string, data event.Data, ok bool) {
+	if ev, ok = wsDelivery(topic, sid, user, client); !ok {
+		return ev, nil, false
+	}
+
+	return ev, wsPayload(topic, user, fields), true
+}
+
 // wsWriter initializes a WebSocket writer for sending messages.
 func wsWriter(ws *websocket.Conn, writeMutex *sync.Mutex, connId string) {
-	pingTicker := time.NewTicker(15 * time.Second)
+	pingTicker := time.NewTicker(time.Duration(wsPingInterval.Load()))
+	sessionChecked := time.Now()
 
 	// Subscribe to events.
 	topics := append([]string(nil), WebsocketTopics...)
@@ -148,6 +178,16 @@ func wsWriter(ws *websocket.Conn, writeMutex *sync.Mutex, connId string) {
 	for {
 		select {
 		case <-pingTicker.C:
+			// Close the connection once the session it authenticated with has ended.
+			if time.Since(sessionChecked) >= time.Duration(wsSessionCheckInterval.Load()) {
+				sessionChecked = time.Now()
+
+				if !wsSessionActive(connId) {
+					wsClose(ws, writeMutex, websocket.ClosePolicyViolation, "session ended")
+					return
+				}
+			}
+
 			writeMutex.Lock()
 
 			if err := ws.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
@@ -174,8 +214,8 @@ func wsWriter(ws *websocket.Conn, writeMutex *sync.Mutex, connId string) {
 			wsAuth.mutex.RUnlock()
 
 			// Send the message only to authorized recipients.
-			if ev, ok := wsDelivery(msg.Topic(), sid, user, client); ok {
-				wsSendMessage(ev, msg.Fields, ws, writeMutex)
+			if ev, data, ok := wsOutgoing(msg.Topic(), sid, user, client, msg.Fields); ok {
+				wsSendMessage(ev, data, ws, writeMutex)
 			} else if !reported && client.Present {
 				// Report once per connection when the client role is what narrows it, so an
 				// integration that goes quiet has a reason to read.

@@ -73,6 +73,7 @@ type ClientConfig struct {
 	UploadAllow      string              `json:"uploadAllow"`
 	Public           bool                `json:"public"`
 	AuthMode         string              `json:"authMode"`
+	OAuthApps        bool                `json:"oauthApps"`
 	UsersPath        string              `json:"usersPath"`
 	LoginUri         string              `json:"loginUri"`
 	LoginInfo        string              `json:"loginInfo"`
@@ -86,6 +87,7 @@ type ClientConfig struct {
 	Lenses           entity.Lenses       `json:"lenses"`
 	Countries        entity.Countries    `json:"countries"`
 	Thumbs           ThumbSizes          `json:"thumbs"`
+	ThumbLimit       int                 `json:"thumbLimit"`
 	Tier             int                 `json:"tier"`
 	Membership       string              `json:"membership"`
 	Customer         string              `json:"customer"`
@@ -101,6 +103,7 @@ type ClientConfig struct {
 	Usage            Usage               `json:"usage"`
 	Settings         *customize.Settings `json:"settings,omitempty"`
 	ACL              acl.Grants          `json:"acl,omitempty"`
+	McpRoles         []string            `json:"mcpRoles,omitempty"`
 	Ext              Values              `json:"ext"`
 }
 
@@ -111,6 +114,13 @@ func (c *ClientConfig) ApplyACL(a acl.ACL, r acl.Role) *ClientConfig {
 	}
 
 	c.ACL = a.Grants(r)
+
+	// Roles that may access all accounts also receive the user roles that may use MCP, for the account dialogs.
+	if c.ACL[acl.ResourceUsers].Allow(acl.AccessAll) {
+		c.McpRoles = acl.UserRoles.Allowed(a, acl.ResourceMCP, acl.ActionView)
+	} else {
+		c.McpRoles = nil
+	}
 
 	if !c.ACL[acl.ResourceUsers].Allow(acl.ActionView) {
 		c.Usage.UsersFreePct = -1
@@ -346,6 +356,7 @@ func (c *Config) ClientPublic() *ClientConfig {
 		Customer:         "",
 		MapKey:           "",
 		Thumbs:           Thumbs,
+		ThumbLimit:       c.ThumbSizeLimit(),
 		Colors:           colors.All.List(),
 		ManifestUri:      c.ClientManifestUri(),
 		Clip:             txt.ClipDefault,
@@ -442,6 +453,7 @@ func (c *Config) ClientShare() *ClientConfig {
 		Countries:        entity.Countries{},
 		Colors:           colors.All.List(),
 		Thumbs:           Thumbs,
+		ThumbLimit:       c.ThumbSizeLimit(),
 		Tier:             c.Hub().Tier(),
 		Membership:       c.Hub().Membership(),
 		Customer:         c.Hub().Customer(),
@@ -535,6 +547,7 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 		UploadAllow:      c.UploadAllow().Accept(),
 		Public:           c.Public(),
 		AuthMode:         c.AuthMode(),
+		OAuthApps:        c.OAuthAppsEnabled(),
 		UsersPath:        c.UsersPath(),
 		LoginUri:         c.LoginUri(),
 		LoginInfo:        c.LoginInfo(),
@@ -548,6 +561,7 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 		Countries:        entity.Countries{},
 		Colors:           colors.All.List(),
 		Thumbs:           Thumbs,
+		ThumbLimit:       c.ThumbSizeLimit(),
 		Tier:             c.Hub().Tier(),
 		Membership:       c.Hub().Membership(),
 		Customer:         c.Hub().Customer(),
@@ -578,33 +592,33 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 	if hidePrivate {
 		c.Db().
 			Table("photos").
-			Select("SUM(photo_type = 'animated' AND photo_quality > -1 AND photo_private = 0) AS animated, " +
-				"SUM(photo_type = 'video' AND photo_quality > -1 AND photo_private = 0) AS videos, " +
-				"SUM(photo_type = 'live' AND photo_quality > -1 AND photo_private = 0) AS live, " +
-				"SUM(photo_type = 'audio' AND photo_quality > -1 AND photo_private = 0) AS audio, " +
-				"SUM(photo_type = 'document' AND photo_quality > -1 AND photo_private = 0) AS documents, " +
-				"SUM(photo_quality = -1) AS hidden, " +
-				"SUM(photo_type NOT IN ('animated','video','live','audio','document') AND photo_quality > -1 AND photo_private = 0) AS photos, " +
-				"SUM(photo_quality BETWEEN 0 AND 2) AS review, " +
-				"SUM(photo_favorite = 1 AND photo_private = 0 AND photo_quality > -1) AS favorites, " +
-				"SUM(photo_private = 1 AND photo_quality > -1) AS private").
-			Where("photos.id NOT IN (SELECT photo_id FROM files WHERE file_primary = 1 AND (file_missing = 1 OR file_error <> ''))").
+			Select("COUNT(CASE WHEN photo_type = 'animated' AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS animated, " +
+				"COUNT(CASE WHEN photo_type = 'video' AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS videos, " +
+				"COUNT(CASE WHEN photo_type = 'live' AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS live, " +
+				"COUNT(CASE WHEN photo_type = 'audio' AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS audio, " +
+				"COUNT(CASE WHEN photo_type = 'document' AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS documents, " +
+				"COUNT(CASE WHEN photo_quality = -1 THEN 1 END) AS hidden, " +
+				"COUNT(CASE WHEN photo_type NOT IN ('animated','video','live','audio','document') AND photo_quality > -1 AND photo_private = FALSE THEN 1 END) AS photos, " +
+				"COUNT(CASE WHEN photo_quality BETWEEN 0 AND 2 THEN 1 END) AS review, " +
+				"COUNT(CASE WHEN photo_favorite = TRUE AND photo_private = FALSE AND photo_quality > -1 THEN 1 END) AS favorites, " +
+				"COUNT(CASE WHEN photo_private = TRUE AND photo_quality > -1 THEN 1 END) AS private").
+			Where("photos.id NOT IN (SELECT photo_id FROM files WHERE file_primary = TRUE AND (file_missing = TRUE OR file_error <> ''))").
 			Where("deleted_at IS NULL").
 			Take(&cfg.Count)
 	} else {
 		c.Db().
 			Table("photos").
-			Select("SUM(photo_type = 'animated' AND photo_quality > -1) AS animated, " +
-				"SUM(photo_type = 'video' AND photo_quality > -1) AS videos, " +
-				"SUM(photo_type = 'live' AND photo_quality > -1) AS live, " +
-				"SUM(photo_type = 'audio' AND photo_quality > -1) AS audio, " +
-				"SUM(photo_type = 'document' AND photo_quality > -1) AS documents, " +
-				"SUM(photo_quality = -1) AS hidden, " +
-				"SUM(photo_type NOT IN ('animated','video','live','audio','document') AND photo_quality > -1) AS photos, " +
-				"SUM(photo_quality BETWEEN 0 AND 2) AS review, " +
-				"SUM(photo_favorite = 1 AND photo_quality > -1) AS favorites, " +
+			Select("COUNT(CASE WHEN photo_type = 'animated' AND photo_quality > -1 THEN 1 END) AS animated, " +
+				"COUNT(CASE WHEN photo_type = 'video' AND photo_quality > -1 THEN 1 END) AS videos, " +
+				"COUNT(CASE WHEN photo_type = 'live' AND photo_quality > -1 THEN 1 END) AS live, " +
+				"COUNT(CASE WHEN photo_type = 'audio' AND photo_quality > -1 THEN 1 END) AS audio, " +
+				"COUNT(CASE WHEN photo_type = 'document' AND photo_quality > -1 THEN 1 END) AS documents, " +
+				"COUNT(CASE WHEN photo_quality = -1 THEN 1 END) AS hidden, " +
+				"COUNT(CASE WHEN photo_type NOT IN ('animated','video','live','audio','document') AND photo_quality > -1 THEN 1 END) AS photos, " +
+				"COUNT(CASE WHEN photo_quality BETWEEN 0 AND 2 THEN 1 END) AS review, " +
+				"COUNT(CASE WHEN photo_favorite = TRUE AND photo_quality > -1 THEN 1 END) AS favorites, " +
 				"0 AS private").
-			Where("photos.id NOT IN (SELECT photo_id FROM files WHERE file_primary = 1 AND (file_missing = 1 OR file_error <> ''))").
+			Where("photos.id NOT IN (SELECT photo_id FROM files WHERE file_primary = TRUE AND (file_missing = TRUE OR file_error <> ''))").
 			Where("deleted_at IS NULL").
 			Take(&cfg.Count)
 	}
@@ -613,7 +627,7 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 	if c.Settings().Features.Archive {
 		c.Db().
 			Table("photos").
-			Select("SUM(photo_quality > -1) AS archived").
+			Select("COUNT(CASE WHEN photo_quality > -1 THEN 1 END) AS archived").
 			Where("deleted_at IS NOT NULL").
 			Take(&cfg.Count)
 	}
@@ -632,34 +646,34 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 		Select("MAX(photo_count) AS label_max_photos, COUNT(*) AS labels").
 		Where("photo_count > 0").
 		Where("deleted_at IS NULL").
-		Where("(labels.label_priority >= 0 AND labels.photo_count > 1 OR labels.label_favorite = 1)").
+		Where("(labels.label_priority >= 0 AND labels.photo_count > 1 OR labels.label_favorite = TRUE)").
 		Take(&cfg.Count)
 
 	if hidePrivate {
 		c.Db().
 			Table("albums").
-			Select("SUM(album_type = ?) AS albums, "+
-				"SUM(album_type = ?) AS moments, "+
-				"SUM(album_type = ?) AS months, "+
-				"SUM(album_type = ?) AS states, "+
-				"SUM(album_type = ?) AS folders, "+
-				"SUM(album_type = ? AND album_private = 1) AS private_albums, "+
-				"SUM(album_type = ? AND album_private = 1) AS private_moments, "+
-				"SUM(album_type = ? AND album_private = 1) AS private_months, "+
-				"SUM(album_type = ? AND album_private = 1) AS private_states, "+
-				"SUM(album_type = ? AND album_private = 1) AS private_folders",
+			Select("COUNT(CASE WHEN album_type = ? THEN 1 END) AS albums, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS moments, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS months, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS states, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS folders, "+
+				"COUNT(CASE WHEN album_type = ? AND album_private = TRUE THEN 1 END) AS private_albums, "+
+				"COUNT(CASE WHEN album_type = ? AND album_private = TRUE THEN 1 END) AS private_moments, "+
+				"COUNT(CASE WHEN album_type = ? AND album_private = TRUE THEN 1 END) AS private_months, "+
+				"COUNT(CASE WHEN album_type = ? AND album_private = TRUE THEN 1 END) AS private_states, "+
+				"COUNT(CASE WHEN album_type = ? AND album_private = TRUE THEN 1 END) AS private_folders",
 				entity.AlbumManual, entity.AlbumMoment, entity.AlbumMonth, entity.AlbumState, entity.AlbumFolder,
 				entity.AlbumManual, entity.AlbumMoment, entity.AlbumMonth, entity.AlbumState, entity.AlbumFolder).
-			Where("deleted_at IS NULL AND (albums.album_type <> 'folder' OR albums.album_path IN (SELECT photos.photo_path FROM photos WHERE photos.photo_private = 0 AND photos.deleted_at IS NULL))").
+			Where("deleted_at IS NULL AND (albums.album_type <> 'folder' OR albums.album_path IN (SELECT photos.photo_path FROM photos WHERE photos.photo_private = FALSE AND photos.deleted_at IS NULL))").
 			Take(&cfg.Count)
 	} else {
 		c.Db().
 			Table("albums").
-			Select("SUM(album_type = ?) AS albums, "+
-				"SUM(album_type = ?) AS moments, "+
-				"SUM(album_type = ?) AS months, "+
-				"SUM(album_type = ?) AS states, "+
-				"SUM(album_type = ?) AS folders",
+			Select("COUNT(CASE WHEN album_type = ? THEN 1 END) AS albums, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS moments, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS months, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS states, "+
+				"COUNT(CASE WHEN album_type = ? THEN 1 END) AS folders",
 				entity.AlbumManual, entity.AlbumMoment, entity.AlbumMonth, entity.AlbumState, entity.AlbumFolder).
 			Where("deleted_at IS NULL AND (albums.album_type <> 'folder' OR albums.album_path IN (SELECT photos.photo_path FROM photos WHERE photos.deleted_at IS NULL))").
 			Take(&cfg.Count)
@@ -668,7 +682,7 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 	c.Db().
 		Table("files").
 		Select("COUNT(*) AS files").
-		Where("file_missing = 0 AND file_root = ? AND deleted_at IS NULL", entity.RootOriginals).
+		Where("file_missing = FALSE AND file_root = ? AND deleted_at IS NULL", entity.RootOriginals).
 		Take(&cfg.Count)
 
 	c.Db().
@@ -678,7 +692,7 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 
 	c.Db().
 		Table("places").
-		Select("SUM(photo_count > 0) AS places").
+		Select("COUNT(CASE WHEN photo_count > 0 THEN 1 END) AS places").
 		Where("id <> 'zz'").
 		Take(&cfg.Count)
 
@@ -707,6 +721,8 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 		Order("photo_year DESC").
 		Pluck("DISTINCT photo_year", &cfg.Years)
 
+	cfg.Categories = make(CategoryLabels, 0)
+
 	c.Db().
 		Table("categories").
 		Select("l.custom_slug, l.label_name").
@@ -726,6 +742,15 @@ func (c *Config) ClientUser(withSettings bool) *ClientConfig {
 		Limit(10000).Offset(0).
 		Pluck("album_category", &cfg.AlbumCategories)
 
+	// Lists without values are serialized as null, as the frontend expects.
+	if len(cfg.Years) == 0 {
+		cfg.Years = nil
+	}
+
+	if len(cfg.AlbumCategories) == 0 {
+		cfg.AlbumCategories = nil
+	}
+
 	// Trace log for performance measurement.
 	log.Tracef("config: updated counts [%s]", time.Since(start))
 
@@ -737,12 +762,22 @@ func (c *Config) ClientRole(role acl.Role) *ClientConfig {
 	return c.ClientUser(true).ApplyACL(acl.Rules, role)
 }
 
+// ClientOAuth provides the client config values for a session of an OAuth2 client without an account,
+// which loads previews from the API rather than a CDN. ClientSession assigns its tokens.
+func (c *Config) ClientOAuth(sess *entity.Session) *ClientConfig {
+	cfg := c.ClientUser(false).ApplyACL(acl.Rules, sess.GetClientRole())
+	cfg.Settings = c.SessionSettings(sess)
+	cfg.ContentUri = c.ApiUri()
+	cfg.VideoUri = c.ApiUri()
+
+	return cfg
+}
+
 // ClientSession provides the client config values for the specified session.
 func (c *Config) ClientSession(sess *entity.Session) (cfg *ClientConfig) {
 	switch {
 	case sess.NoUser() && sess.IsClient():
-		cfg = c.ClientUser(false).ApplyACL(acl.Rules, sess.GetClientRole())
-		cfg.Settings = c.SessionSettings(sess)
+		cfg = c.ClientOAuth(sess)
 	case sess.GetUser().IsVisitor():
 		cfg = c.ClientShare()
 	case sess.GetUser().IsRegistered():
@@ -756,6 +791,20 @@ func (c *Config) ClientSession(sess *entity.Session) (cfg *ClientConfig) {
 	case c.Public():
 		cfg.PreviewToken = entity.TokenPublic
 		cfg.DownloadToken = entity.TokenPublic
+	case sess.SignedPreview():
+		// A client session without an account receives a signed preview token bound to the session, and
+		// none if its scope or role does not cover previews.
+		cfg.PreviewToken = ""
+
+		if sess.ScopePermitsPreview() && sess.RolePermitsPreview() {
+			cfg.PreviewToken = tokens.PreviewToken(sess.ID, sess.ExpiresAt())
+		}
+
+		cfg.DownloadToken = ""
+
+		if sess.ScopePermitsDownload() {
+			cfg.DownloadToken = tokens.DownloadToken(sess.ID)
+		}
 	case sess.PreviewToken != "":
 		cfg.PreviewToken = sess.PreviewToken
 

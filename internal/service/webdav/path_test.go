@@ -31,10 +31,28 @@ func TestIsUnsafePath(t *testing.T) {
 	})
 }
 
+func TestHasControl(t *testing.T) {
+	t.Run("Control", func(t *testing.T) {
+		for _, name := range []string{"\x00", "a\x01b", "a\nb", "a\rb", "a\tb", "a\x1fb", "a\x7fb"} {
+			assert.True(t, hasControl(name), "%q", name)
+		}
+	})
+	t.Run("None", func(t *testing.T) {
+		for _, name := range []string{"", "/Photos/cover.jpg", "/Fotos/Älter 2024 幸福.jpg", "/صور/a\u200Db.jpg", "a\u0085b", "a\xffb"} {
+			assert.False(t, hasControl(name), "%q", name)
+		}
+	})
+}
+
 func TestIsHiddenPath(t *testing.T) {
 	assert.True(t, isHiddenPath("/.locks/upload.tmp"))
 	assert.True(t, isHiddenPath("/Photos/.staging/incomplete.jpg"))
 	assert.False(t, isHiddenPath("/Photos/cover.jpg"))
+
+	// Other names that are hidden locally are not hidden remotely.
+	for _, name := range []string{"/@Family/x.jpg", "/Photos/@eaDir/x.jpg", "/__MACOSX/x.jpg", "/Photos/_.x.jpg", "/$RECYCLE.BIN/x.jpg", "~home"} {
+		assert.False(t, isHiddenPath(name), name)
+	}
 }
 
 // TestClient_FilesRejectTraversalEntries verifies that files whose remote href

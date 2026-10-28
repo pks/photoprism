@@ -6,6 +6,7 @@ import (
 	"time"
 
 	gc "github.com/patrickmn/go-cache"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/pkg/clean"
@@ -28,8 +29,31 @@ func FindSessionByAuthToken(token string) (*Session, error) {
 	return FindSession(rnd.SessionID(token))
 }
 
-// FindSession finds a session based on the id string or returns nil if it does not exist.
+// FindSession finds a session based on the id string or returns an error if it does not exist. Sessions
+// issued for a specific audience, such as app access tokens, are only returned by FindAudienceSession.
 func FindSession(id string) (*Session, error) {
+	sess, err := FindAnySession(id)
+
+	if err == nil && sess.HasAudience() {
+		return &Session{}, ErrSessionNotFound
+	}
+
+	return sess, err
+}
+
+// FindAudienceSession finds a session that has no audience or was issued for the specified audience.
+func FindAudienceSession(id, audience string) (*Session, error) {
+	sess, err := FindAnySession(id)
+
+	if err == nil && sess.HasAudience() && sess.AuthAudience != audience {
+		return &Session{}, ErrSessionNotFound
+	}
+
+	return sess, err
+}
+
+// FindAnySession finds a session based on the id string regardless of its audience, e.g. to revoke it.
+func FindAnySession(id string) (*Session, error) {
 	generation := CurrentAuthCacheGeneration()
 	found := &Session{}
 
@@ -46,7 +70,7 @@ func FindSession(id string) (*Session, error) {
 		} else if err := cached.Delete(); err != nil {
 			event.AuditErr([]string{cached.IP(), "session %s", "failed to delete after expiration", status.Error(err)}, cached.RefID)
 		}
-	} else if res := Db().First(&found, "id = ?", id); res.RecordNotFound() {
+	} else if res := Db().First(&found, "id = ?", id); errors.Is(res.Error, gorm.ErrRecordNotFound) {
 		return found, ErrSessionNotFound
 	} else if res.Error != nil {
 		return found, res.Error
@@ -57,7 +81,12 @@ func FindSession(id string) (*Session, error) {
 		found.stored = true
 		// Set session activity timestamp and update the last_active column in the sessions table.
 		found.UpdateLastActive(true)
-		CacheSession(found, SessionCacheDuration)
+
+		// Cache the session only with its client and owner resolved, or with a client that no longer exists.
+		if err := found.resolveClient(); err == nil || errors.Is(err, ErrClientNotFound) {
+			CacheSession(found, SessionCacheDuration)
+		}
+
 		return found, nil
 	} else if err := found.Delete(); err != nil {
 		event.AuditErr([]string{found.IP(), "session %s", "failed to delete after expiration", status.Error(err)}, found.RefID)
@@ -74,6 +103,7 @@ func FlushSessionCache() {
 	authCacheState.version++
 	authCacheState.flushed = authCacheState.version
 	clear(authCacheState.users)
+	clear(authCacheState.deleted)
 	sessionCache.Flush()
 	webDAVUserCache.Flush()
 }
@@ -120,9 +150,9 @@ func CacheSession(s *Session, d time.Duration) {
 		if s.user != nil {
 			return
 		}
-		s.cacheGeneration = &AuthCacheGeneration{version: authCacheState.version}
+		s.cacheGeneration = &AuthCacheGeneration{version: authCacheState.version, at: time.Now()}
 	}
-	if !s.cacheGeneration.valid(s.UserUID) {
+	if !s.cacheGeneration.valid(s.UserUID) || s.cacheGeneration.sessionDeleted(s.ID) {
 		return
 	}
 

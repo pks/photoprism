@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -106,7 +107,7 @@ func TestRemoveFromAlbumCoverCache(t *testing.T) {
 
 	for thumbName := range thumb.Sizes {
 		key := CacheKey(albumCover, uid, string(thumbName))
-		cache.SetDefault(key, ThumbCache{FileName: "cached-file", ShareName: "share"})
+		cache.SetDefault(key, ThumbCache{FileName: "cached-file"})
 	}
 
 	conf := get.Config()
@@ -155,12 +156,29 @@ func TestRemoveFromAlbumCoverCacheInvalidUID(t *testing.T) {
 
 	uid := "" // empty string fails rnd.IsAlnum
 	key := CacheKey(albumCover, uid, thumb.Tile500.String())
-	cache.SetDefault(key, ThumbCache{FileName: "file", ShareName: "share"})
+	cache.SetDefault(key, ThumbCache{FileName: "file"})
 
 	RemoveFromAlbumCoverCache(uid)
 
 	_, ok := cache.Get(key)
 	assert.True(t, ok)
+}
+
+func TestRemoveFromAlbumCoverCacheUnknownAlbum(t *testing.T) {
+	hook := photoLabelErrorLog(t)
+	uid := rnd.GenerateUID(entity.AlbumUID)
+
+	RemoveFromAlbumCoverCache(uid)
+
+	var errs []string
+
+	for _, entry := range hook.AllEntries() {
+		if entry.Level <= logrus.ErrorLevel {
+			errs = append(errs, entry.Message)
+		}
+	}
+
+	assert.Equal(t, []string{"covers: album not found (find album " + uid + ")"}, errs)
 }
 
 func TestRemoveFromLabelCoverCache(t *testing.T) {
@@ -171,7 +189,7 @@ func TestRemoveFromLabelCoverCache(t *testing.T) {
 
 	for thumbName := range thumb.Sizes {
 		key := CacheKey(labelCover, uid, string(thumbName))
-		cache.SetDefault(key, ThumbCache{FileName: "cached-file", ShareName: "share"})
+		cache.SetDefault(key, ThumbCache{FileName: "cached-file"})
 	}
 
 	RemoveFromLabelCoverCache(uid)
@@ -189,7 +207,7 @@ func TestRemoveFromLabelCoverCacheInvalidUID(t *testing.T) {
 
 	uid := ""
 	key := CacheKey(labelCover, uid, thumb.Tile500.String())
-	cache.SetDefault(key, ThumbCache{FileName: "file", ShareName: "share"})
+	cache.SetDefault(key, ThumbCache{FileName: "file"})
 
 	RemoveFromLabelCoverCache(uid)
 

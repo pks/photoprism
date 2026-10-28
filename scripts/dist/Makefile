@@ -21,16 +21,14 @@ Security:
 
 Graphics & Video:
   gpu              Detect and install the GPU drivers for this system
-  intel            Install the Intel GPU drivers and VA-API tools
-  amd              Install the AMD VA-API GPU drivers
+  intel            Install the Intel GPU drivers, VA-API, and Vulkan tools
+  amd              Install the AMD VA-API and Vulkan GPU drivers
   vulkan           Install the Mesa Vulkan drivers and tools
   ffmpeg           Install the latest FFmpeg build in "/opt"
   darktable        Install darktable for RAW image conversion
   Related: ffmpeg-release, ffmpeg-master
 
 Machine Learning:
-  tensorflow       Install the TensorFlow library for CPUs
-  tensorflow-gpu   Install the TensorFlow library with GPU support
   onnxruntime      Install the ONNX Runtime library
   onnxruntime-gpu  Install the ONNX Runtime library with CUDA support, and the cuda target
   cuda             Install the NVIDIA CUDA runtime libraries on their own
@@ -40,7 +38,7 @@ Other:
   proxysql-admin   Install the ProxySQL admin and scheduler tools
   davfs            Install the davfs2 WebDAV filesystem driver
   yt-dlp           Update yt-dlp to the latest release
-  Related: yt-dlp-nightly, yt-dlp-master
+  Related: yt-dlp-nightly, yt-dlp-master, deno
 
 Run "make -C /scripts list" to show all targets, including those not listed here.
 endef
@@ -85,12 +83,6 @@ install-proxysql-admin:
 gpu: install-gpu
 install-gpu:
 	/scripts/install-gpu.sh
-tensorflow: install-tensorflow
-tensorflow-amd64-cpu: install-tensorflow
-tensorflow-amd64-avx: install-tensorflow
-tensorflow-amd64-avx2: install-tensorflow
-install-tensorflow:
-	/scripts/install-tensorflow.sh auto
 onnxruntime: install-onnx
 install-onnx:
 	/scripts/install-onnx.sh
@@ -100,21 +92,18 @@ install-onnx-gpu:
 cuda: install-cuda
 install-cuda:
 	/scripts/install-cuda.sh
-tensorflow-gpu: install-tensorflow-gpu
-install-tensorflow-gpu:
-	/scripts/install-tensorflow.sh gpu
 codex:
 	/scripts/install-codex.sh
 davfs: install-davfs
 install-davfs:
 	/scripts/install-davfs.sh
-intel: update install-intel
+intel: update install-intel install-vulkan
 install-intel-graphics: intel
 intel-graphics: intel
 install-intel:
 	@echo "Installing Intel GPU Drivers..."
 	apt-get -qq install intel-opencl-icd intel-media-va-driver-non-free i965-va-driver-shaders mesa-va-drivers libmfx-gen1.2 va-driver-all vainfo libva2 libvpl2
-amd: update install-amd
+amd: update install-amd install-vulkan
 install-amd:
 	@echo "Installing AMD VA-API GPU Drivers..."
 	apt-get -qq install mesa-va-drivers vainfo libva2
@@ -144,6 +133,9 @@ install-yt-dlp-nightly:
 yt-dlp-master: install-yt-dlp-master
 install-yt-dlp-master:
 	@/scripts/install-yt-dlp.sh --master
+deno: install-deno
+install-deno:
+	@/scripts/install-deno.sh
 
 # Declare all targets as "PHONY", see https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html.
 MAKEFLAGS += --always-make

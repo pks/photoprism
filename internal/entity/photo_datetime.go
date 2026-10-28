@@ -131,13 +131,43 @@ func (m *Photo) UpdateTimeZone(zone string) {
 		return
 	}
 
-	if m.TimeZoneUTC() {
-		m.TimeZone = zone
+	from := m.TimeZone
+	m.TimeZone = zone
+	m.ApplyTimeZoneChange(from)
+}
+
+// ApplyTimeZoneChange updates the capture time after TimeZone was changed from the given zone without
+// editing the time: a UTC time is converted to the local time in the new zone, and a local time is kept.
+// A TakenAt that already matches the local time is kept, e.g. in a repeated daylight-saving hour.
+func (m *Photo) ApplyTimeZoneChange(from string) {
+	if tz.IsUTC(from) && !m.TimeZoneUTC() && !m.TimeZoneLocal() {
 		m.TakenAtLocal = m.GetTakenAtLocal()
-	} else {
-		m.TimeZone = zone
+		m.SetKnownDateParts()
+	} else if m.TimeZoneLocal() || !m.GetTakenAtLocal().Equal(m.TakenAtLocal) {
 		m.TakenAt = m.GetTakenAt()
 	}
+}
+
+// SetKnownDateParts updates the known date parts from TakenAtLocal.
+// Month and Year follow only while all finer parts are known, since an unknown day leaves a placeholder.
+func (m *Photo) SetKnownDateParts() {
+	if m.PhotoDay <= 0 {
+		return
+	}
+
+	m.PhotoDay = m.TakenAtLocal.Day()
+
+	if m.PhotoMonth <= 0 {
+		return
+	}
+
+	m.PhotoMonth = int(m.TakenAtLocal.Month())
+
+	if m.PhotoYear <= 0 {
+		return
+	}
+
+	m.PhotoYear = m.TakenAtLocal.Year()
 }
 
 // UpdateDateFields updates internal date fields.
@@ -163,7 +193,7 @@ func (m *Photo) UpdateDateFields() {
 
 	// Update photo_taken_at column in related files.
 	Log("photo", "update date fields",
-		UnscopedDb().Model(File{}).
+		UnscopedDb().Model(&File{}).
 			Where("photo_id = ? AND photo_taken_at <> ?", m.ID, m.TakenAtLocal).
 			Updates(File{PhotoTakenAt: m.TakenAtLocal}).Error,
 	)

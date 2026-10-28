@@ -9,7 +9,7 @@ The following 3rd-party software packages may be used by or distributed with
 PhotoPrism. Any information relevant to third-party vendors listed below are
 collected using common, reasonable means.
 
-Date generated: 2026-10-06
+Date generated: 2026-10-27
 
 ================================================================================
 
@@ -267,8 +267,8 @@ limitations under the License.
 --------------------------------------------------------------------------------
 
 Package: github.com/abema/go-mp4
-Version: v1.7.3
-License: MIT (https://github.com/abema/go-mp4/blob/v1.7.3/LICENSE)
+Version: v1.7.4
+License: MIT (https://github.com/abema/go-mp4/blob/v1.7.4/LICENSE)
 
 MIT License
 
@@ -538,8 +538,8 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/davidbyttow/govips/v2/vips
-Version: v2.19.0
-License: MIT (https://github.com/davidbyttow/govips/blob/v2.19.0/LICENSE)
+Version: v2.20.0
+License: MIT (https://github.com/davidbyttow/govips/blob/v2.20.0/LICENSE)
 
 The MIT License
 
@@ -820,8 +820,8 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/dustinkirkland/golang-petname
-Version: v0.0.0-20260929120758-6e3915f1a6a8
-License: Apache-2.0 (https://github.com/dustinkirkland/golang-petname/blob/6e3915f1a6a8/LICENSE)
+Version: v0.0.0-20261016130456-fdd95a3d0543
+License: Apache-2.0 (https://github.com/dustinkirkland/golang-petname/blob/fdd95a3d0543/LICENSE)
 
 
                                  Apache License
@@ -1084,8 +1084,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/gabriel-vasile/mimetype
-Version: v1.4.15
-License: MIT (https://github.com/gabriel-vasile/mimetype/blob/v1.4.15/LICENSE)
+Version: v1.4.16
+License: MIT (https://github.com/gabriel-vasile/mimetype/blob/v1.4.16/LICENSE)
 
 MIT License
 
@@ -1168,8 +1168,8 @@ THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/go-co-op/gocron/v2
-Version: v2.22.0
-License: MIT (https://github.com/go-co-op/gocron/blob/v2.22.0/LICENSE)
+Version: v2.23.0
+License: MIT (https://github.com/go-co-op/gocron/blob/v2.23.0/LICENSE)
 
 MIT License
 
@@ -1210,8 +1210,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 --------------------------------------------------------------------------------
 
 Package: github.com/go-jose/go-jose/v4
-Version: v4.1.5
-License: Apache-2.0 (https://github.com/go-jose/go-jose/blob/v4.1.5/LICENSE)
+Version: v4.1.6
+License: Apache-2.0 (https://github.com/go-jose/go-jose/blob/v4.1.6/LICENSE)
 
 
                                  Apache License
@@ -1419,8 +1419,8 @@ License: Apache-2.0 (https://github.com/go-jose/go-jose/blob/v4.1.5/LICENSE)
 --------------------------------------------------------------------------------
 
 Package: github.com/go-jose/go-jose/v4/json
-Version: v4.1.5
-License: BSD-3-Clause (https://github.com/go-jose/go-jose/blob/v4.1.5/json/LICENSE)
+Version: v4.1.6
+License: BSD-3-Clause (https://github.com/go-jose/go-jose/blob/v4.1.6/json/LICENSE)
 
 Copyright (c) 2012 The Go Authors. All rights reserved.
 
@@ -2433,8 +2433,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 --------------------------------------------------------------------------------
 
 Package: github.com/golang/geo
-Version: v0.0.0-20260928092222-7d12f68cfadb
-License: Apache-2.0 (https://github.com/golang/geo/blob/7d12f68cfadb/LICENSE)
+Version: v0.0.0-20261026081726-9e1e803a26c2
+License: Apache-2.0 (https://github.com/golang/geo/blob/9e1e803a26c2/LICENSE)
 
 
                                  Apache License
@@ -3763,31 +3763,119 @@ Apache License
 
 --------------------------------------------------------------------------------
 
-Package: github.com/jinzhu/gorm
-Version: v1.9.16
-License: MIT (https://github.com/jinzhu/gorm/blob/v1.9.16/License)
+Package: github.com/jackc/pgpassfile
+Version: v1.0.0
+License: MIT (https://github.com/jackc/pgpassfile/blob/v1.0.0/LICENSE)
 
-The MIT License (MIT)
+Copyright (c) 2019 Jack Christensen
 
-Copyright (c) 2013-NOW  Jinzhu <wosmvp@gmail.com>
+MIT License
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: github.com/jackc/pgservicefile
+Version: v0.0.0-20240606120523-5a60cdf6a761
+License: MIT (https://github.com/jackc/pgservicefile/blob/5a60cdf6a761/LICENSE)
+
+Copyright (c) 2020 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: github.com/jackc/pgx/v5
+Version: v5.11.0
+License: MIT (https://github.com/jackc/pgx/blob/v5.11.0/LICENSE)
+
+Copyright (c) 2013-2021 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: github.com/jackc/puddle/v2
+Version: v2.2.2
+License: MIT (https://github.com/jackc/puddle/blob/v2.2.2/LICENSE)
+
+Copyright (c) 2018 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
@@ -3816,6 +3904,34 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: github.com/jinzhu/now
+Version: v1.1.5
+License: MIT (https://github.com/jinzhu/now/blob/v1.1.5/License)
+
+The MIT License (MIT)
+
+Copyright (c) 2013-NOW  Jinzhu <wosmvp@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
@@ -4060,8 +4176,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: github.com/klauspost/compress
-Version: v1.20.1
-License: Apache-2.0 (https://github.com/klauspost/compress/blob/v1.20.1/LICENSE)
+Version: v1.20.3
+License: Apache-2.0 (https://github.com/klauspost/compress/blob/v1.20.3/LICENSE)
 
 Copyright (c) 2012 The Go Authors. All rights reserved.
 Copyright (c) 2019 Klaus Post. All rights reserved.
@@ -4371,8 +4487,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 --------------------------------------------------------------------------------
 
 Package: github.com/klauspost/compress/internal/snapref
-Version: v1.20.1
-License: BSD-3-Clause (https://github.com/klauspost/compress/blob/v1.20.1/internal/snapref/LICENSE)
+Version: v1.20.3
+License: BSD-3-Clause (https://github.com/klauspost/compress/blob/v1.20.3/internal/snapref/LICENSE)
 
 Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.
 
@@ -4405,8 +4521,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: github.com/klauspost/compress/zstd/internal/xxhash
-Version: v1.20.1
-License: MIT (https://github.com/klauspost/compress/blob/v1.20.1/zstd/internal/xxhash/LICENSE.txt)
+Version: v1.20.3
+License: MIT (https://github.com/klauspost/compress/blob/v1.20.3/zstd/internal/xxhash/LICENSE.txt)
 
 Copyright (c) 2016 Caleb Spare
 
@@ -4434,8 +4550,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/klauspost/cpuid/v2
-Version: v2.4.0
-License: MIT (https://github.com/klauspost/cpuid/blob/v2.4.0/LICENSE)
+Version: v2.4.1
+License: MIT (https://github.com/klauspost/cpuid/blob/v2.4.1/LICENSE)
 
 The MIT License (MIT)
 
@@ -4699,8 +4815,8 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/leonelquinteros/gotext
-Version: v1.7.2
-License: MIT (https://github.com/leonelquinteros/gotext/blob/v1.7.2/LICENSE)
+Version: v1.8.0
+License: MIT (https://github.com/leonelquinteros/gotext/blob/v1.8.0/LICENSE)
 
 The MIT License (MIT)
 
@@ -5190,8 +5306,8 @@ the full license text.
 --------------------------------------------------------------------------------
 
 Package: github.com/montanaflynn/stats
-Version: v0.12.7
-License: MIT (https://github.com/montanaflynn/stats/blob/v0.12.7/LICENSE)
+Version: v0.14.0
+License: MIT (https://github.com/montanaflynn/stats/blob/v0.14.0/LICENSE)
 
 The MIT License (MIT)
 
@@ -5722,8 +5838,8 @@ License: Apache-2.0 (https://github.com/pquerna/otp/blob/v1.5.0/LICENSE)
 --------------------------------------------------------------------------------
 
 Package: github.com/prometheus/client_golang/prometheus
-Version: v1.24.1
-License: Apache-2.0 (https://github.com/prometheus/client_golang/blob/v1.24.1/LICENSE)
+Version: v1.25.0
+License: Apache-2.0 (https://github.com/prometheus/client_golang/blob/v1.25.0/LICENSE)
 
                                  Apache License
                            Version 2.0, January 2004
@@ -6138,8 +6254,8 @@ License: Apache-2.0 (https://github.com/prometheus/client_model/blob/v0.6.3/LICE
 --------------------------------------------------------------------------------
 
 Package: github.com/prometheus/common
-Version: v0.72.0
-License: Apache-2.0 (https://github.com/prometheus/common/blob/v0.72.0/LICENSE)
+Version: v0.72.1
+License: Apache-2.0 (https://github.com/prometheus/common/blob/v0.72.1/LICENSE)
 
                                  Apache License
                            Version 2.0, January 2004
@@ -7252,8 +7368,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 Package: github.com/yalue/onnxruntime_go
-Version: v1.36.0
-License: MIT (https://github.com/yalue/onnxruntime_go/blob/v1.36.0/LICENSE)
+Version: v1.38.0
+License: MIT (https://github.com/yalue/onnxruntime_go/blob/v1.38.0/LICENSE)
 
 Copyright (c) 2023 Nathan Otterness
 
@@ -7310,8 +7426,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: github.com/zitadel/oidc/v3
-Version: v3.51.12
-License: Apache-2.0 (https://github.com/zitadel/oidc/blob/v3.51.12/LICENSE)
+Version: v3.51.16
+License: Apache-2.0 (https://github.com/zitadel/oidc/blob/v3.51.16/LICENSE)
 
                                  Apache License
                            Version 2.0, January 2004
@@ -7552,8 +7668,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: go.mongodb.org/mongo-driver/v2
-Version: v2.9.1
-License: Apache-2.0 (https://github.com/mongodb/mongo-go-driver/blob/v2.9.1/LICENSE)
+Version: v2.9.2
+License: Apache-2.0 (https://github.com/mongodb/mongo-go-driver/blob/v2.9.2/LICENSE)
 
                                  Apache License
                            Version 2.0, January 2004
@@ -8888,8 +9004,8 @@ License: Apache-2.0 (https://github.com/go4org/go4/blob/a5071408f32f/LICENSE)
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/crypto
-Version: v0.57.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/crypto/+/v0.57.0:LICENSE)
+Version: v0.58.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/crypto/+/v0.58.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -8922,8 +9038,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/image
-Version: v0.46.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/image/+/v0.46.0:LICENSE)
+Version: v0.47.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/image/+/v0.47.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -8956,8 +9072,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/mod/semver
-Version: v0.41.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/mod/+/v0.41.0:LICENSE)
+Version: v0.42.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/mod/+/v0.42.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -8990,8 +9106,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/net
-Version: v0.59.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/net/+/v0.59.0:LICENSE)
+Version: v0.61.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/net/+/v0.61.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -9058,8 +9174,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/sync
-Version: v0.23.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/sync/+/v0.23.0:LICENSE)
+Version: v0.24.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/sync/+/v0.24.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -9092,8 +9208,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/sys
-Version: v0.48.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/sys/+/v0.48.0:LICENSE)
+Version: v0.49.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/sys/+/v0.49.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -9126,8 +9242,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 
 Package: golang.org/x/text
-Version: v0.42.0
-License: BSD-3-Clause (https://cs.opensource.google/go/x/text/+/v0.42.0:LICENSE)
+Version: v0.43.0
+License: BSD-3-Clause (https://cs.opensource.google/go/x/text/+/v0.43.0:LICENSE)
 
 Copyright 2009 The Go Authors.
 
@@ -9461,6 +9577,118 @@ License: Apache-2.0 (https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE)
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+--------------------------------------------------------------------------------
+
+Package: gorm.io/driver/mysql
+Version: v1.6.0
+License: MIT (https://github.com/go-gorm/mysql/blob/v1.6.0/License)
+
+The MIT License (MIT)
+
+Copyright (c) 2013-NOW  Jinzhu <wosmvp@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: gorm.io/driver/postgres
+Version: v1.6.3
+License: MIT (https://github.com/go-gorm/postgres/blob/v1.6.3/License)
+
+The MIT License (MIT)
+
+Copyright (c) 2013-NOW  Jinzhu <wosmvp@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: gorm.io/driver/sqlite
+Version: v1.6.0
+License: MIT (https://github.com/go-gorm/sqlite/blob/v1.6.0/License)
+
+The MIT License (MIT)
+
+Copyright (c) 2013-NOW  Jinzhu <wosmvp@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Package: gorm.io/gorm
+Version: v1.31.2
+License: MIT (https://github.com/go-gorm/gorm/blob/v1.31.2/LICENSE)
+
+The MIT License (MIT)
+
+Copyright (c) 2013-present  Jinzhu <wosmvp@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 

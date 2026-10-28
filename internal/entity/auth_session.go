@@ -11,7 +11,7 @@ import (
 
 	"github.com/dustin/go-humanize/english"
 	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
@@ -56,33 +56,34 @@ type Sessions []Session
 
 // Session represents an authenticated user or client session persisted in the database.
 type Session struct {
-	ID           string          `gorm:"type:VARBINARY(2048);primary_key;auto_increment:false;" json:"-" yaml:"ID"`
+	ID           string          `gorm:"type:bytes;size:2048;primaryKey;autoIncrement:false;" json:"-" yaml:"ID"`
 	authToken    string          `gorm:"-" yaml:"-"`
 	stored       bool            `gorm:"-" yaml:"-"`
-	UserUID      string          `gorm:"type:VARBINARY(42);index;default:'';" json:"UserUID" yaml:"UserUID,omitempty"`
+	UserUID      string          `gorm:"type:bytes;size:42;index;default:'';" json:"UserUID" yaml:"UserUID,omitempty"`
 	UserName     string          `gorm:"size:200;index;" json:"UserName" yaml:"UserName,omitempty"`
 	user         *User           `gorm:"-" yaml:"-"`
-	ClientUID    string          `gorm:"type:VARBINARY(42);index;default:'';" json:"ClientUID" yaml:"ClientUID,omitempty"`
+	ClientUID    string          `gorm:"type:bytes;size:42;index;default:'';" json:"ClientUID" yaml:"ClientUID,omitempty"`
 	ClientName   string          `gorm:"size:200;default:'';" json:"ClientName" yaml:"ClientName,omitempty"`
 	ClientIP     string          `gorm:"size:64;column:client_ip;index" json:"ClientIP" yaml:"ClientIP,omitempty"`
 	client       *Client         `gorm:"-" yaml:"-"`
-	AuthProvider string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
-	AuthMethod   string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
-	AuthIssuer   string          `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
-	AuthID       string          `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
+	AuthProvider string          `gorm:"type:bytes;size:128;default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
+	AuthMethod   string          `gorm:"type:bytes;size:128;default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
+	AuthIssuer   string          `gorm:"type:bytes;size:255;default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
+	AuthID       string          `gorm:"type:bytes;size:255;index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
 	AuthScope    string          `gorm:"size:1024;default:'';" json:"AuthScope" yaml:"AuthScope,omitempty"`
-	GrantType    string          `gorm:"type:VARBINARY(64);default:'';" json:"GrantType" yaml:"GrantType,omitempty"`
+	AuthAudience string          `gorm:"type:bytes;size:512;default:'';" json:"-" yaml:"AuthAudience,omitempty"`
+	GrantType    string          `gorm:"type:bytes;size:64;default:'';" json:"GrantType" yaml:"GrantType,omitempty"`
 	LastActive   int64           `json:"LastActive" yaml:"LastActive,omitempty"`
 	SessExpires  int64           `gorm:"index" json:"Expires" yaml:"Expires,omitempty"`
 	SessTimeout  int64           `json:"Timeout" yaml:"Timeout,omitempty"`
-	PreviewToken string          `gorm:"type:VARBINARY(64);column:preview_token;default:'';" json:"-" yaml:"-"`
-	AccessToken  string          `gorm:"type:VARBINARY(4096);column:access_token;default:'';" json:"-" yaml:"-"`
-	RefreshToken string          `gorm:"type:VARBINARY(2048);column:refresh_token;default:'';" json:"-" yaml:"-"`
-	IdToken      string          `gorm:"type:VARBINARY(4096);column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
+	PreviewToken string          `gorm:"type:bytes;size:64;column:preview_token;default:'';" json:"-" yaml:"-"`
+	AccessToken  string          `gorm:"type:bytes;size:4096;column:access_token;default:'';" json:"-" yaml:"-"`
+	RefreshToken string          `gorm:"type:bytes;size:2048;column:refresh_token;default:'';" json:"-" yaml:"-"`
+	IdToken      string          `gorm:"type:bytes;size:4096;column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
 	UserAgent    string          `gorm:"size:512;" json:"UserAgent" yaml:"UserAgent,omitempty"`
-	DataJSON     json.RawMessage `gorm:"type:VARBINARY(16384);" json:"-" yaml:"Data,omitempty"`
+	DataJSON     json.RawMessage `gorm:"type:bytes;size:16384;" json:"-" yaml:"Data,omitempty"`
 	data         *SessionData    `gorm:"-" yaml:"-"`
-	RefID        string          `gorm:"type:VARBINARY(16);default:'';" json:"ID" yaml:"-"`
+	RefID        string          `gorm:"type:bytes;size:16;default:'';" json:"ID" yaml:"-"`
 	LoginIP      string          `gorm:"size:64;column:login_ip" json:"LoginIP" yaml:"-"`
 	LoginAt      *time.Time      `json:"LoginAt" yaml:"-"`
 	CreatedAt    time.Time       `json:"CreatedAt" yaml:"CreatedAt"`
@@ -174,21 +175,29 @@ func SessionStatusTooManyRequests() *Session {
 
 // FindSessionByRefID finds an existing session by ref ID.
 func FindSessionByRefID(refId string) *Session {
+	m, _ := LookupSessionByRefID(refId)
+	return m
+}
+
+// LookupSessionByRefID returns the session with the specified reference ID. It returns neither a session nor
+// an error if there is no such session, and the error if the session cannot be read.
+func LookupSessionByRefID(refId string) (*Session, error) {
 	if !rnd.IsRefID(refId) {
-		return nil
+		return nil, nil
 	}
 
 	generation := CurrentAuthCacheGeneration()
 	m := &Session{cacheGeneration: &generation}
 
-	// Build query.
-	if err := UnscopedDb().Where("ref_id = ?", refId).First(m).Error; err != nil {
-		return nil
+	if err := UnscopedDb().Where("ref_id = ?", refId).First(m).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
 	}
 
 	m.stored = true
 
-	return m
+	return m, nil
 }
 
 // AuthToken returns the session's bearer token. Stored sessions read this value from
@@ -264,6 +273,32 @@ func (m *Session) CacheDuration(d time.Duration) {
 	CacheSession(m, d)
 }
 
+// errClientOwnerUnavailable is returned when the account a client belongs to cannot be read.
+var errClientOwnerUnavailable = errors.New("client owner unavailable")
+
+// resolveClient assigns the client of a client session before it is shared through the session cache,
+// keeping the auth provider and method stored with the session, and returns an error if the client or
+// its owner cannot be read.
+func (m *Session) resolveClient() error {
+	if m.client != nil || m.ClientUID == "" {
+		return nil
+	}
+
+	c, err := CachedClientByUID(m.ClientUID)
+
+	if err != nil {
+		return err
+	}
+
+	m.setClient(&c, true)
+
+	if m.UserUID != "" && m.user == nil {
+		return errClientOwnerUnavailable
+	}
+
+	return nil
+}
+
 // Cache caches the session with the default expiration duration.
 func (m *Session) Cache() {
 	m.CacheDuration(SessionCacheDuration)
@@ -328,10 +363,10 @@ func (m *Session) Updates(values any) error {
 }
 
 // BeforeCreate creates a random UID if needed before inserting a new row to the database.
-func (m *Session) BeforeCreate(scope *gorm.Scope) error {
+func (m *Session) BeforeCreate(tx *gorm.DB) error {
 	if rnd.InvalidRefID(m.RefID) {
 		m.RefID = rnd.RefID(SessionPrefix)
-		Log("session", "set ref id", scope.SetColumn("RefID", m.RefID))
+		tx.Statement.SetColumn("RefID", m.RefID)
 	}
 
 	if rnd.IsSessionID(m.ID) {
@@ -340,11 +375,18 @@ func (m *Session) BeforeCreate(scope *gorm.Scope) error {
 
 	m.Regenerate()
 
-	return scope.SetColumn("ID", m.ID)
+	tx.Statement.SetColumn("ID", m.ID)
+
+	return nil
 }
 
-// SetClient sets the client of this session.
+// SetClient sets the client of this session, including its auth provider and method.
 func (m *Session) SetClient(c *Client) *Session {
+	return m.setClient(c, false)
+}
+
+// setClient sets the client of this session and, unless keepAuth is true, its auth provider and method.
+func (m *Session) setClient(c *Client, keepAuth bool) *Session {
 	if c == nil {
 		return m
 	}
@@ -352,10 +394,24 @@ func (m *Session) SetClient(c *Client) *Session {
 	m.client = c
 	m.ClientUID = c.GetUID()
 	m.ClientName = c.ClientName
-	m.AuthProvider = c.Provider().String()
-	m.AuthMethod = c.Method().String()
+
+	if !keepAuth {
+		m.AuthProvider = c.Provider().String()
+		m.AuthMethod = c.Method().String()
+	}
+
 	m.AuthScope = c.Scope()
-	m.SetUser(c.User())
+
+	// Keep an owner already resolved, and the owner's UID if its account cannot be read.
+	if u := m.user; u != nil && c.UserUID != "" && u.UserUID == c.UserUID {
+		m.SetUser(u)
+	} else if u = c.User(); u.HasUID() || c.UserUID == "" {
+		m.SetUser(u)
+	} else {
+		m.user = nil
+		m.UserUID = c.UserUID
+		m.UserName = c.UserName
+	}
 
 	return m
 }
@@ -382,8 +438,8 @@ func (m *Session) GetClient() *Client {
 	// Get client ID.
 	uid := m.ClientUID
 
-	if c := FindClientByUID(uid); c != nil {
-		m.SetClient(c)
+	if c, err := CachedClientByUID(uid); err == nil {
+		m.setClient(&c, true)
 		return m.client
 	}
 
@@ -436,6 +492,16 @@ func (m *Session) NoClient() bool {
 	return !m.HasClient()
 }
 
+// IsOAuthApp reports whether the session is an access token of an app connected with the OAuth app flow.
+func (m *Session) IsOAuthApp() bool {
+	return m != nil && authn.Provider(m.AuthProvider) == authn.ProviderOAuthApp
+}
+
+// HasAudience reports whether the session was issued for a specific resource only, such as an app access token.
+func (m *Session) HasAudience() bool {
+	return m != nil && m.AuthAudience != ""
+}
+
 // IsClient checks if this session authenticates an API client.
 func (m *Session) IsClient() bool {
 	return authn.Provider(m.AuthProvider).IsClient()
@@ -450,9 +516,9 @@ func (m *Session) IsApplication() bool {
 }
 
 // clientRole resolves the client role for this session. When resolve is true it
-// may perform a one-time lookup via FindClientByUID; callers that already
-// depend on GetClientRole must pass resolve=false to avoid the recursive loop
-// that previously caused stack overflows between GetClient() and GetClientRole().
+// may perform a one-time lookup via CachedClientByUID; callers that already
+// depend on GetClientRole must pass resolve=false to avoid a recursive loop
+// between GetClient() and GetClientRole().
 func (m *Session) clientRole(resolve bool) acl.Role {
 	if m == nil {
 		return acl.RoleNone
@@ -464,8 +530,8 @@ func (m *Session) clientRole(resolve bool) acl.Role {
 
 	if !resolve || m.ClientUID == "" {
 		// Skip lookup to avoid recursive loop.
-	} else if c := FindClientByUID(m.ClientUID); c != nil {
-		m.SetClient(c)
+	} else if c, err := CachedClientByUID(m.ClientUID); err == nil {
+		m.setClient(&c, true)
 		return c.AclRole()
 	}
 
@@ -482,6 +548,18 @@ func (m *Session) clientRole(resolve bool) acl.Role {
 	}
 
 	return acl.RoleNone
+}
+
+// ClientDisabled reports whether the session belongs to a registered client that is missing, deleted, or
+// disabled, based on the cached client rather than the copy held by the session.
+func (m *Session) ClientDisabled() bool {
+	if m == nil || m.ClientUID == "" {
+		return false
+	}
+
+	c, err := CachedClientByUID(m.ClientUID)
+
+	return err != nil || c.Disabled()
 }
 
 // GetUser returns the related user entity.
@@ -675,6 +753,33 @@ func (m *Session) ScopePermitsDownload() bool {
 	return m.ValidateScope(acl.ResourcePhotos, perms) || m.ValidateScope(acl.ResourceFiles, perms)
 }
 
+// ScopePermitsPreview checks if the scope includes viewing pictures or their files, the two resources
+// thumbnails and videos authorize against. The preview endpoints apply their own per-resource scope check.
+func (m *Session) ScopePermitsPreview() bool {
+	if m.NoScope() {
+		return true
+	}
+
+	perms := acl.Permissions{acl.ActionView}
+
+	return m.ValidateScope(acl.ResourcePhotos, perms) || m.ValidateScope(acl.ResourceFiles, perms)
+}
+
+// RolePermitsPreview checks if the client role of the session may view pictures or their files, as the
+// REST API requires. The preview endpoints apply their own per-resource role check.
+func (m *Session) RolePermitsPreview() bool {
+	role := m.GetClientRole()
+	perms := acl.Permissions{acl.ActionView}
+
+	return acl.Rules.AllowAny(acl.ResourcePhotos, role, perms) || acl.Rules.AllowAny(acl.ResourceFiles, role, perms)
+}
+
+// SignedPreview reports whether the session belongs to a registered client without an account and has a
+// valid ID, so it receives signed preview tokens instead of a stored one.
+func (m *Session) SignedPreview() bool {
+	return m.HasClient() && m.NoUser() && m.IsClient() && rnd.IsSessionID(m.ID)
+}
+
 // SetScope sets a custom authentication scope.
 func (m *Session) SetScope(scope string) *Session {
 	if scope == "" {
@@ -720,7 +825,8 @@ func (m *Session) ChangePassword(newPw string) (err error) {
 	return nil
 }
 
-// SetPreviewToken updates the preview token if not empty.
+// SetPreviewToken updates the preview token if not empty, or generates one if the session has none and
+// does not receive signed preview tokens.
 func (m *Session) SetPreviewToken(token string) *Session {
 	if m.ID == "" {
 		return m
@@ -729,7 +835,7 @@ func (m *Session) SetPreviewToken(token string) *Session {
 	if token != "" {
 		m.PreviewToken = token
 		PreviewToken.Set(m.ID, token)
-	} else if m.PreviewToken == "" {
+	} else if m.PreviewToken == "" && !m.SignedPreview() {
 		m.PreviewToken = GenerateToken()
 		PreviewToken.Set(m.ID, m.PreviewToken)
 	}
@@ -871,7 +977,7 @@ func (m *Session) VerifyStored() error {
 		return nil
 	}
 
-	var found int
+	var found int64
 
 	if err := UnscopedDb().Model(&Session{}).Where("id = ?", m.ID).Count(&found).Error; err != nil {
 		return err

@@ -9,6 +9,7 @@ import (
 
 	"github.com/photoprism/photoprism/internal/commands/catalog"
 	"github.com/photoprism/photoprism/internal/config"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // ShowCommandsCommand configures the command name, flags, and action.
@@ -88,10 +89,10 @@ func showCommandsAction(ctx *cli.Context) error {
 			continue
 		}
 		if nested {
-			node := catalog.BuildNode(c, 1, "photoprism", includeHidden, globalFlags)
+			node := catalog.BuildNode(c, 1, "photoprism", includeHidden)
 			tree = append(tree, node)
 		} else {
-			flat = append(flat, catalog.BuildFlat(c, 1, "photoprism", includeHidden, globalFlags)...)
+			flat = append(flat, catalog.BuildFlat(c, 1, "photoprism", includeHidden)...)
 		}
 	}
 
@@ -100,9 +101,9 @@ func showCommandsAction(ctx *cli.Context) error {
 		var cmds json.RawMessage
 		var err error
 		if nested {
-			cmds, err = json.Marshal(tree)
+			cmds, err = report.MarshalJSON(tree)
 		} else {
-			cmds, err = json.Marshal(flat)
+			cmds, err = report.MarshalJSON(flat)
 		}
 		if err != nil {
 			return err
@@ -113,7 +114,7 @@ func showCommandsAction(ctx *cli.Context) error {
 			GlobalFlags: globalFlags,
 			Commands:    cmds,
 		}
-		b, err := json.Marshal(out)
+		b, err := report.MarshalJSON(out)
 		if err != nil {
 			return err
 		}

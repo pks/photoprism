@@ -369,17 +369,17 @@ func TestProcessUserUploadAlbums(t *testing.T) {
 	file, err := entity.FirstFileByHash(hash)
 	require.NoError(t, err)
 
-	var count int
+	var count int64
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("photo_uid = ? AND album_uid = ?", file.PhotoUID, album.AlbumUID).Count(&count).Error)
-	assert.Equal(t, 1, count)
+	assert.EqualValues(t, 1, count)
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("album_uid = ?", missing).Count(&count).Error)
-	assert.Equal(t, 0, count)
+	assert.EqualValues(t, 0, count)
 
 	// The picture is added to a new album of the user, and only that album's backup file is written.
 	var created entity.Album
 	require.NoError(t, entity.UnscopedDb().Where("album_title = ? AND created_by = ?", title, user.UserUID).First(&created).Error)
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("photo_uid = ? AND album_uid = ?", file.PhotoUID, created.AlbumUID).Count(&count).Error)
-	assert.Equal(t, 1, count)
+	assert.EqualValues(t, 1, count)
 	createdYaml, _, err := created.YamlFileName(conf.BackupAlbumsPath())
 	require.NoError(t, err)
 	assert.FileExists(t, createdYaml)
@@ -436,13 +436,13 @@ func TestProcessUserUploadAlbumLimit(t *testing.T) {
 	file, err := entity.FirstFileByHash(hash)
 	require.NoError(t, err)
 
-	var count int
+	var count int64
 	require.NoError(t, entity.UnscopedDb().Model(&entity.Album{}).Where("album_title LIKE ?", prefix+"%").Count(&count).Error)
-	assert.Equal(t, MaxUploadAlbums, count)
+	assert.EqualValues(t, MaxUploadAlbums, count)
 	require.NoError(t, entity.UnscopedDb().Model(&entity.PhotoAlbum{}).Where("photo_uid = ?", file.PhotoUID).Count(&count).Error)
-	assert.Equal(t, MaxUploadAlbums, count)
+	assert.EqualValues(t, MaxUploadAlbums, count)
 	require.NoError(t, entity.UnscopedDb().Model(&entity.Album{}).Where("album_title = ?", titles[MaxUploadAlbums]).Count(&count).Error)
-	assert.Equal(t, 0, count)
+	assert.EqualValues(t, 0, count)
 }
 
 func TestUploadBatchName(t *testing.T) {
@@ -654,6 +654,69 @@ func TestProcessUserUploadStagedFiles(t *testing.T) {
 		assert.Equal(t, http.StatusInsufficientStorage, result.Code)
 		assert.Contains(t, result.Body.String(), i18n.Msg(i18n.ErrInsufficientStorage))
 		assert.FileExists(t, filepath.Join(dir, "upload.jpg"))
+	})
+	t.Run("UnsupportedDest", func(t *testing.T) {
+		// The upload path of the user takes precedence over the import-dest option, so both are set.
+		dest := conf.Options().ImportDest
+		stored := entity.FindUserByUID(user.UserUID)
+		require.NotNil(t, stored)
+		t.Cleanup(func() {
+			conf.Options().ImportDest = dest
+			assert.NoError(t, entity.Db().Model(&entity.User{}).Where("user_uid = ?", user.UserUID).
+				UpdateColumn("upload_path", stored.UploadPath).Error)
+			entity.FlushUserSessionCache(user.UserUID)
+		})
+		conf.Options().ImportDest = "a:b"
+		require.NoError(t, entity.Db().Model(&entity.User{}).Where("user_uid = ?", user.UserUID).
+			UpdateColumn("upload_path", "a:b").Error)
+		entity.FlushUserSessionCache(user.UserUID)
+		token, dir := stage(t)
+		result := AuthenticatedRequestWithBody(app, http.MethodPut, "/api/v1/users/"+user.UserUID+"/upload/"+token, `{}`, sess.AuthToken())
+		assert.Equal(t, http.StatusBadRequest, result.Code)
+		assert.Contains(t, result.Body.String(), i18n.Msg(i18n.ErrUploadFailed))
+		assert.FileExists(t, filepath.Join(dir, "upload.jpg"))
+	})
+	t.Run("ImportPathInOriginals", func(t *testing.T) {
+		// Originals that contain the upload folder outside a storage folder refuse the import.
+		originals := conf.Options().OriginalsPath
+		t.Cleanup(func() { conf.Options().OriginalsPath = originals })
+		conf.Options().OriginalsPath = conf.StoragePath()
+		token, dir := stage(t)
+		result := AuthenticatedRequestWithBody(app, http.MethodPut, "/api/v1/users/"+user.UserUID+"/upload/"+token, `{}`, sess.AuthToken())
+		assert.Equal(t, http.StatusBadRequest, result.Code)
+		assert.Contains(t, result.Body.String(), i18n.Msg(i18n.ErrUploadFailed))
+		assert.FileExists(t, filepath.Join(dir, "upload.jpg"))
+	})
+	t.Run("StorageInOriginals", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode.")
+		}
+
+		// A storage folder in originals is marked with a file the walks skip, so its uploads are imported.
+		storage := conf.Options().StoragePath
+		t.Cleanup(func() { conf.Options().StoragePath = storage })
+		conf.Options().OriginalsPath = t.TempDir()
+		conf.Options().StoragePath = filepath.Join(conf.OriginalsPath(), "storage")
+		conf.Options().SidecarPath = t.TempDir()
+		conf.Options().ImportAllow = ""
+		require.NoError(t, fs.MkdirAll(conf.StoragePath()))
+		require.NoError(t, os.WriteFile(filepath.Join(conf.StoragePath(), fs.PPStorageFilename), []byte("1"), fs.ModeFile))
+		token, dir := stage(t)
+		hash := fs.Hash(filepath.Join(dir, "upload.jpg"))
+		t.Cleanup(func() {
+			file, err := entity.FirstFileByHash(hash)
+			if err != nil {
+				return
+			}
+			entity.UnscopedDb().Unscoped().Delete(&entity.File{}, "photo_id = ?", file.PhotoID)
+			entity.UnscopedDb().Unscoped().Delete(&entity.Details{}, "photo_id = ?", file.PhotoID)
+			entity.UnscopedDb().Unscoped().Delete(&entity.Photo{}, "id = ?", file.PhotoID)
+		})
+
+		result := AuthenticatedRequestWithBody(app, http.MethodPut, "/api/v1/users/"+user.UserUID+"/upload/"+token, `{}`, sess.AuthToken())
+		assert.Equal(t, http.StatusOK, result.Code, result.Body.String())
+		_, err := entity.FirstFileByHash(hash)
+		assert.NoError(t, err)
 	})
 	t.Run("Canceled", func(t *testing.T) {
 		require.NoError(t, mutex.IndexWorker.Start())

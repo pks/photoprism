@@ -1,0 +1,207 @@
+import * as media from "common/media";
+
+const mediaTypes = new Set([media.Image, media.Raw, media.Vector, media.Document, media.Animated, media.Live, media.Video, media.Audio]);
+const formatMediaTypes = new Map([
+  [media.Image, ["jpg", "jpeg", "jxl", "thm", "png", "gif", "tiff", "psd", "bmp", "cin", "mpo", "avif", "avifs", "heif", "heic", "heics", "webp", "insp"]],
+  [media.Raw, ["raw", "dng", "3fr", "ari", "arw", "bay", "cap", "crw", "cr2", "cr3", "data", "dcs", "dcr", "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos", "mrw", "nef", "nrw", "obm", "orf", "ori", "pef", "ptx", "pxn", "r3d", "raf", "rwl", "rwz", "rw2", "srf", "srw", "sr2", "x3f"]],
+  [media.Vector, ["svg", "ai", "ps", "eps"]],
+  [media.Document, ["pdf"]],
+  [media.Video, ["webm", "avc", "hvc", "hev", "vvc", "evc", "avi", "av1", "vp8", "vp9", "mpg", "mjpg", "mp2", "mp4", "m4v", "mkv", "mov", "mxf", "3gp", "3g2", "flv", "m2t", "mts", "ogv", "asf", "wmv", "dv", "insv", "lrv"]],
+  [media.Sidecar, ["xmp", "xml", "aae", "yml", "json", "txt", "nfo", "md"]],
+].flatMap(([type, formats]) => formats.map((format) => [format, type])));
+
+// canExport reads the session-filtered Export feature flag.
+export function canExport(config) {
+  return config?.values?.settings?.features?.export === true;
+}
+
+// fileFormat normalizes the file's stored format for export options.
+function fileFormat(file) {
+  const stored = typeof file.FileType === "string" ? file.FileType.toLowerCase() : "";
+  const format = stored === "raw" ? (file.Name?.match(/\.([^./\\]+)$/)?.[1] || stored).toLowerCase() : stored;
+  return format === "jpeg" ? media.FormatJpeg : format;
+}
+
+// fileMediaType derives missing media types from the format before the video flag.
+function fileMediaType(file) {
+  if (file.MediaType) {
+    return file.MediaType;
+  }
+  const type = formatMediaTypes.get(typeof file.FileType === "string" ? file.FileType.toLowerCase() : "");
+  return type || (file.Video ? media.Video : "");
+}
+
+// isMediaFile excludes metadata sidecars from the full file list.
+function isMediaFile(file) {
+  return !!file && !file.Sidecar && mediaTypes.has(fileMediaType(file));
+}
+
+// isAvailable checks whether a file can be used as an export source.
+function isAvailable(file) {
+  return !!file.UID && !!file.Hash && !!file.Name && !file.Missing && !file.Error && !file.DeletedAt;
+}
+
+// isRaster checks for a JPEG or PNG image usable as a thumbnail source.
+function isRaster(file) {
+  return !file.Video && !isAnimatedFile(file) && fileMediaType(file) === media.Image && [media.FormatJpeg, media.FormatPng].includes(fileFormat(file));
+}
+
+// isAnimatedFile recognizes indexed image animations by their frames or duration.
+function isAnimatedFile(file) {
+  return fileMediaType(file) === media.Animated || (fileMediaType(file) === media.Image && (file.Frames > 1 || file.Duration > 0));
+}
+
+// knownDimension returns a positive integer dimension or null when unknown.
+function knownDimension(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+// sourceInfo snapshots the file information needed by export consumers.
+function sourceInfo(file) {
+  return {
+    uid: file.UID,
+    root: file.Root,
+    name: file.Name,
+    originalName: file.OriginalName || "",
+    hash: file.Hash,
+    format: fileFormat(file),
+    mediaType: isAnimatedFile(file) ? media.Animated : fileMediaType(file),
+    width: knownDimension(file.Width),
+    height: knownDimension(file.Height),
+    bytes: Number.isSafeInteger(file.Size) && file.Size >= 0 ? file.Size : null,
+    video: !!file.Video,
+    codec: typeof file.Codec === "string" ? file.Codec : "",
+    duration: Number.isFinite(file.Duration) && file.Duration > 0 ? file.Duration : null,
+  };
+}
+
+// nameStem removes the last extension while preserving the relative directory.
+function nameStem(name) {
+  if (typeof name !== "string") {
+    return "";
+  }
+  const dot = name.lastIndexOf(".");
+  return dot > name.lastIndexOf("/") ? name.substring(0, dot) : name;
+}
+
+// preferredPreview chooses a unique candidate in the preferred available raster format.
+function preferredPreview(original, candidates) {
+  const preferred = fileMediaType(original) === media.Vector ? media.FormatPng : media.FormatJpeg;
+  const matches = candidates.filter((file) => fileFormat(file) === preferred);
+  const available = matches.length ? matches : candidates;
+  return available.length === 1 ? available[0] : null;
+}
+
+// findPreview resolves an image by full original name or an unambiguous stem.
+function findPreview(original, originals, rasters) {
+  const exact = rasters.filter((file) => nameStem(file.Name) === original.Name);
+  if (exact.length > 0) {
+    return preferredPreview(original, exact);
+  }
+
+  const stem = nameStem(original.Name);
+  const owned = rasters.filter((file) => file.Root === "/" && nameStem(file.Name) === stem);
+  if (owned.length) {
+    return preferredPreview(original, owned);
+  }
+  if (originals.filter((file) => !isRaster(file) && nameStem(file.Name) === stem).length !== 1) {
+    return null;
+  }
+
+  const matches = rasters.filter((file) => nameStem(file.Name) === stem && !originals.some((owner) => owner.Name === stem));
+  return preferredPreview(original, matches);
+}
+
+// fileOption describes an existing original or preview without generating files.
+function fileOption(kind, source) {
+  return {
+    id: `${kind}:${source.uid}`,
+    kind,
+    label: kind === "original" ? "Original" : "Full-Size Preview",
+    source,
+    format: source.format,
+    width: source.width,
+    height: source.height,
+  };
+}
+
+// compareBoxes chooses the smallest bounding box, then the size code.
+function compareBoxes(a, b) {
+  return a.w * a.h - b.w * b.h || (a.size < b.size ? -1 : a.size > b.size ? 1 : 0);
+}
+
+// thumbnailOptions fits deliverable sizes to the oriented source and merges duplicates.
+function thumbnailOptions(source, thumbs, options, thumbLimit) {
+  if (!source.width || !source.height) {
+    return [];
+  }
+
+  const sizes = thumbs
+    .filter((thumb) => typeof thumb?.size === "string" && thumb.size.startsWith("fit_") && knownDimension(thumb.w) && knownDimension(thumb.h) && thumb.w <= thumbLimit && thumb.h <= thumbLimit)
+    .sort(compareBoxes);
+  const outputs = new Map();
+
+  for (const thumb of sizes) {
+    const scale = Math.min(1, thumb.w / source.width, thumb.h / source.height);
+    // libvips rounds fitted dimensions to the nearest pixel, with a one-pixel minimum.
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const key = `${width}x${height}`;
+
+    if (outputs.has(key) || options.some((option) => option.format === media.FormatJpeg && option.width === width && option.height === height)) {
+      continue;
+    }
+
+    outputs.set(key, {
+      id: `thumbnail:${source.uid}:${thumb.size}`,
+      kind: "thumbnail",
+      label: width === source.width && height === source.height ? "Full Size" : thumb.usage || thumb.size,
+      source,
+      format: media.FormatJpeg,
+      width,
+      height,
+      size: thumb.size,
+    });
+  }
+
+  return Array.from(outputs.values()).sort((a, b) => a.width * a.height - b.width * b.height || (a.size < b.size ? -1 : a.size > b.size ? 1 : 0));
+}
+
+// buildExportGroups builds ordered export choices within the thumbnail serving limit.
+export function buildExportGroups(files, thumbs = [], thumbLimit = 1920) {
+  if (!Array.isArray(files)) {
+    return [];
+  }
+
+  const originals = files.filter((file) => isMediaFile(file) && file.Root === "/");
+  const rasters = files.filter((file) => isMediaFile(file) && ["/", "sidecar"].includes(file.Root) && isAvailable(file) && isRaster(file));
+  const groups = [];
+
+  for (const original of originals.filter(isAvailable)) {
+    const source = sourceInfo(original);
+    const options = [fileOption("original", source)];
+    const still = source.mediaType !== media.Audio;
+    const nativeStill = isRaster(original) || (source.mediaType === media.Live && [media.FormatJpeg, media.FormatPng].includes(source.format));
+    const preview = still && !nativeStill ? findPreview(original, originals, rasters) : null;
+    const thumbnailSource = nativeStill ? source : preview ? sourceInfo(preview) : null;
+
+    const previewOwned = preview?.Root === "/";
+    if (preview && !previewOwned) {
+      options.push({ ...fileOption("preview", thumbnailSource), label: source.format === "pdf" ? "Full-Size Preview (First Page)" : "Full-Size Preview" });
+    }
+    if (thumbnailSource && still && !previewOwned) {
+      options.push(...thumbnailOptions(thumbnailSource, Array.isArray(thumbs) ? thumbs : [], options, thumbLimit));
+    }
+
+    groups.push({
+      id: source.uid,
+      original: source,
+      previewMissing: still && !thumbnailSource,
+      thumbnailSource,
+      options,
+      selected: "",
+    });
+  }
+
+  return groups;
+}

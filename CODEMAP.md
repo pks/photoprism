@@ -1,6 +1,6 @@
 PhotoPrism — Backend CODEMAP
 
-**Last Updated:** October 5, 2026
+**Last Updated:** October 23, 2026
 
 Purpose
 - Give agents and contributors a fast, reliable map of where things live and how they fit together, so you can add features, fix bugs, and write tests without spelunking.
@@ -22,7 +22,7 @@ Executables & Entry Points
 - CLI app (binary name across docs/images is `photoprism`):
   - Main: `cmd/photoprism/photoprism.go`
   - Commands registry: `internal/commands/commands.go` (array `commands.PhotoPrism`)
-  - Catalog helpers: `internal/commands/catalog` (DTOs and builders to enumerate commands/flags; Markdown renderer)
+  - Catalog helpers: `internal/commands/catalog` (DTOs and builders to enumerate commands/flags; Markdown renderer); also feeds the MCP `list_cli_commands` tool
 - Web server:
   - Startup: `internal/commands/start.go` → `server.Start` (starts HTTP(S), workers, session cleanup)
   - HTTP server: `internal/server/start.go` (compression, security, healthz, readiness, TLS/AutoTLS/unix socket)
@@ -34,8 +34,8 @@ High-Level Package Map (Go)
 - `internal/commands` — CLI command definitions and orchestration (`start`, `index`, `import`, `migrate`, etc.); `commands.go` wires them into the app and subpackages like `catalog` emit CLI documentation.
 - `internal/server` — HTTP server, middleware, routing, static/ui/webdav
 - `internal/config` — configuration, flags/env/options, client config, DB init/migrate
-- `internal/entity` — GORM v1 models, queries, search helpers, migrations
-  - Label lookup helpers now live in `internal/entity/label*.go`; reuse `FindLabels(...)`, `FindLabelIDs(...)`, and `LabelSlugs(...)` for homophone-aware exact-name/slug resolution instead of duplicating slug SQL in callers.
+- `internal/entity` — GORM v2 models, queries, search helpers, migrations
+  - Label lookup helpers live in `internal/entity/label*.go`; reuse `FindLabels(...)`, `FindLabelIDs(...)`, and `LabelSlugs(...)` for homophone-aware exact-name/slug resolution instead of duplicating slug SQL in callers.
 - `internal/photoprism` — core domain logic (indexing, import, faces, thumbnails, cleanup)
 - `internal/ai/vision` — multi-engine computer vision pipeline (models, adapters, schema). Adapter docs: [`internal/ai/vision/openai/README.md`](internal/ai/vision/openai/README.md) and [`internal/ai/vision/ollama/README.md`](internal/ai/vision/ollama/README.md).
 - `internal/ai/classify` — fixed-taxonomy ONNX image labeling, model registry, embedded vocabulary, and preprocessing. See [`internal/ai/classify/README.md`](internal/ai/classify/README.md).
@@ -43,13 +43,14 @@ High-Level Package Map (Go)
 - `internal/ai/onnx` — shared ONNX model description and session construction: artifact identity and checksum, graph inspection and verification, preprocessing contract, runtime loading, and execution-provider selection. Consumed by `internal/ai/face`, `internal/ai/classify`, and `internal/ai/nsfw`. See [`internal/ai/onnx/README.md`](internal/ai/onnx/README.md).
 - `internal/ai/face` — face detection and embedding: the detector registry selected by `FACE_DETECTOR`, the embedding-model registry selected by `FACE_MODEL`, landmark alignment, and distance thresholds. See [`internal/ai/face/README.md`](internal/ai/face/README.md).
 - `internal/workers` — background schedulers (index, vision, sync, meta, backup)
-- `internal/auth` — ACL, sessions, OIDC
+- `internal/auth` — ACL, sessions, OIDC, OAuth app flow
+- `internal/mcp` — MCP server: reference tools and resources (public mode, stdio) and the library server with per-tool authorization (`authorize.go`). Docs: `internal/mcp/README.md`.
 - `internal/service` — cluster/portal, maps, hub, webdav
   - WebDAV client docs: `internal/service/webdav/README.md`
   - Key WebDAV client behavior:
     - Recursive directory discovery prefers `PROPFIND Depth: infinity` and falls back to iterative `Depth: 1` traversal for incompatible servers.
     - Hidden dotfiles and entries inside hidden dot-directories are excluded from listings and fallback traversal because they often represent lock files, partial uploads, or provider metadata.
-    - Service timeouts apply to control operations (`Files`, `Directories`, `Mkdir`, `Delete`), while `Upload` and `Download` avoid total request deadlines and instead use connection-level safeguards.
+    - Service timeouts apply to control operations (`Files`, `Directories`, `Mkdir`, `Delete`), while `Upload` and `Download` have no total request deadline; they end when less than 1 MiB moves within five minutes, on top of connection-level safeguards. With the timeout "None", control operations are capped at 30 minutes.
 - `internal/event` — logging, pub/sub, audit; canonical outcome tokens live in `pkg/log/status` (use helpers like `status.Error(err)` when the sanitized message should be the outcome). Docs: `internal/event/README.md`.
 - `internal/ffmpeg`, `internal/thumb`, `internal/meta`, `internal/form`, `internal/mutex` — media, thumbs, metadata, forms, coordination. Docs: `internal/ffmpeg/README.md`, `internal/meta/README.md`.
 - `pkg/*` — reusable utilities (must never import from `internal/*`), e.g. `pkg/clean`, `pkg/enum`, `pkg/fs`, `pkg/txt`, `pkg/http/header`, `pkg/authn/authtoken`
@@ -72,11 +73,13 @@ HTTP API
   - Use full `/api/v1/...` in every `@Router` annotation (match the group prefix).
   - Annotate only public handlers; skip internal helpers to avoid stray generic paths.
   - `make swag-json` runs a stabilization step (`swaggerfix`) removing duplicated enums for `time.Duration`; API uses integer nanoseconds for durations.
+  - `.swaggo` in the repo root maps types whose JSON differs from their Go fields, such as `entity.DeletedAt` (a timestamp or null), to the type clients see; the edition Makefiles pass it with `--overridesFile ../.swaggo`.
 - `/api/v1/metrics` (see `internal/api/metrics.go`) exposes Prometheus metrics, including cached filesystem/account usage derived from `config.Usage()`, registered user/guest totals, and portal cluster node counts when `NodeRole=portal`; the handler returns the standard Prometheus exposition content type (`text/plain; version=0.0.4`).
 - Common groups in `routes.go`: sessions, OAuth/OIDC, config, users, services, thumbnails, video, downloads/zip, index/import, photos/files/labels/subjects/faces, batch ops, cluster, technical (metrics, status, echo).
 - Hidden search behavior (used by the hidden route under the configured frontend URI, default `/library/hidden` for CE/Plus/Pro and `/portal/hidden` for Portal) is implemented in `internal/entity/search/photos.go`:
   - `frm.Hidden` enforces `photos.photo_quality = -1` and `photos.deleted_at IS NULL`.
   - Non-hidden searches exclude errored files by default (`files.file_error = ''`) unless `frm.Error` is explicitly set.
+- Downloads: `internal/api/download.go` (`GET /api/v1/dl/{hash}`); `?format=avc` returns the AVC rendition of a video, live photo, or animation (`download_avc.go`), resolved like playback by `resolveVideo` (`video_source.go`, shared with `video.go`). Thumbnail attachments (`/t/...?download=1`) are named `<stem>_<size>.jpg` by `thumbDownloadName` in `thumbnails.go`. The Lightbox Export dialog uses both; see `frontend/CODEMAP.md`.
 - Search DTOs in `internal/entity/search/photos_results.go` expose `FileError` (`files.file_error`) so clients can render hidden reasons without loading full file details first.
 
 Configuration & Flags
@@ -99,7 +102,7 @@ Configuration & Flags
   - CDN behavior: Requests carrying CDN headers are rejected with `404` to prevent intermediary cache mix-ups between public and session-specific config payloads.
   - Assembly: Built from `internal/config/client_config.go` (not a direct serialization of Options) plus extension values registered via `config.Register` in `internal/config/extensions.go`.
   - Updates: Back-end calls `UpdateClientConfig()` to publish "config.updated" over websockets after changes (see `internal/api/config_options.go` and `internal/api/config_settings.go`).
-  - ACL/mode aware: Values are filtered by user/session and may differ for public vs. authenticated users.
+  - ACL/mode aware: Values are filtered by user/session and may differ for public vs. authenticated users. Feature flags such as `Export` are shaped per session by `Settings.ApplyACL` / `ApplyScope` (`internal/config/customize`), and `thumbLimit` tells the client the largest thumbnail size the server renders.
   - Don’t expose secrets: Treat it as client-visible; avoid sensitive data. To add fields, extend client values via `config.Register` rather than exposing Options directly.
   - Refresh cadence: The web UI (non‑mobile) also polls for updates every 10 minutes via `$config.update()` in `frontend/src/app.js`, complementing the websocket push.
 - OIDC Groups (Pro-Only)
@@ -108,17 +111,19 @@ Configuration & Flags
   - Overage: if `_claim_names.groups` is present and no groups are returned, login fails when required groups are configured; Graph fetch is not implemented yet.
 
 Database & Migrations
-- Driver: GORM v1 (`github.com/jinzhu/gorm`). No `WithContext`. Use `db.Raw(stmt).Scan(&nop)` for raw SQL.
-- Entities and helpers: `internal/entity/*.go` and subpackages (`query`, `search`, `sortby`).
+- Driver: GORM v2 (`gorm.io/gorm`, MySQL and SQLite dialectors, plus experimental PostgreSQL through `gorm.io/driver/postgres` with pgx) opened by `entity.OpenDb` with `entity.GormConfig()`. No `WithContext`. Use `db.Exec(stmt)` for raw SQL. Usage rules: `.claude/rules/go-code-style.md` ("GORM v2 Usage").
+- Entities and helpers: `internal/entity/*.go` and subpackages (`query`, `search`, `sortby`; `sqlcount` counts statements in tests). Branch per driver on `entity.DbDialect()`, which returns a `dsn.Dialect*` constant.
 - Migrations engine: `internal/entity/migrate/*` — run via `config.MigrateDb()`; CLI: `photoprism migrate` / `photoprism migrations`.
-- DB init/migrate flow: `internal/config/config_db.go` chooses driver/DSN, sets `gorm:table_options`, then `entity.InitDb(migrate.Opt(...))`.
+- Backups, restores and transfers: `internal/photoprism/backup/*` (dumps), `entity.Tables.Transfer` (`internal/entity/entity_transfer.go`, copies the index between databases); CLI: `photoprism database backup|restore|transfer`.
+- DB init/migrate flow: `internal/config/config_db.go` chooses driver/DSN and opens the connection, then `entity.InitDb(migrate.Opt(...))`; MySQL table options are set on the migration session.
 
 AuthN/Z & Sessions
 - Session model and cache: `internal/entity/auth_session*` and `internal/auth/session/*` (cleanup worker).
   - `internal/entity/auth_session_jwt.go` builds transient sessions from portal-issued JWTs; used by `internal/api/api_auth_jwt.go` when nodes authenticate portal requests.
 - ACL: `internal/auth/acl/*` — roles, grants, scopes; use constants; avoid logging secrets, compare tokens constant‑time; for scope checks use `acl.ScopePermits` / `ScopeAttrPermits` instead of rolling your own parsing.
 - OIDC: `internal/auth/oidc/*`.
-- URL tokens (signed downloads, previews): `pkg/authn/authtoken` is the dependency-free primitive that mints/verifies the bunny.net-compatible HMAC-SHA256 token format (docs: `pkg/authn/authtoken/README.md`); `internal/auth/tokens` holds the app-level wiring — a generic `Signer` (key + signature path) with one instance per kind (`Download` today, previews next), the delivery policy (`DownloadToken`/`SignDownload`/`VerifyDownload`/`IsCoarseDownload`), and `Derive` for the not-yet-signed preview token. Full details, including the delivery rules and test gotchas, are in `internal/auth/tokens/README.md`. It is a Propagate-configured leaf like `thumb`/`dl`/`ttl`, so it imports neither `config` nor `get`: `Config.Propagate` sets the signer key/path plus `tokens.PublicMode`/`CoarseDownload`, and config owns `Config.TokenSigningKey` (the shared `config/keys/signing.key` secret) and `DownloadTokenMaxAge` (the `download-token-maxage` option, effective value in `ttl.DownloadToken`). Download tokens are **stateless** — no per-session/user storage. Request-side resolution in `internal/api/auth_tokens.go`: `AuthDownload(c) (sess, valid)` is the merged gate the endpoints use (session-or-coarse authorization + the resolved session in one call, auditing a denial centrally like `AuthAny`), `InvalidDownloadToken` is a thin wrapper, and `DownloadSession` resolves a signed `?t=` token to its session — accepting, before the token, a **Portal cluster JWT in a request header** (`authAnyJWT` requiring `acl.AccessAll` on files, so only a trusted full-access principal qualifies; a transient JWT session can't back a `?t=` token, and only JWTs — not arbitrary bearer/Basic-auth headers — take this path, which otherwise falls through to `?t=`). Scoped consumers: `DownloadAlbum` (`internal/api/download_album.go`), `GetDownload` (`internal/api/download.go`), `GetPhotoDownload` (`internal/api/photos.go`), `ZipDownload` (`internal/api/zip.go`).
+- OAuth app flow (authorization code with PKCE for apps and MCP clients): `internal/auth/oauth/*` — PKCE, authorize parameter bounds, redirect URI rules, hashed single-use codes stored as `entity.AuthCode` (`auth_codes`), app grants with rotating refresh tokens (`entity.Grant`, `auth_grants`) and one-hour access tokens confined to the MCP endpoint by their audience (`entity.FindSession` refuses them; `FindAudienceSession`, `api.AuthAudience`); see `internal/auth/oauth/README.md`.
+- URL tokens (signed downloads and previews): `pkg/authn/authtoken` mints/verifies the bunny.net-compatible HMAC-SHA256 format; `internal/auth/tokens` (a Propagate-configured leaf) holds the per-kind signers `Download`, `Preview` and `OAuth` (codes and refresh tokens of the app flow), the delivery policy, and `Derive` for the instance preview token. Request side in `internal/api/auth_tokens.go`: `AuthDownload`/`DownloadSession` for downloads, and `InvalidPreviewToken(c, resources)`/`PreviewSession` for previews. Delivery: `Config.ClientSession`/`ClientOAuth` and `SessionDownloadToken`/`SessionPreviewToken`/`SessionContentUri` (`internal/api/api_response_headers.go`). Details, the JWT precedence, the scoped consumers and test gotchas: `internal/auth/tokens/README.md`.
 
 Media Processing
 - Thumbnails: `internal/thumb/*` and helpers in `internal/photoprism/mediafile_thumbs.go`.
@@ -137,7 +142,8 @@ Background Workers
 Cluster / Portal
 - Node types: `internal/service/cluster/const.go` (`cluster.RoleInstance`, `cluster.RolePortal`, `cluster.RoleService`).
 - Node bootstrap & registration: `internal/service/cluster/node/*` (HTTP to Portal; do not import Portal internals).
-  - Registration treats 401, 403 and 404 as final and does not rotate credentials; only 429 is retried with bounded backoff.
+  - Only `start` joins the cluster and syncs the theme (`Config.Starting()`), but not `start --config` (`Config.StartReport()`); other commands on a node that has not joined yet log a warning instead.
+  - Bootstrap treats 400, 401, 403, 404 and 409 as final and retries 429, 5xx and network errors (6 attempts, 15 s apart), then reports the Portal's reason; `cluster register` retries only 429, with backoff.
   - Theme sync logs at info level when it downloads, updates, or skips a bundle, so operators can trace it in standard log levels.
 - Registry/provisioner: `internal/service/cluster/registry/*`, `internal/service/cluster/provisioner/*`.
 - Theme endpoint (server): GET `/api/v1/cluster/theme`; client/CLI installs theme only if missing or no `app.js`.
@@ -178,7 +184,7 @@ Common How‑Tos
   - Tests: cover CLI/env/file precedence (see `internal/config/test.go` helpers)
 
 - Touch the DB schema
-  - Use GORM auto-migration, or add a custom migration in `internal/entity/migrate/<dialect>/...` and run `go generate` or `make generate` (runs `go generate` for all packages) 
+  - Use GORM auto-migration (on MariaDB it does not shrink columns or change their type), or add a custom migration in `internal/entity/migrate/<dialect>/...` and run `go generate` or `make generate` (runs `go generate` for all packages) 
   - Bump/review version gates in `migrate.Version` usage via `config_db.go`
   - Tests: run against SQLite by default; for MySQL cases, gate appropriately
 
@@ -208,7 +214,7 @@ Security & Hot Spots (Where to Look)
   - Endpoints: `internal/api/thumbnails.go` (`GetThumb`), `internal/api/albums_cover.go` (`AlbumCover`, shared `coverSize`), `internal/api/labels_cover.go` (`LabelCover`), `internal/api/folders_cover.go` (`FolderCover`); response and cover caching in `internal/api/cache.go`.
 
 - Safe HTTP downloader:
-  - Shared utility: `pkg/http/safe` (`Download`, `Options`).
+  - Shared utility: `pkg/http/safe` (`Download`, `Options`); `Fetch` reads small documents into memory with the same checks (OAuth client metadata documents).
   - Protections: scheme allow‑list (http/https), pre‑DNS + per‑redirect hostname/IP validation, final peer IP check, size and timeout enforcement, temp file `0600` + rename.
   - Avatars: wrapper `internal/thumb/avatar.SafeDownload` applies stricter defaults (15s, 10 MiB, `AllowPrivate=false`, image‑focused `Accept`).
   - Tests: `go test ./pkg/http/safe -count=1` (includes redirect SSRF cases); avatars: `go test ./internal/thumb/avatar -count=1`.
@@ -236,7 +242,7 @@ Filesystem Permissions & io/fs Aliasing
 
 Cluster Registry & Provisioner Cheatsheet
 - UUID‑first everywhere: API paths `{uuid}`, Registry `Get/Delete/RotateSecret` by UUID; explicit `FindByClientID` exists for OAuth.
-- Node/DTO fields: `uuid` required; `clientId` optional; database metadata includes `driver`.
+- Node/DTO fields: `UUID` required; `ClientID` optional; database metadata includes `Driver`.
 - Provisioner naming (no slugs):
   - database: `cluster_d<hmac11>`
   - username: `cluster_u<hmac11>`
@@ -262,7 +268,7 @@ Frequently Touched Files (by topic)
 - Workers: `internal/workers/*`
 - Cluster: `internal/service/cluster/*`
   - Theme support: `internal/service/cluster/theme/version.go` exposes `DetectVersion`, used by bootstrap, CLI, and API handlers to compare portal vs node theme revisions (prefers `fs.VersionTxtFile`, falls back to `app.js` mtime).
-  - Registration sanitizes `AppName`, `AppVersion`, and `Theme` with `clean.TypeUnicode`; defaults for app metadata come from `config.About()` / `config.Version()`. `cluster.RegisterResponse` now includes a `Theme` hint when the portal has a newer bundle so nodes can decide whether to download immediately.
+  - Registration sanitizes `AppName`, `AppVersion`, and `Theme` with `clean.TypeUnicode`; defaults for app metadata come from `config.About()` / `config.Version()`. `cluster.RegisterResponse` includes a `Theme` hint when the portal has a newer bundle so nodes can decide whether to download immediately.
 - Headers: `pkg/http/header/*`
 
 Downloads (CLI) & yt-dlp helpers
@@ -271,6 +277,7 @@ Downloads (CLI) & yt-dlp helpers
   - `internal/commands/download_impl.go` (testable implementation used by CLI)
 - yt-dlp wrappers:
   - `internal/photoprism/dl/options.go` (arg wiring; `FFmpegPostArgs` hook for `--postprocessor-args`)
+  - `internal/photoprism/dl/format.go` (`FormatBest` selector; FFmpeg reconnect args for stdout merges)
   - `internal/photoprism/dl/info.go` (metadata discovery)
   - `internal/photoprism/dl/file.go` (file method with `--output`/`--print`)
   - `internal/photoprism/dl/meta.go` (`CreatedFromInfo` fallback; `RemuxOptionsFromInfo`)

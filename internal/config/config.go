@@ -43,14 +43,12 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/dustin/go-humanize"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"  // register mysql dialect
-	_ "github.com/jinzhu/gorm/dialects/sqlite" // register sqlite dialect
 	"github.com/klauspost/cpuid/v2"
 	gc "github.com/patrickmn/go-cache"
 	"github.com/pbnjay/memory"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/ai/face"
 	"github.com/photoprism/photoprism/internal/api/download"
@@ -82,6 +80,7 @@ type Config struct {
 	settings      *customize.Settings
 	db            *gorm.DB
 	dbVersion     string
+	dbNoPassFile  bool
 	hub           *hub.Config
 	hubCancel     context.CancelFunc
 	hubLock       sync.Mutex
@@ -94,8 +93,10 @@ type Config struct {
 	tokenKeyOnce  sync.Once
 	env           string
 	start         bool
+	startReport   bool
 	ready         atomic.Bool
 	cache         *gc.Cache
+	testFolder    string
 }
 
 // Values is a shorthand alias for map[string]interface{}.
@@ -163,10 +164,11 @@ func initLogger() {
 
 // NewConfig builds a Config from CLI context defaults and loads options.yml overrides if present.
 func NewConfig(ctx *cli.Context) *Config {
-	start := false
+	start, startReport := false, false
 
 	if ctx != nil {
 		start = ctx.Command.Name == "start"
+		startReport = start && ctx.Bool("config")
 	}
 
 	// Initialize logger.
@@ -174,12 +176,13 @@ func NewConfig(ctx *cli.Context) *Config {
 
 	// Initialize options from the "defaults.yml" file and CLI context.
 	c := &Config{
-		cliCtx:  ctx,
-		options: NewOptions(ctx),
-		token:   rnd.Base36(8),
-		env:     os.Getenv("DOCKER_ENV"),
-		start:   start,
-		cache:   gc.New(time.Minute, 10*time.Minute),
+		cliCtx:      ctx,
+		options:     NewOptions(ctx),
+		token:       rnd.Base36(8),
+		env:         os.Getenv("DOCKER_ENV"),
+		start:       start,
+		startReport: startReport,
+		cache:       gc.New(time.Minute, 10*time.Minute),
 	}
 
 	// Keep what the environment or the command line asked for, since "options.yml" is loaded
@@ -259,13 +262,7 @@ func (c *Config) Init() error {
 	c.warnVisionKey()
 
 	// Configure HTTPS proxy for outgoing connections.
-	if httpsProxy := c.HttpsProxy(); httpsProxy != "" {
-		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: c.HttpsProxyInsecure(), //nolint:gosec // proxy settings are user-configurable and opt-in
-		}
-
-		_ = os.Setenv("HTTPS_PROXY", httpsProxy)
-	}
+	c.initHttpsProxy()
 
 	// Load settings from the "settings.yml" config file.
 	c.initSettings()
@@ -383,6 +380,9 @@ func (c *Config) InitCore() error {
 		log.Warnf("config: the wakeup interval is %s, but must be 1h or less for face recognition to work", c.WakeupInterval().String())
 	}
 
+	// Configure HTTPS proxy for outgoing connections.
+	c.initHttpsProxy()
+
 	// Load settings from the "settings.yml" config file.
 	c.initSettings()
 
@@ -394,6 +394,17 @@ func (c *Config) InitCore() error {
 	c.ready.Store(true)
 
 	return nil
+}
+
+// initHttpsProxy configures the HTTPS proxy for outgoing connections, if one is set.
+func (c *Config) initHttpsProxy() {
+	if httpsProxy := c.HttpsProxy(); httpsProxy != "" {
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: c.HttpsProxyInsecure(), //nolint:gosec // proxy settings are user-configurable and opt-in
+		}
+
+		_ = os.Setenv("HTTPS_PROXY", httpsProxy)
+	}
 }
 
 // IsReady checks if the application has been successfully initialized.
@@ -452,9 +463,12 @@ func (c *Config) Propagate() {
 	ttl.DownloadToken = ttl.Duration(int(c.DownloadTokenMaxAge().Seconds()))
 
 	// Configure signed URL tokens, which must be complete before anything mints or verifies one. A single
-	// signing key covers every token kind (downloads today, previews next); the signature path is per kind.
+	// signing key covers every token kind; the signed parameters keep the kinds apart.
 	tokens.Download.Key = c.TokenSigningKey()
 	tokens.Download.SignaturePath = c.ApiUri()
+	tokens.Preview.Key = c.TokenSigningKey()
+	tokens.Preview.SignaturePath = c.ApiUri()
+	tokens.OAuth.Key = c.TokenSigningKey()
 
 	// Configure download-token delivery: public mode delivers a placeholder, every session receives a
 	// signed token, and the coarse token covers only the sessionless client configs.
@@ -474,6 +488,9 @@ func (c *Config) Propagate() {
 
 	// Set path for user assets.
 	entity.UsersPath = c.UsersPath()
+
+	// Set the originals folder in which the default base paths of new accounts are checked.
+	entity.OriginalsPath = c.OriginalsPath()
 
 	// Set the API preview default token (the download token is no longer stored per session). The
 	// placeholder is never registered, so a missing signing key rejects previews instead of admitting it.
@@ -549,30 +566,47 @@ func (c *Config) Options() *Options {
 // SaveOptionsPatch merges a patch into options.yml, reloads in-memory options,
 // and returns true when persisted values changed.
 func (c *Config) SaveOptionsPatch(patch Values) (bool, error) {
-	if c == nil || c.options == nil || len(patch) == 0 {
-		return false, nil
+	changed, _, err := c.saveOptionsPatch(patch)
+	return changed, err
+}
+
+// saveOptionsPatch is SaveOptionsPatch that also removes the given keys from options.yml in the same write
+// and returns those it removed. The caller clears the in-memory fields of removed keys.
+func (c *Config) saveOptionsPatch(patch Values, remove ...string) (changed bool, removed []string, err error) {
+	if c == nil || c.options == nil || len(patch) == 0 && len(remove) == 0 {
+		return false, nil, nil
 	}
 
 	// Values are typed against the options they set before anything is written, so that the file
 	// and the running configuration cannot end up holding different numbers.
-	if err := CoerceOptionValues(patch); err != nil {
-		return false, err
+	if err = CoerceOptionValues(patch); err != nil {
+		return false, nil, err
 	}
 
 	fileName, values, err := c.loadOptionsYAML()
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
-	if !mergeOptionValues(values, patch) {
-		return false, nil
+	changed = mergeOptionValues(values, patch)
+
+	for _, key := range remove {
+		if _, ok := values[key]; ok {
+			delete(values, key)
+			removed = append(removed, key)
+			changed = true
+		}
+	}
+
+	if !changed {
+		return false, nil, nil
 	}
 
 	if _, err = c.writeOptionsYAML(fileName, values); err != nil {
-		return true, err
+		return true, nil, err
 	}
 
-	return true, c.applyOptionValues(patch)
+	return true, removed, c.applyOptionValues(patch)
 }
 
 // DeleteOptionsPatch removes the specified keys from "options.yml" and reports whether the file
@@ -721,6 +755,30 @@ func (c *Config) Restart() bool {
 	return mutex.Restart.Load()
 }
 
+// Starting reports whether the config belongs to the start command, which runs the server.
+func (c *Config) Starting() bool {
+	return c != nil && c.start
+}
+
+// SetStarting marks the config as belonging to the start command, e.g. in tests of the server bootstrap.
+func (c *Config) SetStarting(start bool) {
+	if c != nil {
+		c.start = start
+	}
+}
+
+// StartReport reports whether the start command only shows its config report, without running the server.
+func (c *Config) StartReport() bool {
+	return c != nil && c.startReport
+}
+
+// SetStartReport marks the config as belonging to a start command that only shows its config report.
+func (c *Config) SetStartReport(report bool) {
+	if c != nil {
+		c.startReport = report
+	}
+}
+
 // CliContext returns the cli context if set.
 func (c *Config) CliContext() *cli.Context {
 	if c.cliCtx == nil {
@@ -730,13 +788,22 @@ func (c *Config) CliContext() *cli.Context {
 	return c.cliCtx
 }
 
+// CliApp returns the CLI app of the cli context, or nil if no context is set.
+func (c *Config) CliApp() *cli.App {
+	if c == nil || c.cliCtx == nil {
+		return nil
+	}
+
+	return c.cliCtx.App
+}
+
 // CliContextString returns a global cli string flag value if set.
 func (c *Config) CliContextString(name string) string {
 	if c.cliCtx == nil {
 		return ""
 	}
 
-	return c.cliCtx.String(name)
+	return flagContext(c.cliCtx, name).String(name)
 }
 
 // serialFiles returns the storage serial copies in lookup order, each with the mode to create it with.

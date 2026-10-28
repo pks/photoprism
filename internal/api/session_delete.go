@@ -27,7 +27,7 @@ import (
 //	@Summary	delete a session (logout)
 //	@Tags		Authentication
 //	@Produce	json
-//	@Param		id				path		string	false	"session id or ref id"
+//	@Param		id				path		string	true	"session id or ref id"
 //	@Success	200				{object}	gin.H
 //	@Failure	401,403,404,429	{object}	i18n.Response
 //	@Router		/api/v1/session [delete]
@@ -72,6 +72,17 @@ func DeleteSession(router *gin.RouterGroup) {
 			if s = entity.FindSessionByRefID(id); s == nil {
 				Abort(c, http.StatusNotFound, i18n.ErrNotFound)
 				return
+			}
+
+			// Deleting an app access token as manager disconnects the app.
+			if s.IsOAuthApp() {
+				if grant := entity.FindGrant(s.AuthID); grant != nil {
+					if err := grant.Delete(); err != nil {
+						event.AuditErr([]string{clientIp, "session %s", "revoke grant %s", status.Error(err)}, s.RefID, clean.Log(grant.GrantUID))
+					} else {
+						event.AuditInfo([]string{clientIp, "session %s", "revoke grant %s", status.Deleted}, s.RefID, clean.Log(grant.GrantUID))
+					}
+				}
 			}
 		} else if id != "" && s.ID != id {
 			event.AuditWarn([]string{clientIp, "session %s", "delete %s as %s", "ids do not match"}, s.RefID, acl.ResourceSessions.String(), s.GetUserRole())

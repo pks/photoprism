@@ -21,9 +21,26 @@
     z-index: 1;
 }
 
+/* Base styles for all maps, also where Vue's class binding removes the maplibregl-map class. */
+.map-container,
+.maplibregl-map {
+    font-family: var(--v-font-family);
+    font-size: 12px;
+    line-height: normal;
+    overflow: hidden;
+    -webkit-tap-highlight-color: rgb(0 0 0/0);
+    -webkit-touch-callout: none;
+}
+
 .map-background {
     background: radial-gradient(circle at center, #101023, #0a0a16);
     z-index: -1;
+}
+
+.map-background .sky-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 .map-background .star {
@@ -133,8 +150,8 @@
 .maplibregl-ctrl.maplibregl-ctrl-attrib > .maplibregl-ctrl-attrib-inner {
     height: auto;
     min-height: 19px;
-    display: flex;
-    align-items: center;
+    line-height: 19px;
+    color: #333 !important;
 }
 
 .maplibregl-ctrl-attrib-inner a {

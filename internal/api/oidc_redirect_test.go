@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,22 @@ import (
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/http/header"
 	"github.com/photoprism/photoprism/pkg/i18n"
+	"github.com/photoprism/photoprism/pkg/rnd"
+	"github.com/photoprism/photoprism/pkg/txt"
 )
+
+func TestOidcTimeZone(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		assert.Equal(t, "Europe/Berlin", oidcTimeZone("Europe/Berlin"))
+		assert.Equal(t, "UTC", oidcTimeZone("Etc/UTC"))
+		assert.Equal(t, "UTC+2", oidcTimeZone("+02:00"))
+	})
+	t.Run("Invalid", func(t *testing.T) {
+		for _, zone := range []string{"", "Europe/Berlin\x00", "Europe/\x1bBerlin", "UTC+99", "Europe//Berlin"} {
+			assert.Equal(t, "", oidcTimeZone(zone), "%q", zone)
+		}
+	})
+}
 
 func TestOidcReconcileHint(t *testing.T) {
 	t.Run("LocalProvider", func(t *testing.T) {
@@ -66,11 +82,19 @@ func TestOIDCRedirect(t *testing.T) {
 		require.True(t, conf.OIDCEnabled())
 		app := newOidcTestApp(conf)
 
-		for _, query := range []string{"", "?state=s1", "?code=c1"} {
+		for _, query := range []string{"", "?state=s1", "?code=c1", "?state=s1&code=" + strings.Repeat("c", MaxOIDCCodeLength+1)} {
 			r := PerformRequest(app, http.MethodGet, "/api/v1/oidc/redirect"+query)
 			assert.Equal(t, http.StatusTemporaryRedirect, r.Code)
 			assert.Equal(t, conf.LoginUri(), r.Header().Get("Location"))
 		}
+	})
+	t.Run("CodeAtLengthLimit", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+
+		// A code of the maximum length is passed on to the exchange.
+		r := PerformRequest(app, http.MethodGet, "/api/v1/oidc/redirect?state=s1&code="+strings.Repeat("c", MaxOIDCCodeLength))
+		assert.NotEqual(t, conf.LoginUri(), r.Header().Get("Location"))
 	})
 	t.Run("AuthTemplatePreservesSessionStoragePreference", func(t *testing.T) {
 		app := gin.New()
@@ -220,7 +244,7 @@ const (
 
 // oidcTestSubjects lists the subjects of the dummy-oidc test identities, so cleanup finds the
 // accounts they create even when registration renamed them.
-var oidcTestSubjects = []string{"sub00000001", "sub00000002", "sub00000003", "sub00000004", "sub00000005", "sub00000006", "sub00000007", "sub00000008", "sub00000009"}
+var oidcTestSubjects = []string{"sub00000001", "sub00000002", "sub00000003", "sub00000004", "sub00000005", "sub00000006", "sub00000007", "sub00000008", "sub00000009", "sub00000010", "sub00000011", "sub00000012", "sub00000013", "sub00000014", "sub00000015"}
 
 // oidcUnreachableUri is an https provider address that refuses connections, so discovery fails.
 const oidcUnreachableUri = "https://127.0.0.1:1"
@@ -330,9 +354,10 @@ func findOidcTestUser(subject string) *entity.User {
 }
 
 // oidcSessionCount returns the number of sessions of the specified user.
-func oidcSessionCount(t *testing.T, user *entity.User) (count int) {
-	require.NoError(t, entity.UnscopedDb().Model(&entity.Session{}).Where("user_uid = ?", user.UserUID).Count(&count).Error)
-	return count
+func oidcSessionCount(t *testing.T, user *entity.User) int {
+	var n64 int64
+	require.NoError(t, entity.UnscopedDb().Model(&entity.Session{}).Where("user_uid = ?", user.UserUID).Count(&n64).Error)
+	return int(n64)
 }
 
 // newOidcTestApp returns a router with the OIDC login and redirect endpoints.
@@ -400,6 +425,21 @@ func oidcLogin(t *testing.T, app *gin.Engine, loginHint string) *httptest.Respon
 	return w
 }
 
+// skipUnlessOidcHint skips a test if the running dummy-oidc image does not know the login_hint yet.
+func skipUnlessOidcHint(t *testing.T, hint string) {
+	t.Helper()
+
+	q := url.Values{"client_id": {"test"}, "redirect_uri": {oidcTestRedirectUri}, "response_type": {"code"}, "scope": {"openid"}, "state": {"probe"}, "login_hint": {hint}}
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(oidcTestIssuer + "/authorize?" + q.Encode())
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	if strings.Contains(resp.Header.Get("Location"), "unknown+login_hint") {
+		t.Skipf("oidc: dummy-oidc does not know the login_hint %q, rebuild it with make docker-dummy-oidc", hint)
+	}
+}
+
 // assertOidcLoginRefused checks that the redirect endpoint rendered the error page with the message.
 func assertOidcLoginRefused(t *testing.T, r *httptest.ResponseRecorder, message i18n.Message) {
 	t.Helper()
@@ -412,6 +452,7 @@ func TestOIDCRedirect_Flow(t *testing.T) {
 	t.Run("Register", func(t *testing.T) {
 		conf := useOidcTestConfig(t)
 		app := newOidcTestApp(conf)
+		audit := captureAuditLog(t)
 
 		r := oidcLogin(t, app, "")
 
@@ -421,6 +462,7 @@ func TestOIDCRedirect_Flow(t *testing.T) {
 		user := findOidcTestUser("sub00000001")
 		require.NotNil(t, user)
 		assert.Equal(t, "prefname", user.UserName)
+		assert.False(t, oidcAuditContains(audit, "username claim"))
 		assert.Equal(t, authn.ProviderOIDC.String(), user.AuthProvider)
 		assert.Equal(t, oidcTestIssuer, user.AuthIssuer)
 		assert.Equal(t, "guest", user.UserRole)
@@ -451,6 +493,36 @@ func TestOIDCRedirect_Flow(t *testing.T) {
 
 		assertOidcLoginRefused(t, r, i18n.ErrRegistrationDisabled)
 		assert.Nil(t, findOidcTestUser("sub00000001"))
+	})
+	t.Run("UsersQuotaMappedRole", func(t *testing.T) {
+		// The quota applies to the role a new account receives from a group mapping.
+		conf := useOidcTestConfig(t)
+		conf.Options().UsersQuota = 1
+		conf.Options().OIDCGroupRole = []string{"photoprism-admin=admin"}
+		config.FlushUsageCache()
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "olivia")
+
+		assertOidcLoginRefused(t, r, i18n.ErrQuotaExceeded)
+		assert.Nil(t, findOidcTestUser("sub00000002"))
+	})
+	t.Run("UsersQuotaRoleUpdate", func(t *testing.T) {
+		// A role update that counts toward the quota is not applied while it is reached.
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "olivia").Code)
+		require.Equal(t, "guest", findOidcTestUser("sub00000002").UserRole)
+
+		conf.Options().UsersQuota = 1
+		conf.Options().OIDCGroupRole = []string{"photoprism-admin=admin"}
+		config.FlushUsageCache()
+
+		r := oidcLogin(t, app, "olivia")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, "guest", findOidcTestUser("sub00000002").UserRole)
 	})
 	t.Run("UsersQuota", func(t *testing.T) {
 		// The quota applies to the default role, and a guest is never counted.
@@ -519,6 +591,38 @@ func TestOIDCRedirect_Flow(t *testing.T) {
 	})
 }
 
+func TestOIDCRedirect_TimeZone(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "zora")
+		app := newOidcTestApp(conf)
+
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "zora").Code)
+		user := findOidcTestUser("sub00000014")
+		require.NotNil(t, user)
+		assert.Equal(t, "Europe/Berlin", user.Settings().UITimeZone)
+	})
+	t.Run("Invalid", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "zeno")
+		app := newOidcTestApp(conf)
+
+		// A new account stores no time zone.
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "zeno").Code)
+		user := findOidcTestUser("sub00000015")
+		require.NotNil(t, user)
+		assert.Equal(t, "", user.Settings().UITimeZone)
+
+		// An existing account keeps its time zone.
+		require.NoError(t, entity.UnscopedDb().Model(&entity.UserSettings{}).Where("user_uid = ?", user.UserUID).
+			UpdateColumn("ui_time_zone", "Asia/Tokyo").Error)
+		entity.FlushUserSessionCache(user.UserUID)
+
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "zeno").Code)
+		assert.Equal(t, "Asia/Tokyo", findOidcTestUser("sub00000015").Settings().UITimeZone)
+	})
+}
+
 func TestOIDCRedirect_Groups(t *testing.T) {
 	t.Run("GroupRole", func(t *testing.T) {
 		conf := useOidcTestConfig(t)
@@ -568,6 +672,17 @@ func TestOIDCRedirect_Groups(t *testing.T) {
 		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 		assert.NotNil(t, findOidcTestUser("sub00000003"))
 	})
+	t.Run("RequiredGroupInvalid", func(t *testing.T) {
+		// A required group that is not a valid group ID still restricts login.
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCGroup = []string{strings.Repeat("photoprism-user", 20)}
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "oscar")
+
+		assertOidcLoginRefused(t, r, i18n.ErrForbidden)
+		assert.Nil(t, findOidcTestUser("sub00000003"))
+	})
 	t.Run("RequiredGroupMissing", func(t *testing.T) {
 		conf := useOidcTestConfig(t)
 		conf.Options().OIDCGroup = []string{"photoprism-user"}
@@ -612,14 +727,69 @@ func TestOIDCRedirect_Groups(t *testing.T) {
 	})
 	t.Run("PortalRoleNotInEdition", func(t *testing.T) {
 		// The manager role that petra's Portal claim grants does not exist in this edition, so the
-		// default role applies.
+		// nearest role it has applies rather than the default role.
 		conf := useOidcTestConfig(t)
+		conf.Options().OIDCRole = "admin"
 		app := newOidcTestApp(conf)
 
 		r := oidcLogin(t, app, "petra")
 
 		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 		assert.Equal(t, "guest", findOidcTestUser("sub00000007").UserRole)
+	})
+	t.Run("PortalRoleSuperAdmin", func(t *testing.T) {
+		// A super admin keeps the admin role, and no role change is audited.
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "petra").Code)
+
+		user := findOidcTestUser("sub00000007")
+		require.NotNil(t, user)
+		require.NoError(t, entity.UnscopedDb().Model(user).UpdateColumns(entity.Values{"user_role": "admin", "super_admin": true}).Error)
+
+		origAudit := event.AuditLog
+		auditLogger, auditHook := logtest.NewNullLogger()
+		event.AuditLog = auditLogger
+		t.Cleanup(func() { event.AuditLog = origAudit })
+
+		r := oidcLogin(t, app, "petra")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, "admin", findOidcTestUser("sub00000007").UserRole)
+
+		for _, entry := range auditHook.AllEntries() {
+			assert.NotContains(t, entry.Message, "changed to", entry.Message)
+		}
+	})
+	t.Run("PortalRoleNotInEditionUpdate", func(t *testing.T) {
+		// An existing account takes the nearest lower role this edition has.
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+
+		require.Equal(t, http.StatusOK, oidcLogin(t, app, "petra").Code)
+
+		user := findOidcTestUser("sub00000007")
+		require.NotNil(t, user)
+		require.NoError(t, entity.UnscopedDb().Model(user).UpdateColumn("user_role", "admin").Error)
+		require.Equal(t, "admin", findOidcTestUser("sub00000007").UserRole)
+
+		origAudit := event.AuditLog
+		auditLogger, auditHook := logtest.NewNullLogger()
+		event.AuditLog = auditLogger
+		t.Cleanup(func() { event.AuditLog = origAudit })
+
+		r := oidcLogin(t, app, "petra")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, "guest", findOidcTestUser("sub00000007").UserRole)
+
+		var messages []string
+		for _, entry := range auditHook.AllEntries() {
+			messages = append(messages, entry.Message)
+		}
+		assert.Contains(t, strings.Join(messages, "\n"), "portal role 'manager' is not available, applying guest")
+		assert.Contains(t, strings.Join(messages, "\n"), "role admin changed to guest › updated")
 	})
 }
 
@@ -654,8 +824,58 @@ func TestOIDCRedirect_Email(t *testing.T) {
 		assertOidcLoginRefused(t, r, i18n.ErrVerifiedEmailRequired)
 		assert.Nil(t, findOidcTestUser("sub00000004"))
 	})
+	t.Run("DomainNotASCII", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "kate")
+		conf.Options().OIDCDomain = "example.com"
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "kate")
+
+		assertOidcLoginRefused(t, r, i18n.ErrVerifiedEmailRequired)
+		assert.Nil(t, findOidcTestUser("sub00000013"))
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		// A verified address with characters other than ASCII is not stored.
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "kate")
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "kate")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000013")
+		require.NotNil(t, user)
+		assert.Equal(t, "kate", user.UserName)
+		assert.Equal(t, "", user.UserEmail)
+		assert.False(t, user.EmailVerified())
+	})
+	t.Run("NotASCIIExistingAccount", func(t *testing.T) {
+		// An existing account keeps its stored email address.
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "kate")
+		app := newOidcTestApp(conf)
+
+		m := entity.NewUser()
+		m.UserName = "kate"
+		m.UserEmail = "kate.smith@example.com"
+		m.UserRole = "guest"
+		m.AuthProvider = authn.ProviderOIDC.String()
+		m.AuthIssuer = oidcTestIssuer
+		m.AuthID = "sub00000013"
+		m.CanLogin = true
+		require.NoError(t, entity.Db().Create(m).Error)
+
+		r := oidcLogin(t, app, "kate")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000013")
+		require.NotNil(t, user)
+		assert.Equal(t, m.UserUID, user.UserUID)
+		assert.Equal(t, "kate.smith@example.com", user.UserEmail)
+	})
 	t.Run("Unverified", func(t *testing.T) {
-		// Without a domain requirement the account is created, and the email is kept unverified.
+		// Without a domain requirement the account is created, and an unverified email is not stored.
 		conf := useOidcTestConfig(t)
 		app := newOidcTestApp(conf)
 
@@ -664,11 +884,11 @@ func TestOIDCRedirect_Email(t *testing.T) {
 		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 		user := findOidcTestUser("sub00000004")
 		require.NotNil(t, user)
-		assert.Equal(t, "otto@example.com", user.UserEmail)
+		assert.Equal(t, "", user.UserEmail)
 		assert.False(t, user.EmailVerified())
 	})
 	t.Run("InUse", func(t *testing.T) {
-		// An email another account holds is kept unverified and does not prevent the registration.
+		// An email another account also holds is stored and marked verified like any other.
 		conf := useOidcTestConfig(t)
 		app := newOidcTestApp(conf)
 
@@ -683,13 +903,62 @@ func TestOIDCRedirect_Email(t *testing.T) {
 			assert.NoError(t, entity.UnscopedDb().Delete(other).Error)
 		})
 
+		audit := captureAuditLog(t)
 		r := oidcLogin(t, app, "oscar")
 
 		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 		user := findOidcTestUser("sub00000003")
 		require.NotNil(t, user)
 		assert.Equal(t, "oscar@example.com", user.UserEmail)
-		assert.False(t, user.EmailVerified())
+		assert.True(t, user.EmailVerified())
+
+		var reported bool
+
+		for _, entry := range audit.AllEntries() {
+			if strings.Contains(entry.Message, "email is also assigned to 1 other account") {
+				reported = entry.Level == logrus.WarnLevel
+			}
+		}
+
+		assert.True(t, reported, "registering an account with a shared email address is reported")
+	})
+	t.Run("UpdateInUse", func(t *testing.T) {
+		// A verified address that changes on a later login is reported if another account also holds it.
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "oscar")
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000003")
+		require.NotNil(t, user)
+		require.NoError(t, entity.UnscopedDb().Model(user).Update("UserEmail", "oscar-old@example.com").Error)
+
+		other := entity.NewUser()
+		other.UserName = "zz-oidc-email-update"
+		other.UserEmail = "oscar@example.com"
+		other.SetProvider(authn.ProviderLocal)
+		require.NoError(t, other.Create())
+		t.Cleanup(func() {
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserDetails{}, "user_uid = ?", other.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserSettings{}, "user_uid = ?", other.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(other).Error)
+		})
+
+		system := captureSystemLog(t)
+		r = oidcLogin(t, app, "oscar")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.Equal(t, "oscar@example.com", findOidcTestUser("sub00000003").UserEmail)
+
+		var reported bool
+
+		for _, entry := range system.AllEntries() {
+			if strings.HasSuffix(entry.Message, "› email is also assigned to 1 other account") {
+				reported = true
+			}
+		}
+
+		assert.True(t, reported, "an updated address another account holds is reported")
 	})
 }
 
@@ -723,6 +992,154 @@ func TestOIDCRedirect_Username(t *testing.T) {
 		require.NotNil(t, alice)
 		assert.Equal(t, local.AuthProvider, alice.AuthProvider)
 		assert.Equal(t, local.AuthID, alice.AuthID)
+	})
+}
+
+func TestOIDCRedirect_NotASCII(t *testing.T) {
+	t.Run("EmailHandle", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jose")
+		app := newOidcTestApp(conf)
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "jose")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000010")
+		require.NotNil(t, user)
+		assert.Equal(t, "jose", user.UserName)
+		assert.Equal(t, "José García", user.DisplayName)
+		assert.Equal(t, "jose@example.com", user.UserEmail)
+		assert.True(t, oidcAuditContains(audit, "create user › username claim › username may only contain ASCII characters › skipped"))
+	})
+	t.Run("EmailHandleTaken", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jose")
+		app := newOidcTestApp(conf)
+
+		holder := entity.NewUser()
+		holder.UserName = "jose"
+		holder.UserRole = "guest"
+		require.NoError(t, holder.Create())
+		t.Cleanup(func() {
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserDetails{}, "user_uid = ?", holder.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserSettings{}, "user_uid = ?", holder.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.User{}, "user_uid = ?", holder.UserUID).Error)
+		})
+
+		r := oidcLogin(t, app, "jose")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000010")
+		require.NotNil(t, user)
+		assert.Regexp(t, `^jose[0-9]{6}$`, user.UserName)
+		assert.NotEqual(t, "jose", user.Handle())
+	})
+	t.Run("EmailHandleHeldDeleted", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jose")
+		app := newOidcTestApp(conf)
+
+		holder := entity.NewUser()
+		holder.UserName = "jose"
+		holder.UserRole = "guest"
+		require.NoError(t, holder.Create())
+		require.NoError(t, holder.Delete())
+		t.Cleanup(func() {
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserDetails{}, "user_uid = ?", holder.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserSettings{}, "user_uid = ?", holder.UserUID).Error)
+			assert.NoError(t, entity.UnscopedDb().Delete(&entity.User{}, "user_uid = ?", holder.UserUID).Error)
+		})
+
+		r := oidcLogin(t, app, "jose")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000010")
+		require.NotNil(t, user)
+		assert.Regexp(t, `^jose[0-9]{6}$`, user.UserName)
+
+		stored := entity.FindUser(entity.User{UserUID: holder.UserUID})
+		require.NotNil(t, stored)
+		assert.True(t, stored.IsDeleted())
+		assert.Equal(t, "", stored.AuthID)
+	})
+	t.Run("NextClaim", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "josefa")
+		app := newOidcTestApp(conf)
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "josefa")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000011")
+		require.NotNil(t, user)
+		assert.Equal(t, "josefa.nunez", user.UserName)
+		assert.True(t, oidcAuditContains(audit, "create user › username claim › username may only contain ASCII characters › skipped"))
+	})
+	t.Run("NoASCIIClaim", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jesus")
+		app := newOidcTestApp(conf)
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "jesus")
+
+		assertOidcLoginRefused(t, r, i18n.ErrInvalidCredentials)
+		assert.Nil(t, findOidcTestUser("sub00000012"))
+		assert.True(t, oidcAuditContains(audit, "create user › username claim › username may only contain ASCII characters › skipped"))
+	})
+	t.Run("RegistrationDisabled", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jesus")
+		conf.Options().OIDCRegister = false
+		app := newOidcTestApp(conf)
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "jesus")
+
+		assertOidcLoginRefused(t, r, i18n.ErrInvalidCredentials)
+		assert.Nil(t, findOidcTestUser("sub00000012"))
+		assert.False(t, oidcAuditContains(audit, "username claim"))
+	})
+	t.Run("ExistingAccount", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		skipUnlessOidcHint(t, "jesus")
+		app := newOidcTestApp(conf)
+
+		m := entity.NewUser()
+		m.UserName = "jesús"
+		m.UserRole = "guest"
+		m.AuthProvider = authn.ProviderOIDC.String()
+		m.AuthIssuer = oidcTestIssuer
+		m.AuthID = "sub00000012"
+		m.CanLogin = true
+		require.NoError(t, entity.Db().Create(m).Error)
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "jesus")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000012")
+		require.NotNil(t, user)
+		assert.Equal(t, m.UserUID, user.UserUID)
+		assert.Equal(t, "jesús", user.UserName)
+		assert.False(t, oidcAuditContains(audit, "username claim"))
+	})
+}
+
+func TestAuditOidcSkippedClaim(t *testing.T) {
+	t.Run("Skipped", func(t *testing.T) {
+		audit := captureAuditLog(t)
+		auditOidcSkippedClaim("192.0.2.1", true)
+		require.NotNil(t, audit.LastEntry())
+		assert.Equal(t, logrus.WarnLevel, audit.LastEntry().Level)
+		assert.Contains(t, audit.LastEntry().Message, "192.0.2.1 › create session › oidc › create user › username claim › username may only contain ASCII characters › skipped")
+	})
+	t.Run("NotSkipped", func(t *testing.T) {
+		audit := captureAuditLog(t)
+		auditOidcSkippedClaim("192.0.2.1", false)
+		assert.Nil(t, audit.LastEntry())
 	})
 }
 
@@ -839,4 +1256,154 @@ func oidcTestSession(t *testing.T, subject string) *entity.Session {
 	require.Len(t, sessions, 1)
 
 	return &sessions[0]
+}
+
+// newOidcEmailHolder stores a local account with the given name and email address, and removes it after the test.
+func newOidcEmailHolder(t *testing.T, name, email string) *entity.User {
+	t.Helper()
+
+	m := entity.NewUser()
+	m.UserName = name
+	m.UserEmail = email
+	m.SetProvider(authn.ProviderLocal)
+	require.NoError(t, m.Create())
+	t.Cleanup(func() {
+		assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserDetails{}, "user_uid = ?", m.UserUID).Error)
+		assert.NoError(t, entity.UnscopedDb().Delete(&entity.UserSettings{}, "user_uid = ?", m.UserUID).Error)
+		assert.NoError(t, entity.UnscopedDb().Delete(m).Error)
+	})
+
+	return m
+}
+
+func TestOidcEmailUsername(t *testing.T) {
+	t.Run("FromEmail", func(t *testing.T) {
+		fromEmail, valid := oidcEmailUsername(authn.OidcClaimEmail, "jane@example.com", "jane@example.com")
+		assert.True(t, fromEmail)
+		assert.True(t, valid)
+	})
+	t.Run("NotUsableAsName", func(t *testing.T) {
+		for _, email := range []string{"jo~e@example.com", "jane+tag@example.com", "o'brien@example.com"} {
+			fromEmail, valid := oidcEmailUsername(authn.OidcClaimEmail, email, email)
+			assert.True(t, fromEmail, email)
+			assert.False(t, valid, email)
+		}
+	})
+	t.Run("OtherClaim", func(t *testing.T) {
+		fromEmail, _ := oidcEmailUsername(authn.OidcClaimPreferredUsername, "jane@example.com", "jane@example.com")
+		assert.False(t, fromEmail)
+	})
+	t.Run("FallbackName", func(t *testing.T) {
+		fromEmail, _ := oidcEmailUsername(authn.OidcClaimEmail, "jane", "")
+		assert.False(t, fromEmail)
+		fromEmail, _ = oidcEmailUsername(authn.OidcClaimEmail, "jane", "jane@example.com")
+		assert.False(t, fromEmail)
+	})
+}
+
+func TestOIDCRedirect_EmailUsername(t *testing.T) {
+	t.Run("Register", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCUsername = authn.OidcClaimEmail
+		app := newOidcTestApp(conf)
+
+		r := oidcLogin(t, app, "oscar")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000003")
+		require.NotNil(t, user)
+		assert.Equal(t, "oscar@example.com", user.UserName)
+	})
+	t.Run("UsernameTaken", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCUsername = authn.OidcClaimEmail
+		app := newOidcTestApp(conf)
+		newOidcEmailHolder(t, "oscar@example.com", "")
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "oscar")
+
+		assertOidcLoginRefused(t, r, i18n.ErrInvalidCredentials)
+		assert.Nil(t, findOidcTestUser("sub00000003"))
+		assert.True(t, oidcAuditContains(audit, "create user 'oscar@example.com' › username already exists"))
+	})
+	t.Run("EmailInUse", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCUsername = authn.OidcClaimEmail
+		app := newOidcTestApp(conf)
+		newOidcEmailHolder(t, "zz-oidc-email-holder", "Oscar@Example.com")
+		audit := captureAuditLog(t)
+
+		r := oidcLogin(t, app, "oscar")
+
+		assertOidcLoginRefused(t, r, i18n.ErrInvalidCredentials)
+		assert.Nil(t, findOidcTestUser("sub00000003"))
+		assert.True(t, oidcAuditContains(audit, "create user 'oscar@example.com' › email already exists"))
+	})
+	t.Run("EmailHeldByDeletedAccount", func(t *testing.T) {
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCUsername = authn.OidcClaimEmail
+		app := newOidcTestApp(conf)
+		holder := newOidcEmailHolder(t, "zz-oidc-email-deleted", "oscar@example.com")
+		require.NoError(t, holder.Delete())
+
+		r := oidcLogin(t, app, "oscar")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		assert.NotNil(t, findOidcTestUser("sub00000003"))
+	})
+	t.Run("UnverifiedEmail", func(t *testing.T) {
+		// The username falls back to another claim, so the address does not need to be unique.
+		conf := useOidcTestConfig(t)
+		conf.Options().OIDCUsername = authn.OidcClaimEmail
+		app := newOidcTestApp(conf)
+		newOidcEmailHolder(t, "zz-oidc-email-otto", "otto@example.com")
+
+		r := oidcLogin(t, app, "otto")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000004")
+		require.NotNil(t, user)
+		assert.Equal(t, "otto", user.UserName)
+	})
+	t.Run("DefaultClaimSuffix", func(t *testing.T) {
+		// Other username claims keep resolving a conflict with a numeric suffix.
+		conf := useOidcTestConfig(t)
+		app := newOidcTestApp(conf)
+		newOidcEmailHolder(t, "oscar", "oscar@example.com")
+
+		r := oidcLogin(t, app, "oscar")
+
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		user := findOidcTestUser("sub00000003")
+		require.NotNil(t, user)
+		assert.Regexp(t, `^oscar[0-9]{6}$`, user.UserName)
+	})
+}
+
+// oidcAuditContains reports whether an audit warning contains the specified text.
+func oidcAuditContains(hook *logtest.Hook, text string) bool {
+	for _, entry := range hook.AllEntries() {
+		if entry.Level == logrus.WarnLevel && strings.Contains(entry.Message, text) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func TestOidcUsernameAvailable(t *testing.T) {
+	assert.True(t, oidcUsernameAvailable("oidc-available-name"))
+	assert.False(t, oidcUsernameAvailable("alice"))
+	assert.True(t, oidcUsernameAvailable("visitor"))
+	assert.False(t, oidcUsernameAvailable(rnd.GenerateUID('c')))
+}
+
+func TestOidcSuffixedUsername(t *testing.T) {
+	assert.Regexp(t, `^jose[0-9]{6}$`, oidcSuffixedUsername("jose"))
+
+	long := strings.Repeat("a", txt.ClipUsername)
+	name := oidcSuffixedUsername(long)
+	assert.Len(t, name, txt.ClipUsername)
+	assert.Regexp(t, `^a{58}[0-9]{6}$`, name)
 }

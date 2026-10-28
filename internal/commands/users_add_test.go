@@ -9,6 +9,7 @@ import (
 
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/pkg/authn"
+	"github.com/photoprism/photoprism/pkg/dsn"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
@@ -40,6 +41,13 @@ func TestUsersAddCommand(t *testing.T) {
 		// t.Logf(output)
 		assert.Error(t, err)
 		assert.Empty(t, output)
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		for name, sanitized := range map[string]string{"cli-josé": "cli-josé", "\u212Aate-cli": "kate-cli"} {
+			_, err := RunWithTestContext(UsersAddCommand, []string{"add", "--password=test1234", name})
+			require.ErrorIs(t, err, authn.ErrNotASCII, name)
+			assert.Nil(t, entity.FindUserByName(sanitized), name)
+		}
 	})
 }
 
@@ -88,7 +96,7 @@ func TestUsersAddCommand_Restore(t *testing.T) {
 
 		_, err := RunWithTestContext(UsersAddCommand, []string{"add", "--password=test1234", "restoreaddno"})
 
-		assert.ErrorIs(t, err, authn.ErrAccountAlreadyExists)
+		assert.ErrorIs(t, err, authn.ErrUserAlreadyExists)
 		assert.True(t, entity.FindUserByName("restoreaddno").IsDeleted())
 	})
 	t.Run("Confirmed", func(t *testing.T) {
@@ -128,8 +136,36 @@ func TestUsersAddCommand_Restore(t *testing.T) {
 	t.Run("NotDeleted", func(t *testing.T) {
 		_, err := RunWithTestContext(UsersAddCommand, []string{"add", "--restore", "--password=test1234", "alice"})
 
-		assert.ErrorIs(t, err, authn.ErrAccountAlreadyExists)
+		assert.ErrorIs(t, err, authn.ErrUserAlreadyExists)
 		assert.False(t, entity.FindUserByName("alice").IsDeleted())
+	})
+	t.Run("RestoreFlagOtherName", func(t *testing.T) {
+		m := entity.NewUser()
+		m.UserName = "restoreadd-josé"
+		m.UserRole = "admin"
+		require.NoError(t, entity.Db().Create(m).Error)
+		t.Cleanup(func() {
+			reopenConnection()
+			removeTestUser(t, m.UserUID)
+			if created := entity.FindUserByName("restoreadd-jose"); created != nil && created.UserUID != m.UserUID {
+				removeTestUser(t, created.UserUID)
+			}
+		})
+		require.NoError(t, m.Delete())
+
+		_, err := RunWithTestContext(UsersAddCommand, []string{"add", "--restore", "--password=test1234", "restoreadd-jose"})
+
+		// MariaDB compares names that differ only by accents as equal.
+		if entity.IsDialect(dsn.DriverMySQL) {
+			assert.ErrorIs(t, err, authn.ErrUserAlreadyExists)
+		} else {
+			assert.NoError(t, err)
+		}
+
+		stored := entity.FindUser(entity.User{UserUID: m.UserUID})
+		require.NotNil(t, stored)
+		assert.Equal(t, "restoreadd-josé", stored.UserName)
+		assert.True(t, stored.IsDeleted())
 	})
 }
 
@@ -138,8 +174,8 @@ func removeTestUser(t *testing.T, uid string) {
 	t.Helper()
 
 	db := entity.UnscopedDb()
-	assert.NoError(t, db.Delete(entity.UserDetails{}, "user_uid = ?", uid).Error)
-	assert.NoError(t, db.Delete(entity.UserSettings{}, "user_uid = ?", uid).Error)
-	assert.NoError(t, db.Delete(entity.Password{}, "uid = ?", uid).Error)
-	assert.NoError(t, db.Delete(entity.User{}, "user_uid = ?", uid).Error)
+	assert.NoError(t, db.Delete(&entity.UserDetails{}, "user_uid = ?", uid).Error)
+	assert.NoError(t, db.Delete(&entity.UserSettings{}, "user_uid = ?", uid).Error)
+	assert.NoError(t, db.Delete(&entity.Password{}, "uid = ?", uid).Error)
+	assert.NoError(t, db.Delete(&entity.User{}, "user_uid = ?", uid).Error)
 }

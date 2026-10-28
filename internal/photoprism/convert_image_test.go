@@ -722,10 +722,48 @@ func TestConvert_dewarpFileInPlace(t *testing.T) {
 		dir := t.TempDir()
 		dst := copyFixture(t, dir, "df.jpg", "testdata/insta360.insp") // 2:1 dual-fisheye JPEG.
 		require.NoError(t, convert.dewarpFileInPlace(dst, projection.DualFisheye, false, 204, 0))
-		assert.False(t, fs.FileExists(dst+".dewarp.jpg"), "temp file must not leak")
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "staged output must not leak")
 		out, err := NewMediaFile(dst)
 		require.NoError(t, err)
 		assert.InDelta(t, 2.0, float64(out.AspectRatio()), 0.2) // equirectangular output is ~2:1.
+	})
+	t.Run("LeavesOtherNamesAlone", func(t *testing.T) {
+		if !cnf.FFmpegEnabled() {
+			t.Skip("FFmpeg must be available to dewarp")
+		}
+		dir := t.TempDir()
+		dst := copyFixture(t, dir, "df.jpg", "testdata/insta360.insp")
+		other := dst + ".dewarp.jpg"
+		require.NoError(t, os.WriteFile(other, []byte("KEEP"), fs.ModeFile))
+		require.NoError(t, convert.dewarpFileInPlace(dst, projection.DualFisheye, false, 204, 0))
+		data, err := os.ReadFile(other) //nolint:gosec // test file in a temporary folder
+		require.NoError(t, err)
+		assert.True(t, string(data) == "KEEP", "other files must be left unchanged")
+	})
+	t.Run("NoOutput", func(t *testing.T) {
+		if !cnf.FFmpegEnabled() {
+			t.Skip("FFmpeg must be available to dewarp")
+		}
+		dir := t.TempDir()
+		dst := filepath.Join(dir, "df.jpg")
+		require.NoError(t, os.WriteFile(dst, []byte("not an image"), fs.ModeFile))
+		assert.Error(t, convert.dewarpFileInPlace(dst, projection.DualFisheye, false, 204, 0))
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Len(t, entries, 1, "staged output must be removed")
+	})
+	t.Run("SymlinkRefused", func(t *testing.T) {
+		dir := t.TempDir()
+		src := copyFixture(t, dir, "df.jpg", "testdata/insta360.insp")
+		link := filepath.Join(dir, "link.jpg")
+		require.NoError(t, os.Symlink(src, link))
+		assert.Error(t, convert.dewarpFileInPlace(link, projection.DualFisheye, false, 204, 0))
+		assert.True(t, fs.IsSymlink(link))
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Len(t, entries, 2)
 	})
 	t.Run("SingleFisheye", func(t *testing.T) {
 		if !cnf.FFmpegEnabled() {
@@ -1070,6 +1108,45 @@ func TestConvert_JpegConvertCmds_RawDisabled(t *testing.T) {
 	}
 
 	assert.True(t, previewImage, "embedded preview must still be extracted when RAW conversion is disabled")
+}
+
+// TestConvert_JpegConvertCmds_DarktableOutputName verifies that unsupported Darktable output names are
+// rendered by the next converter.
+func TestConvert_JpegConvertCmds_DarktableOutputName(t *testing.T) {
+	cnf := config.TestConfig()
+
+	if !cnf.DarktableEnabled() {
+		t.Skip("Darktable must be available")
+	}
+
+	convert := NewConvert(cnf)
+	rawFile := filepath.Join(cnf.SamplesPath(), "canon_eos_6d.dng")
+
+	mediaFile, err := NewMediaFile(rawFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	darktable := func(cmds ConvertCmds) bool {
+		for _, cmd := range cmds {
+			if filepath.Base(cmd.Cmd.Path) == "darktable-cli" {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("Default", func(t *testing.T) {
+		cmds, _, cmdErr := convert.JpegConvertCmds(mediaFile, filepath.Join(t.TempDir(), "canon_eos_6d.dng.jpg"), "")
+		require.NoError(t, cmdErr)
+		assert.True(t, darktable(cmds))
+	})
+	t.Run("Unsupported", func(t *testing.T) {
+		cmds, _, cmdErr := convert.JpegConvertCmds(mediaFile, filepath.Join(t.TempDir(), "image$(x).dng.jpg"), "")
+		require.NoError(t, cmdErr)
+		assert.False(t, darktable(cmds))
+		assert.NotEmpty(t, cmds)
+	})
 }
 
 // TestConvert_JpegConvertCmds_HeifFallback verifies that the documented external

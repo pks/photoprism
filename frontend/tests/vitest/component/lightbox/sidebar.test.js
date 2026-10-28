@@ -28,6 +28,8 @@ const validationConfig = {
 // Other $util methods needed at render time are stubbed inline.
 const validationUtil = {
   normalizeTitle: (s) => $util.normalizeTitle(s),
+  balanceBidi: (s) => $util.balanceBidi(s),
+  isolate: (s) => $util.isolate(s),
   formatCamera: (camera, id, make, model, long) => $util.formatCamera(camera, id, make, model, long),
   typeName: (type, defaultValue) => $util.typeName(type, defaultValue),
   encodeHTML: (s) => s,
@@ -277,6 +279,32 @@ describe("PLightboxSidebar component", () => {
     // is intentional and decorative.
     expect(fileRow.find(".meta-inline-pencil").exists()).toBe(false);
     expect(fileRow.text()).toContain(mockPhoto.FileName);
+  });
+
+  it("should isolate album titles, label names and people names", () => {
+    const w = mountSidebar({
+      props: {
+        modelValue: mockModel,
+        photo: {
+          ...mockPhoto,
+          Albums: [{ UID: "alb1", Title: "رحلة\u2069\u200F 2026", Slug: "trip" }],
+          Labels: [{ Uncertainty: 0, Label: { ID: 1, UID: "lbl1", Name: "قطة\u2029Cat", Slug: "cat", CustomSlug: "" } }],
+        },
+        context: contexts.Photos,
+      },
+    });
+    expect(w.find(".meta-albums .meta-chip__label bdi").text()).toBe("رحلة\u200F 2026");
+    expect(w.findAll(".meta-chip__label bdi").map((b) => b.text())).toContain("قطة Cat");
+    expect(w.find(".meta-person__name bdi").text()).toBe("Jane Doe");
+  });
+
+  it("should show the file name without bidi controls", () => {
+    const w = mountSidebar({
+      props: { modelValue: mockModel, photo: { ...mockPhoto, FileName: "photos/2023/IMG\u202E001.jpg" }, context: contexts.Photos },
+    });
+    expect(w.vm.visibleFileName).toBe("photos/2023/IMG001.jpg");
+    expect(w.find(".meta-file").text()).toContain("photos/2023/IMG001.jpg");
+    expect(w.find(".meta-file").text()).not.toContain("\u202E");
   });
 
   it("should render file info row with the file metadata text", () => {
@@ -1891,7 +1919,7 @@ describe("PLightboxSidebar component", () => {
     return attachRollbackContract(photo, initial);
   }
 
-  describe("confirmDateTime failure rollback", () => {
+  describe("confirmDateTime", () => {
     function buildDateTimePhoto(overrides = {}) {
       const photo = buildSidebarPhoto(
         {
@@ -1904,11 +1932,7 @@ describe("PLightboxSidebar component", () => {
         },
         overrides
       );
-      photo.localDate = vi.fn().mockReturnValue({
-        isValid: true,
-        toISO: () => "2022-07-15T13:45:30",
-      });
-      photo.currentTimeZoneUTC = vi.fn().mockReturnValue(true);
+      photo.setLocalTime = vi.fn().mockReturnValue({ isValid: true });
       return photo;
     }
 
@@ -1965,6 +1989,67 @@ describe("PLightboxSidebar component", () => {
       expect(photo.Year).toBe(2022);
       expect(photo.TimeZone).toBe("UTC");
       expect(w.vm.$notify.error).not.toHaveBeenCalled();
+    });
+
+    it("sets the edited wall time in the selected zone", () => {
+      const photo = buildDateTimePhoto();
+      // Keeps the save pending, so the named zone is not rendered with the stubbed DateTime.
+      photo.update.mockReturnValueOnce(new Promise(() => {}));
+      photo.setLocalTime.mockImplementation(function () {
+        expect([this.TimeZone, this.Year, this.Month, this.Day]).toEqual(["Europe/Berlin", 2022, 7, 15]);
+        return { isValid: true };
+      });
+
+      const w = mountSidebar({
+        props: { modelValue: mockModel, photo, canEdit: true, context: contexts.Photos },
+        global: { stubs: { PMap: true } },
+      });
+
+      w.vm.confirmDateTime({ ...newDateTimeData, TimeZone: "Europe/Berlin" });
+
+      expect(photo.setLocalTime).toHaveBeenCalledWith("13:45:30");
+      expect(photo.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not save an invalid date", () => {
+      const photo = buildDateTimePhoto();
+      photo.setLocalTime.mockReturnValueOnce({ isValid: false });
+
+      const w = mountSidebar({
+        props: { modelValue: mockModel, photo, canEdit: true, context: contexts.Photos },
+        global: { stubs: { PMap: true } },
+      });
+
+      w.vm.confirmDateTime(newDateTimeData);
+
+      expect(photo.update).not.toHaveBeenCalled();
+    });
+
+    it("uses the timestamps passed by the dialog", () => {
+      const photo = buildDateTimePhoto();
+      // Keeps the save pending, so the named zone is not rendered with the stubbed DateTime.
+      photo.update.mockReturnValueOnce(new Promise(() => {}));
+
+      const w = mountSidebar({
+        props: { modelValue: mockModel, photo, canEdit: true, context: contexts.Photos },
+        global: { stubs: { PMap: true } },
+      });
+
+      w.vm.confirmDateTime({
+        ...newDateTimeData,
+        Day: 1,
+        Month: 1,
+        Year: 2020,
+        TimeZone: "Europe/Berlin",
+        time: "01:00:00",
+        TakenAt: "2020-01-01T00:00:00Z",
+        TakenAtLocal: "2020-01-01T01:00:00Z",
+      });
+
+      expect(photo.setLocalTime).not.toHaveBeenCalled();
+      expect(photo.TakenAt).toBe("2020-01-01T00:00:00Z");
+      expect(photo.TakenAtLocal).toBe("2020-01-01T01:00:00Z");
+      expect(photo.TimeZone).toBe("Europe/Berlin");
     });
   });
 

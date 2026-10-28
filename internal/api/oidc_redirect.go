@@ -1,14 +1,17 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/dustin/go-humanize/english"
 	"github.com/gin-gonic/gin"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/auth/oidc"
+	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/photoprism/get"
@@ -52,6 +55,46 @@ func oidcReconcileHint(userName, provider, subject string) string {
 
 	return fmt.Sprintf("account %s uses %s authentication and must be linked before it can sign in via oidc; adopt it with 'photoprism users mod %s --auth oidc --auth-id %s' or sign in locally",
 		clean.LogQuote(userName), clean.LogQuote(provider), userName, clean.Log(subject))
+}
+
+// auditOidcSkippedClaim records that a username claim with characters other than ASCII was skipped when
+// registering an account.
+func auditOidcSkippedClaim(clientIp string, skipped bool) {
+	if skipped {
+		event.AuditWarn([]string{clientIp, "create session", "oidc", "create user", "username claim", authn.ErrNotASCII.Error(), status.Skipped})
+	}
+}
+
+// oidcUsernameAvailable reports whether a new account can take the username, i.e. it is not reserved and no
+// account, as the database compares names, has it.
+func oidcUsernameAvailable(userName string) bool {
+	if _, err := authn.Username(userName); errors.Is(err, authn.ErrReserved) {
+		return false
+	}
+
+	return entity.FindUserByName(userName) == nil
+}
+
+// oidcSuffixedUsername appends a random six-digit number to the username, shortening it first so that the
+// result fits the length a login accepts.
+func oidcSuffixedUsername(userName string) string {
+	const suffixLength = 6
+
+	if maxLength := txt.ClipUsername - suffixLength; len(userName) > maxLength {
+		userName = userName[:maxLength]
+	}
+
+	return userName + rnd.Base10(suffixLength)
+}
+
+// oidcEmailUsername reports whether the username of a new account is its verified email address, as with the
+// email username claim, and whether the address is a valid username as it is.
+func oidcEmailUsername(claim, name, verifiedEmail string) (fromEmail, valid bool) {
+	if claim != authn.OidcClaimEmail || verifiedEmail == "" || name != verifiedEmail {
+		return false, false
+	}
+
+	return true, clean.Username(name) == name
 }
 
 // OIDCRedirect completes the OIDC flow, creates a session, and renders a page that stores the token client-side.
@@ -112,8 +155,8 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			return
 		}
 
-		// Check if the required request parameters are present.
-		if c.Query("state") == "" || c.Query("code") == "" {
+		// Check if the required request parameters are present and the code is within its length limit.
+		if code := c.Query("code"); c.Query("state") == "" || code == "" || len(code) > MaxOIDCCodeLength {
 			event.AuditErr([]string{clientIp, "create session", "oidc", authn.ErrAuthCodeRequired.Error()})
 			c.Redirect(http.StatusTemporaryRedirect, conf.LoginUri())
 			return
@@ -136,7 +179,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			// branded page that returns the user to login instead of leaving them on a
 			// raw, dead-end error with no way forward.
 			event.AuditErr([]string{clientIp, "create session", "oidc", status.Error(claimErr)})
-			event.LoginError(clientIp, "oidc", userName, userAgent, claimErr.Error())
+			event.LoginError(clientIp, "oidc", userName, userAgent, clean.Error(claimErr))
 			c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrUnexpected))
 			return
 		}
@@ -165,8 +208,14 @@ func OIDCRedirect(router *gin.RouterGroup) {
 
 		requiredGroups := conf.OIDCGroup()
 
-		if len(requiredGroups) > 0 {
+		if len(requiredGroups) > 0 || conf.OIDCGroupSet() {
 			switch {
+			case len(requiredGroups) == 0:
+				message := "required groups are not valid group IDs"
+				event.AuditErr([]string{clientIp, "create session", "oidc", message})
+				event.LoginError(clientIp, "oidc", userName, userAgent, message)
+				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrForbidden))
+				return
 			case groupOverage && len(groups) == 0:
 				message := "IdP omitted some or all groups; cannot validate required groups"
 				event.AuditErr([]string{clientIp, "create session", "oidc", message})
@@ -188,9 +237,29 @@ func OIDCRedirect(router *gin.RouterGroup) {
 		// A PhotoPrism Portal OP grants the instance login role via the pp_role
 		// claim (gated by pp_issuer_kind); prefer the verified ID token, then user
 		// info. It takes precedence over the group mapping below.
-		portalRole, hasPortalRole := oidc.PortalGrantedRole(idTokenClaims)
+		portalClaims := idTokenClaims
+		portalRole, hasPortalRole := oidc.PortalGrantedRole(portalClaims)
 		if !hasPortalRole {
-			portalRole, hasPortalRole = oidc.PortalGrantedRole(userInfo.Claims)
+			portalClaims = userInfo.Claims
+			portalRole, hasPortalRole = oidc.PortalGrantedRole(portalClaims)
+		}
+
+		if granted := oidc.PortalRoleClaim(portalClaims); !hasPortalRole || granted == portalRole.String() {
+			// The granted role applies as is.
+		} else if granted == "" {
+			event.AuditWarn([]string{clientIp, "create session", "oidc", "portal role is invalid, applying %s"}, portalRole.String())
+		} else {
+			event.AuditWarn([]string{clientIp, "create session", "oidc", "portal role %s is not available, applying %s"}, clean.LogQuote(granted), portalRole.String())
+		}
+
+		// The role a new account receives: a Portal-granted role, then a federatable
+		// group-mapped role, else the configured default.
+		newUserRole := defaultRole
+		switch {
+		case hasPortalRole:
+			newUserRole = portalRole
+		case hasMappedRole && acl.IsFederatedRole(mappedRole):
+			newUserRole = mappedRole
 		}
 
 		// Step 1: Create user account if it does not exist yet.
@@ -202,7 +271,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 		// Optionally check if the email domain matches.
 		if domain := conf.OIDCDomain(); domain == "" {
 			// Do nothing.
-		} else if _, emailDomain, _ := strings.Cut(userEmail, "@"); emailDomain == "" || !userInfo.EmailVerified {
+		} else if _, emailDomain, _ := strings.Cut(oidc.VerifiedEmail(userInfo), "@"); emailDomain == "" {
 			event.AuditErr([]string{clientIp, "create session", "oidc", authn.ErrVerifiedEmailRequired.Error()})
 			event.LoginError(clientIp, "oidc", userEmail, userAgent, authn.ErrVerifiedEmailRequired.Error())
 			c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrVerifiedEmailRequired))
@@ -222,6 +291,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
 			return
 		} else if oidcUser.UserName == "" && entity.FindUser(oidcUser) == nil {
+			auditOidcSkippedClaim(clientIp, conf.OIDCRegister() && oidc.SkipsClaim(userInfo, conf.OIDCUsername()))
 			event.AuditErr([]string{clientIp, "create session", "oidc", authn.ErrUsernameRequiredToRegister.Error()})
 			event.LoginError(clientIp, "oidc", oidcUser.UserName, userAgent, authn.ErrUsernameRequiredToRegister.Error())
 			c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
@@ -264,6 +334,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 
 			// Update user profile information.
 			details := user.Details()
+			emailChanged := false
 
 			// Update user display name.
 			if entity.SrcPriority[details.NameSrc] <= entity.SrcPriority[entity.SrcOIDC] {
@@ -292,7 +363,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			user.Settings().UILanguage = clean.Locale(userInfo.Locale.String(), user.Settings().UILanguage)
 
 			// Update UI timezone.
-			if zone := userInfo.Zoneinfo; zone != "" && zone != tz.UTC {
+			if zone := oidcTimeZone(userInfo.Zoneinfo); zone != "" && zone != tz.UTC {
 				user.Settings().UITimeZone = zone
 			}
 
@@ -303,34 +374,44 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			}
 
 			// Update birthday, if available.
-			if birthDate := txt.ParseTime(userInfo.Birthdate, userInfo.Zoneinfo); !birthDate.IsZero() {
+			if birthDate := txt.ParseTime(userInfo.Birthdate, oidcTimeZone(userInfo.Zoneinfo)); !birthDate.IsZero() {
 				user.BornAt = &birthDate
 				user.Details().BirthDay = birthDate.Day()
 				user.Details().BirthMonth = int(birthDate.Month())
 				user.Details().BirthYear = birthDate.Year()
 			}
 
-			// Update email only when the IdP marks it verified and no other account
-			// holds it. The email is informational, so a clash never blocks login; the
-			// Portal OP forwards real verification state, so unverified cluster emails
-			// are simply not stored.
-			if bool(userInfo.EmailVerified) && entity.UserEmailAvailable(userInfo.Email, user.UserUID) {
-				user.UserEmail = clean.Email(userInfo.Email)
+			// Update email only when the IdP marks it verified; the Portal OP forwards
+			// real verification state, so unverified cluster emails are not stored.
+			if email := oidc.VerifiedEmail(userInfo); email != "" {
+				emailChanged = email != user.UserEmail
+				user.UserEmail = email
 				user.VerifiedAt = entity.TimeStamp()
 			}
 
-			// Apply a federated role only when federation may set it: an existing
-			// cluster_admin/visitor account is never touched, and the IdP can never
-			// escalate to a non-federatable role. A Portal-granted pp_role takes
-			// precedence over the group mapping.
-			if hasPortalRole {
-				if role, ok := acl.FederatedRoleUpdate(user.AclRole(), portalRole); ok {
-					user.SetRole(role.String())
-				}
+			// Apply a federated role only when federation may set it: super admins and existing
+			// cluster_admin/visitor accounts keep their role, and the IdP can never escalate to a
+			// non-federatable role. A Portal-granted pp_role takes precedence over the group mapping.
+			prevRole := user.AclRole()
+			var role acl.Role
+			var update bool
+
+			if user.SuperAdmin {
+				// Do nothing.
+			} else if hasPortalRole {
+				role, update = acl.FederatedRoleUpdate(prevRole, portalRole)
 			} else if hasMappedRole {
-				if role, ok := acl.FederatedRoleUpdate(user.AclRole(), mappedRole); ok {
-					user.SetRole(role.String())
-				}
+				role, update = acl.FederatedRoleUpdate(prevRole, mappedRole)
+			}
+
+			// A role that counts toward the user quota is not applied while the quota is reached.
+			if update && !conf.UsersQuotaReached(prevRole) && conf.UsersQuotaReached(role) {
+				event.AuditWarn([]string{clientIp, "create session", "oidc", "update user %s", "role %s not applied", authn.ErrUsersQuotaExceeded.Error()}, clean.LogQuote(userName), role.String())
+				update = false
+			}
+
+			if update {
+				user.SetRole(role.String())
 			}
 
 			// Update Subject ID and Issuer URI.
@@ -339,9 +420,16 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			// Update existing user account.
 			if err = user.Save(); err != nil {
 				event.AuditErr([]string{clientIp, "create session", "oidc", clean.LogQuote(userName), authn.ErrAccountUpdateFailed.Error(), status.Error(err)})
-				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountUpdateFailed.Error()+" ("+err.Error()+")")
+				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountUpdateFailed.Error()+" ("+clean.Error(err)+")")
 				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
 				return
+			} else if emailChanged {
+				user.ReportSharedEmail()
+			}
+
+			if update {
+				config.FlushUsageCache()
+				event.AuditInfo([]string{clientIp, "create session", "oidc", "update user %s", "role %s changed to %s", status.Updated}, clean.LogQuote(userName), prevRole.String(), role.String())
 			}
 
 			// Set user avatar image?
@@ -350,7 +438,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 					event.AuditWarn([]string{clientIp, "create session", "oidc", clean.LogQuote(userName), "failed to set avatar image", status.Error(err)})
 				}
 			}
-		} else if conf.UsersQuotaReached(conf.OIDCRole()) { //nolint:gocritic
+		} else if conf.UsersQuotaReached(newUserRole) { //nolint:gocritic
 			userName = oidcUser.Username()
 			event.AuditWarn([]string{clientIp, "create session", "oidc", "create user", clean.LogQuote(userName), authn.ErrUsersQuotaExceeded.Error()})
 			event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrUsersQuotaExceeded.Error())
@@ -361,10 +449,41 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			user = &oidcUser
 
 			userName = oidcUser.Username()
+			auditOidcSkippedClaim(clientIp, oidc.SkipsClaim(userInfo, conf.OIDCUsername()))
 
-			// Resolve potential naming conflict by adding a random number to the username.
-			if found := entity.FindUserByName(userName); found != nil {
-				userName += rnd.Base10(6)
+			// A username taken from the email address must match it, so it is never changed to resolve a conflict.
+			emailUsername, validEmailUsername := oidcEmailUsername(conf.OIDCUsername(), oidcUser.UserName, oidc.VerifiedEmail(userInfo))
+
+			if emailUsername && !validEmailUsername {
+				event.AuditWarn([]string{clientIp, "create session", "oidc", "create user %s", authn.ErrInvalidUsername.Error()}, clean.LogQuote(userName))
+				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrInvalidUsername.Error())
+				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
+				return
+			} else if oidcUsernameAvailable(userName) {
+				// The username is available.
+			} else if emailUsername {
+				event.AuditWarn([]string{clientIp, "create session", "oidc", "create user %s", authn.ErrUsernameAlreadyExists.Error()}, clean.LogQuote(userName))
+				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrUsernameAlreadyExists.Error())
+				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
+				return
+			} else {
+				// Resolve the naming conflict by adding a random number to the username.
+				userName = oidcSuffixedUsername(userName)
+			}
+
+			// An email address used as username must not be assigned to another account.
+			if emailUsername {
+				if count, _, err := oidcUser.OtherEmailHolders(); err != nil {
+					event.AuditErr([]string{clientIp, "create session", "oidc", "create user %s", authn.ErrAccountCreateFailed.Error(), status.Error(err)}, clean.LogQuote(userName))
+					event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountCreateFailed.Error())
+					c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
+					return
+				} else if count > 0 {
+					event.AuditWarn([]string{clientIp, "create session", "oidc", "create user %s", authn.ErrEmailAlreadyExists.Error()}, clean.LogQuote(userName))
+					event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrEmailAlreadyExists.Error())
+					c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
+					return
+				}
 			}
 
 			event.AuditInfo([]string{clientIp, "create session", "oidc", "create user", clean.LogQuote(userName)})
@@ -388,7 +507,7 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			user.Settings().UILanguage = clean.Locale(userInfo.Locale.String(), "")
 
 			// Set UI timezone.
-			user.Settings().UITimeZone = userInfo.Zoneinfo
+			user.Settings().UITimeZone = oidcTimeZone(userInfo.Zoneinfo)
 
 			// Set user location, if available.
 			if addr := userInfo.GetAddress(); addr != nil {
@@ -397,46 +516,42 @@ func OIDCRedirect(router *gin.RouterGroup) {
 			}
 
 			// Set birthday, if available.
-			if birthDate := txt.ParseTime(userInfo.Birthdate, userInfo.Zoneinfo); !birthDate.IsZero() {
+			if birthDate := txt.ParseTime(userInfo.Birthdate, oidcTimeZone(userInfo.Zoneinfo)); !birthDate.IsZero() {
 				user.BornAt = &birthDate
 				user.Details().BirthDay = birthDate.Day()
 				user.Details().BirthMonth = int(birthDate.Month())
 				user.Details().BirthYear = birthDate.Year()
 			}
 
-			// Mark the email verified only when the IdP does and no other account holds
-			// it; otherwise it is kept unverified. The email is informational (not an
-			// auth identifier), so a clash never blocks provisioning.
-			if bool(userInfo.EmailVerified) && entity.UserEmailAvailable(userInfo.Email, user.UserUID) {
-				user.UserEmail = clean.Email(userInfo.Email)
+			// Mark the email verified, which it only holds if the IdP has verified it.
+			if email := oidc.VerifiedEmail(userInfo); email != "" {
+				user.UserEmail = email
 				user.VerifiedAt = entity.TimeStamp()
 			}
 
-			// Set user role and permissions. A Portal-granted pp_role wins, then a
-			// group-mapped role when federation may set it, else the configured
-			// default; all are filtered to federatable roles (no cluster_admin/visitor).
-			switch {
-			case hasPortalRole:
-				user.SetRole(portalRole.String())
-			case hasMappedRole && acl.IsFederatedRole(mappedRole):
-				user.SetRole(mappedRole.String())
-			default:
-				user.SetRole(defaultRole.String())
-			}
+			// Set user role and permissions.
+			user.SetRole(newUserRole.String())
 			user.CanLogin = true
 			user.WebDAV = conf.OIDCWebDAV()
 
 			// Create new user account, and then update the Subject ID to make sure it is unique.
 			if err = user.Create(); err != nil {
 				event.AuditErr([]string{clientIp, "create session", "oidc", clean.LogQuote(userName), authn.ErrAccountCreateFailed.Error(), status.Error(err)})
-				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountCreateFailed.Error()+" ("+err.Error()+")")
+				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountCreateFailed.Error()+" ("+clean.Error(err)+")")
 				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
 				return
 			} else if err = user.UpdateAuthID(userInfo.Subject, provider.Issuer()); err != nil {
 				event.AuditErr([]string{clientIp, "create session", "oidc", clean.LogQuote(userName), authn.ErrAccountUpdateFailed.Error(), status.Error(err)})
-				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountUpdateFailed.Error()+" ("+err.Error()+")")
+				event.LoginError(clientIp, "oidc", userName, userAgent, authn.ErrAccountUpdateFailed.Error()+" ("+clean.Error(err)+")")
 				c.HTML(http.StatusUnauthorized, "auth.gohtml", CreateSessionError(http.StatusUnauthorized, i18n.ErrInvalidCredentials))
 				return
+			}
+
+			config.FlushUsageCache()
+
+			// Report an email address that other accounts also hold.
+			if count, _ := user.ReportSharedEmail(); count > 0 {
+				event.AuditWarn([]string{clientIp, "create session", "oidc", "create user %s", "email is also assigned to %s"}, clean.LogQuote(userName), english.Plural(count, "other account", "other accounts"))
 			}
 
 			// Set user avatar image.
@@ -525,4 +640,9 @@ func OIDCRedirect(router *gin.RouterGroup) {
 		// Step 3: Render HTML template to set the access token in localStorage.
 		c.HTML(http.StatusOK, "auth.gohtml", response)
 	})
+}
+
+// oidcTimeZone returns the normalized time zone of a zoneinfo claim, or an empty string if it is not a valid name.
+func oidcTimeZone(zoneinfo string) string {
+	return tz.Sanitize(zoneinfo)
 }

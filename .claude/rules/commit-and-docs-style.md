@@ -16,9 +16,7 @@ Do not add `Co-Authored-By: Claude …` trailers (or any other AI-authorship tra
 
 Issue titles MUST be concise, use the imperative mood, and start with a single capitalized prefix followed by a colon and a space, e.g. `Search: Add filter for RAW image formats`. A `Bug` title states what does not work instead, e.g. `PWA: Unable to download or share files`.
 
-Issue descriptions MUST begin with a one-sentence **User Story** in the format: `**As a <role>, I want <goal>, so that <outcome>.**`
-Use level-3 Markdown headings for sections within issue descriptions, for example `### Acceptance Criteria`.
-Follow the User Story with a clear summary of the expected behavior, rationale, technical considerations, and constraints.
+Issue descriptions MUST begin with a one-sentence **User Story** in the format: `**As a <role>, I want <goal>, so that <outcome>.**` Use level-3 Markdown headings for sections within issue descriptions, for example `### Acceptance Criteria`. Follow the User Story with a clear summary of the expected behavior, rationale, technical considerations, and constraints.
 
 Descriptions MUST conclude with a checklist of **Acceptance Criteria**:
 - Use GitHub checklist formatting: `- [ ]`
@@ -32,7 +30,7 @@ Descriptions MUST conclude with a checklist of **Acceptance Criteria**:
 - An issue is complete only when every `MUST` is checked; never tick a box on the strength of a plan alone or an unrun test.
 - When referencing an issue from a commit that fulfills some of its criteria, update the matching boxes first.
 
-> Agents MUST create, edit, close, reopen, relabel, or otherwise modify GitHub issues only when explicitly requested by the user.
+> Agents MUST create, edit, close, reopen, relabel, or otherwise modify GitHub issues only when explicitly requested by the user. Ticking the Acceptance Criteria checkboxes of an issue you are delivering against, for work that is committed and verified, is not a restricted modification.
 
 The repo's issue templates use the GitHub `type:` property instead of `bug`/`idea` labels. The types are configured for the organization, not in this repo, so read them with `gh api orgs/photoprism/issue-types --jq '.[].name'` rather than assuming — as of September 2026 they are `Task`, `Bug`, `Feature`, `Enhancement` and `Epic`, and the templates name only some of them. `gh issue create --type <name>` sets the type when filing, and `gh issue edit --type <name>` changes it afterwards; neither needs the web UI.
 
@@ -54,6 +52,7 @@ A half-wired mechanism may look like a defect: helpers exist, the intent is legi
 - Document headings use a **Chicago-style title case**, with additional code- and path-aware normalization rules (see below). Always spell the product name as `PhotoPrism`.
 - Use US English spelling in all documentation, headings, issue and PR text, and commit messages (`behavior`, `color`, `labeled`, `license`, `analyze`, `normalize`, `optimize`) — not the British `-our` / `-ise` / `-re` / `-lled` variants. Leave code spans, identifiers, file paths, and quoted external text such as third-party license names verbatim. `.claude/rules/code-comments.md` applies the same rule to code comments.
 - When writing CLI examples or scripts, place option flags before positional arguments unless the command requires a different order.
+- **Do not hard-wrap Markdown prose.** Write each paragraph and list item on one line, in Markdown files and in text posted elsewhere: GitHub issue descriptions, issue and pull request comments, discussion posts, and email drafts. Markdown renders a soft-wrapped line the same, and agents read the source either way, so fixed-width wraps only add re-wrapping work and noisy diffs; this overrides any agent or editor default that wraps at a column. Keep line breaks where they carry meaning: code blocks, tables, front matter, and deliberate hard breaks. When editing an already wrapped paragraph, unwrap the paragraph you change and leave the rest alone. Commit message bodies and code comments are plain text and keep their own conventions.
 - Name environment variables in full in user-facing docs, READMEs, examples, and templates (`PHOTOPRISM_DETECT_NSFW`, not `DETECT_NSFW`), since readers copy them verbatim. CLI flags (`--detect-nsfw`) and YAML option keys keep their own names.
 - Use RFC 3339 UTC timestamps in request and response examples, and valid ID, UID and UUID examples in docs and tests.
 - Technical specifications in the nested `specs/` subrepository may not be present in every clone or environment. Do not add `Makefile` targets in the main project that depend on `specs/` paths.

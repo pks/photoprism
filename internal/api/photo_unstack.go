@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -149,8 +150,7 @@ func PhotoUnstack(router *gin.RouterGroup) {
 
 			destName := fmt.Sprintf("%s.%s%s", unstackFile.AbsPrefix(false), unstackFile.Checksum(), unstackFile.Extension())
 
-			// MediaFile.Move/Copy allow replacing an existing empty destination file
-			// without force, but will not overwrite non-empty files.
+			// The destination name includes the file checksum, so a file that force replaces has the same checksum.
 			if moveErr := unstackFile.Move(destName, true); moveErr != nil {
 				log.Error(moveErr)
 				log.Errorf("photo: cannot rename %s to %s (unstack)", clean.Log(unstackFile.BaseName()), clean.Log(filepath.Base(destName)))
@@ -180,7 +180,8 @@ func PhotoUnstack(router *gin.RouterGroup) {
 		newPhoto.PhotoPath = unstackFile.RootRelPath()
 		newPhoto.PhotoName = unstackFile.BasePrefix(false)
 
-		if createErr := newPhoto.Create(); createErr != nil {
+		// The photo row is created even if its details could not be saved; indexing the files saves them again.
+		if createErr := newPhoto.Create(); createErr != nil && !errors.Is(createErr, entity.ErrDetailsNotSaved) {
 			log.Errorf("photo: %s (unstack %s)", createErr.Error(), clean.Log(baseName))
 			AbortSaveFailed(c)
 			return
@@ -196,7 +197,7 @@ func PhotoUnstack(router *gin.RouterGroup) {
 			}
 
 			if updateErr := entity.UnscopedDb().Exec(`UPDATE files 
-				SET photo_id = ?, photo_uid = ?, file_name = ?, file_missing = 0
+				SET photo_id = ?, photo_uid = ?, file_name = ?, file_missing = FALSE
 				WHERE file_name = ? AND file_root = ?`,
 				newPhoto.ID, newPhoto.PhotoUID, r.RootRelName(),
 				relName, relRoot).Error; updateErr != nil {
@@ -210,8 +211,7 @@ func PhotoUnstack(router *gin.RouterGroup) {
 
 				// Revert file rename.
 				if unstackSingle {
-					// MediaFile.Move/Copy allow replacing an existing empty destination file
-					// without force, but will not overwrite non-empty files.
+					// Force restores the original name, which the file held before it was renamed.
 					if moveErr := r.Move(photoprism.FileName(relRoot, relName), true); moveErr != nil {
 						log.Error(moveErr)
 						log.Errorf("photo: file name could not be reverted (unstack %s)", clean.Log(r.BaseName()))

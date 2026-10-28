@@ -11,6 +11,9 @@ export const Roles = () => {
     "contributor": $gettext("Contributor"),
     "guest": $gettext("Guest"),
     "client": $gettext("Client"),
+    "instance": $gettext("Instance"),
+    "service": $gettext("Service"),
+    "portal": $gettext("Portal"),
     "visitor": $gettext("Visitor"),
     "": $gettext("Unauthorized"),
   };
@@ -42,6 +45,7 @@ export const Providers = () => {
     "local": $gettext("Local"),
     "client": $gettext("Client"),
     "client_credentials": "Client Credentials",
+    "oauth_app": "OAuth App",
     "application": $gettext("Application"),
     "access_token": $gettext("Access Token"),
     "password": $gettext("Local"),
@@ -73,6 +77,7 @@ export const Methods = () => {
     "client": $gettext("Client"),
     "access_token": $gettext("Access Token"),
     "oauth2": "OAuth2",
+    "pkce": "PKCE",
     "2fa": $gettext("2FA"),
     "oidc": "OIDC",
   };

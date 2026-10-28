@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/photoprism/photoprism/internal/form"
@@ -9,7 +10,9 @@ import (
 
 // Lenses searches lenses based on their name.
 func Lenses(frm form.SearchLenses) (results []Lens, err error) {
-	if err = frm.ParseQueryString(); err != nil {
+	if err = frm.ParseQueryString(); errors.Is(err, form.ErrNoMatch) {
+		return []Lens{}, nil
+	} else if err != nil {
 		return results, err
 	}
 
@@ -38,6 +41,8 @@ func Lenses(frm form.SearchLenses) (results []Lens, err error) {
 	if frm.ID != "" {
 		s = s.Where("lenses.id IN (?)", strings.Split(frm.ID, txt.Or))
 
+		results = make([]Lens, 0)
+
 		if result := s.Scan(&results); result.Error != nil {
 			return results, result.Error
 		}
@@ -47,8 +52,10 @@ func Lenses(frm form.SearchLenses) (results []Lens, err error) {
 
 	if frm.Query != "" {
 		likeString := SqlParam(frm.Query, "%", "%")
-		s = s.Where(likeCond("lenses.lens_name")+" OR "+likeCond("lenses.lens_make")+" OR "+likeCond("lenses.lens_model"), likeString, likeString, likeString)
+		s = s.Where(likeCond("lenses.lens_name", false)+" OR "+likeCond("lenses.lens_make", false)+" OR "+likeCond("lenses.lens_model", false), likeString, likeString, likeString)
 	}
+
+	results = make([]Lens, 0)
 
 	if result := s.Scan(&results); result.Error != nil {
 		return results, result.Error

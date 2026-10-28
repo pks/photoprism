@@ -34,20 +34,40 @@ func TestFlagsToCatalog_Visibility(t *testing.T) {
 	}
 }
 
-func TestCommandInfo_GlobalFlagElimination(t *testing.T) {
-	// Define a command with a global-like flag and a local one
+func TestCommandInfo_Flags(t *testing.T) {
 	cmd := &cli.Command{
-		Name: "auth",
+		Name: "register",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "json"}, // should be filtered out as global
-			&cli.BoolFlag{Name: "force"},
+			cli.HelpFlag,
+			nil,
+			&cli.StringFlag{Name: "portal-url", Usage: "has the name of a global flag"},
+			&cli.BoolFlag{Name: "trace", Usage: "has the name of a global flag"},
+			&cli.BoolFlag{Name: "dry", Hidden: true},
 		},
 	}
-	globals := FlagsToCatalog([]cli.Flag{&cli.BoolFlag{Name: "json"}}, false)
-	info := CommandInfo(cmd, 1, "photoprism", false, globals)
-	if len(info.Flags) != 1 || info.Flags[0].Name != "--force" {
-		t.Fatalf("expected only '--force' flag, got %+v", info.Flags)
-	}
+
+	t.Run("Visible", func(t *testing.T) {
+		info := CommandInfo(cmd, 1, "photoprism cluster", false)
+		names := make([]string, 0, len(info.Flags))
+		for _, f := range info.Flags {
+			names = append(names, f.Name)
+		}
+		if strings.Join(names, " ") != "--portal-url --trace" {
+			t.Fatalf("expected '--portal-url --trace', got %v", names)
+		}
+	})
+	t.Run("Hidden", func(t *testing.T) {
+		info := CommandInfo(cmd, 1, "photoprism cluster", true)
+		if len(info.Flags) != 3 || info.Flags[0].Name != "--dry" || !info.Flags[0].Hidden {
+			t.Fatalf("expected '--dry' as hidden flag and no '--help', got %+v", info.Flags)
+		}
+	})
+	t.Run("HelpFlagName", func(t *testing.T) {
+		own := &cli.Command{Name: "x", Flags: []cli.Flag{&cli.BoolFlag{Name: "help", Usage: "own flag"}}}
+		if info := CommandInfo(own, 1, "photoprism", false); len(info.Flags) != 1 {
+			t.Fatalf("expected a command's own '--help' flag to be kept, got %+v", info.Flags)
+		}
+	})
 }
 
 func TestBuildFlatAndNode(t *testing.T) {
@@ -56,10 +76,8 @@ func TestBuildFlatAndNode(t *testing.T) {
 	rmHidden := &cli.Command{Name: "rm", Hidden: true}
 	auth := &cli.Command{Name: "auth", Subcommands: []*cli.Command{add, rmHidden, help}}
 
-	globals := FlagsToCatalog(nil, false)
-
 	// Flat without hidden
-	flat := BuildFlat(auth, 1, "photoprism", false, globals)
+	flat := BuildFlat(auth, 1, "photoprism", false)
 	if len(flat) != 2 { // auth + add (help omitted)
 		t.Fatalf("expected 2 commands (auth, add), got %d", len(flat))
 	}
@@ -71,7 +89,7 @@ func TestBuildFlatAndNode(t *testing.T) {
 	}
 
 	// Nested with hidden
-	node := BuildNode(auth, 1, "photoprism", true, globals)
+	node := BuildNode(auth, 1, "photoprism", true)
 	if len(node.Subcommands) != 2 { // add + rm (help omitted)
 		t.Fatalf("expected 2 subcommands when including hidden, got %d", len(node.Subcommands))
 	}
@@ -167,4 +185,34 @@ func TestRenderMarkdown_ShortOmitsFlags(t *testing.T) {
 	if strings.Contains(out, "| Flag | Aliases | Type |") {
 		t.Fatalf("did not expect flags table when Short=true:\n%s", out)
 	}
+}
+
+// wrappedFlag wraps a string flag like commands.LocalStringFlag.
+type wrappedFlag struct {
+	*cli.StringFlag
+}
+
+// Unwrap returns the wrapped string flag.
+func (f *wrappedFlag) Unwrap() cli.Flag {
+	return f.StringFlag
+}
+
+func TestFlagTypeString(t *testing.T) {
+	t.Run("Plain", func(t *testing.T) {
+		if got := flagTypeString(&cli.StringFlag{Name: "site-url"}); got != "string" {
+			t.Fatalf("expected string, got %q", got)
+		}
+		if got := flagTypeString(&cli.BoolFlag{Name: "trace"}); got != "bool" {
+			t.Fatalf("expected bool, got %q", got)
+		}
+	})
+	t.Run("Wrapped", func(t *testing.T) {
+		f := &wrappedFlag{&cli.StringFlag{Name: "advertise-url", Aliases: []string{"i"}, Usage: "internal service `URL`"}}
+		if got := flagTypeString(f); got != "string" {
+			t.Fatalf("expected string, got %q", got)
+		}
+		if d := DescribeFlag(f); d.Type != "string" || d.Name != "--advertise-url" || d.Usage == "" {
+			t.Fatalf("unexpected description %+v", d)
+		}
+	})
 }

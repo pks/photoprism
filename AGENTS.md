@@ -1,6 +1,6 @@
 # PhotoPrism Repository Guidelines
 
-**Last Updated:** October 1, 2026
+**Last Updated:** October 19, 2026
 
 ## Purpose
 
@@ -61,12 +61,13 @@ Optional nested repositories such as `plus/`, `pro/`, `portal/`, and `specs/` ma
   - Leave items that are unverified, not yet implemented, or skipped optional (`MAY`) enhancements unchecked.
   - An issue is complete only when every `MUST` is checked; never tick a box on the strength of a plan alone or an unrun test.
   - When referencing an issue from a commit that fulfills some of its criteria, update the matching boxes first.
-- Agents MUST create, edit, close, reopen, relabel, or otherwise modify GitHub issues only when explicitly requested by the user.
+- Agents MUST create, edit, close, reopen, relabel, or otherwise modify GitHub issues only when explicitly requested by the user. Ticking the Acceptance Criteria checkboxes of an issue you are delivering against, for work that is committed and verified, is not a restricted modification.
 
 ### Specifications & Documentation
 
 - Markdown headings use a Chicago-style title case, with additional code- and path-aware normalization rules (see *Title Case rules* below). Always spell the product name as `PhotoPrism`.
 - Put option flags before positional arguments unless the command requires another order.
+- **Do not hard-wrap Markdown prose.** Write each paragraph and list item on one line, in Markdown files and in text posted elsewhere: GitHub issue descriptions, issue and pull request comments, discussion posts, and email drafts. Markdown renders a soft-wrapped line the same, and agents read the source either way, so fixed-width wraps only add re-wrapping work and noisy diffs; this overrides any agent or editor default that wraps at a column. Keep line breaks where they carry meaning: code blocks, tables, front matter, and deliberate hard breaks. When editing an already wrapped paragraph, unwrap the paragraph you change and leave the rest alone. Commit message bodies and code comments are plain text and keep their own conventions.
 - Name environment variables in full in user-facing docs, READMEs, examples, and templates (`PHOTOPRISM_DETECT_NSFW`, not `DETECT_NSFW`), since readers copy them verbatim. CLI flags (`--detect-nsfw`) and YAML option keys keep their own names.
 - Use RFC 3339 UTC timestamps and valid ID, UID, and UUID examples in docs and tests.
 - The nested `specs/` repository may be absent. Do not add main-repo `Makefile` targets that depend on it; when present, you may run its tools manually.
@@ -96,7 +97,7 @@ Title Case rules (Chicago-style, with code- and path-aware normalization):
 
 ## Project Layout & Shared Rules
 
-- Backend: Go in `internal/`, `pkg/`, and `cmd/`, backed by MariaDB or SQLite.
+- Backend: Go in `internal/`, `pkg/`, and `cmd/`, backed by MariaDB or SQLite (PostgreSQL is experimental).
 - Frontend: Vue 3 plus Vuetify 4 under `frontend/`.
 - Local development uses Docker Compose; Traefik provides local TLS via `*.localssl.dev`.
 - Code in `pkg/*` must not import from `internal/*`. If you need config, entity, or DB access, add code under `internal/`.

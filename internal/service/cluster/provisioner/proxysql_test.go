@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/photoprism/photoprism/internal/config"
+	"github.com/photoprism/photoprism/internal/event"
+	"github.com/photoprism/photoprism/pkg/rnd"
 )
 
 func TestEnsureCredentials_ProxySQLIntegration(t *testing.T) {
@@ -59,7 +61,7 @@ func TestEnsureCredentials_ProxySQLIntegration(t *testing.T) {
 	})
 
 	conf := config.NewConfig(config.CliTestContext())
-	conf.Options().ClusterUUID = time.Now().UTC().Format("20060102-150405.000000000")
+	conf.Options().ClusterUUID = rnd.UUID()
 
 	nodeUUID := "11111111-1111-4111-8111-333333333333"
 	nodeName := "pp-proxy-itest"
@@ -173,20 +175,22 @@ func TestNormalizeProxyDSN(t *testing.T) {
 		}
 	})
 	t.Run("DroppedLogged", func(t *testing.T) {
+		// Operator-only detail goes to the system log.
 		logger, hook := logtest.NewNullLogger()
-		prev := log
-		log = logger
-		t.Cleanup(func() { log = prev })
+		prev := event.SystemLog
+		event.SystemLog = logger
+		t.Cleanup(func() { event.SystemLog = prev })
 		_, err := normalizeProxyDSN("admin:admin@tcp(127.0.0.1:6032)/?wait_timeout=28800,sql_mode=ANSI&x%20y=secret&stray")
 		require.NoError(t, err)
 		require.Len(t, hook.AllEntries(), 1)
 		assert.Equal(t, "proxysql: ignored 3 unsupported admin dsn parameters wait_timeout", hook.LastEntry().Message)
 	})
 	t.Run("InvalidDSN", func(t *testing.T) {
+		// Neither logger may receive the rejected DSN, which holds a password.
 		logger, hook := logtest.NewNullLogger()
-		prev := log
-		log = logger
-		t.Cleanup(func() { log = prev })
+		prevLog, prevSystemLog := log, event.SystemLog
+		log, event.SystemLog = logger, logger
+		t.Cleanup(func() { log, event.SystemLog = prevLog, prevSystemLog })
 		for _, in := range []string{"admin:pa?ss=word@tcp(127.0.0.1:6032)", "admin:p/a?ss=word@tcp(127.0.0.1:6032)",
 			"admin:admin@tcp(127.0.0.1:6032)/?tls=custom", "admin:admin@tcp(127.0.0.1:6032)/?strict=1",
 			"admin:admin@tcp(127.0.0.1:6032)/?allowNativePasswords=no"} {

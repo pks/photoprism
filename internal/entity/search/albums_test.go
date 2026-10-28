@@ -79,6 +79,16 @@ func TestUserAlbums(t *testing.T) {
 
 		assert.NoError(t, err)
 	})
+	t.Run("NoMatchDeniesNonAdmin", func(t *testing.T) {
+		// A value that can match nothing does not skip the check.
+		_, err := UserAlbums(form.SearchAlbums{Query: "\xff ", Count: 100}, entity.SessionFixtures.Pointer("visitor"))
+		assert.ErrorIs(t, err, ErrForbidden)
+
+		results, err := UserAlbums(form.SearchAlbums{Query: "\xff ", Count: 100}, entity.SessionFixtures.Pointer("alice"))
+		require.NoError(t, err)
+		assert.NotNil(t, results)
+		assert.Empty(t, results)
+	})
 	t.Run("InvalidUidWithoutTypeDeniesNonAdmin", func(t *testing.T) {
 		// A UID filter that contains no valid album UID must not unlock the ResourceAlbums path;
 		// the check still falls back to ResourceDefault and denies the non-admin role.
@@ -325,7 +335,7 @@ func TestAlbums(t *testing.T) {
 		}
 
 		// MySQL/MariaDB sort case-insensitively, SQLite compares byte values.
-		if testDialect() == dsn.DriverSQLite3 {
+		if testDialect() == dsn.DialectSQLite {
 			assert.Equal(t, "sale%", result[0].AlbumTitle)
 			assert.Equal(t, "Yoga***", result[1].AlbumTitle)
 		} else {
@@ -348,7 +358,7 @@ func TestAlbums(t *testing.T) {
 		}
 
 		// MySQL/MariaDB sort case-insensitively, SQLite compares byte values.
-		if testDialect() == dsn.DriverSQLite3 {
+		if testDialect() == dsn.DialectSQLite {
 			assert.Equal(t, "%gold", result[0].AlbumTitle)
 			assert.Equal(t, "'Family", result[1].AlbumTitle)
 		} else {

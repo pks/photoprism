@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
+	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/fs/disk"
@@ -621,6 +622,16 @@ func TestConfig_MariadbDumpBin(t *testing.T) {
 	assert.Contains(t, c.MariadbDumpBin(), "mariadb-dump")
 }
 
+func TestConfig_PsqlBin(t *testing.T) {
+	c := NewConfig(CliTestContext())
+	assert.Contains(t, c.PsqlBin(), "psql")
+}
+
+func TestConfig_PgDumpBin(t *testing.T) {
+	c := NewConfig(CliTestContext())
+	assert.Contains(t, c.PgDumpBin(), "pg_dump")
+}
+
 func TestConfig_SqliteBin(t *testing.T) {
 	c := NewConfig(CliTestContext())
 	assert.Contains(t, c.SqliteBin(), "sqlite")
@@ -1132,4 +1143,33 @@ func TestConfig_InitCaseModeLogs(t *testing.T) {
 		assert.Equal(t, CaseModeAuto, c.OriginalsCase())
 		assert.Equal(t, []string{"config: invalid originals-case value 'Yes', using auto"}, messages(logrus.WarnLevel))
 	})
+}
+
+// TestConfig_RootPathsAbsolute checks that the root folders are absolute when they are configured as
+// relative paths.
+func TestConfig_RootPathsAbsolute(t *testing.T) {
+	c := NewMinimalTestConfig(t.TempDir())
+	c.options.OriginalsPath = "relative/originals"
+	c.options.ImportPath = "relative/import"
+	c.options.StoragePath = "relative/storage"
+
+	for name, path := range map[string]string{
+		"OriginalsPath": c.OriginalsPath(),
+		"ImportPath":    c.ImportPath(),
+		"StoragePath":   c.StoragePath(),
+	} {
+		assert.True(t, filepath.IsAbs(path), "%s returned %s", name, path)
+	}
+}
+
+func TestConfig_Propagate_OriginalsPath(t *testing.T) {
+	orig := entity.OriginalsPath
+	t.Cleanup(func() { entity.OriginalsPath = orig })
+
+	c := NewConfig(CliTestContext())
+	c.options.OriginalsPath = t.TempDir()
+	entity.OriginalsPath = ""
+	c.Propagate()
+	assert.Equal(t, c.OriginalsPath(), entity.OriginalsPath)
+	assert.True(t, filepath.IsAbs(entity.OriginalsPath))
 }

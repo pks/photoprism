@@ -7,12 +7,8 @@
 
 - Tests live next to sources (`<file>_test.go`); group cases with `t.Run(...)` using **PascalCase** names (`Success`, `InvalidRequest`). Consecutive subtests inside the same `Test*` function are written without blank lines between them so the cases read as a compact table; reserve blank lines for separating distinct setup blocks.
 - Do not run multiple test commands in parallel — suites share fixtures, temp assets, and DB state.
-- Put Go scratch work in a per-run directory under `.local/scratch/`:
-  `mkdir -p .local/scratch && mktemp -d .local/scratch/<name>.XXXXXX`. Code there can import
-  `internal/...` (Go refuses that from `/tmp`), `.local/` is gitignored, and `./...` skips it, so
-  it never joins a full suite. The `../../storage` fallback in the test config helpers resolves to
-  `.local/storage` from there, so `config.TestConfig()` needs `PHOTOPRISM_STORAGE_PATH` set (the
-  development environment sets it). Delete the directory when done.
+- Put Go scratch work in a per-run directory under `.local/scratch/`: `mkdir -p .local/scratch && mktemp -d .local/scratch/<name>.XXXXXX`. Code there can import `internal/...` (Go refuses that from `/tmp`), `.local/` is gitignored, and `./...` skips it, so it never joins a full suite. The `../../storage` fallback in the test config helpers resolves to `.local/storage` from there, so `config.TestConfig()` needs `PHOTOPRISM_STORAGE_PATH` set (the development environment sets it).
+- Create the scratch directory in its own command, and delete it when done by the literal path `mktemp` printed, e.g. `rm -r .local/scratch/<name>.Ab12Cd`, never `.local/scratch/` itself. Claude Code asks for confirmation in every permission mode before an `rm` whose target is a glob, a variable or `$(…)`, and a subagent waits unseen on that prompt. If a removal prompts or is refused, do not retry it in another form; leave the directory and report its path.
 - A test that runs the indexer or importer on fixture media (`Index.Start`, `IndexMain`/`IndexRelated`,
   `UserMediaFile`, `Import.Start`, the import worker) starts with
   `if testing.Short() { t.Skip("skipping test in short mode.") }`, placed before any setup; gate only the subtest
@@ -54,7 +50,9 @@ resolves its config through `get.Config()` behind a `sync.Once`, so a test needs
 
 ### MariaDB Runs
 
-`make test-mariadb` runs the backend suite against MariaDB instead of SQLite, and each edition has the same target (`make -C pro test-mariadb`, likewise `plus` and `portal`). Each package gets its own `acceptance_<pkg>_<hash>` database via `entity.TestDbDSN`, mirroring the file-per-package isolation SQLite provides; `make reset-acceptance` drops them. Driver-dependent expectations (sort order, `LIKE` case sensitivity on `VARBINARY`, generated IDs, `RowsAffected`) are documented in `internal/entity/README.md`.
+`make test-mariadb` runs the backend suite against MariaDB instead of SQLite, and each edition has the same target (`make -C pro test-mariadb`, likewise `plus` and `portal`). Each package gets its own `testdb_<pkg>_<hash>` database via `entity.TestDbDSN`, mirroring the file-per-package isolation SQLite provides; `make reset-mariadb-testdb` drops them. Driver-dependent expectations (sort order, `LIKE` case sensitivity on `VARBINARY`, generated IDs, `RowsAffected`) are documented in `internal/entity/README.md`.
+
+`make test-postgres` does the same against the optional PostgreSQL service (`docker compose --profile postgres up -d`), and `make reset-postgres-testdb` drops its per-package databases. PostgreSQL is experimental; a failed statement aborts the rest of its transaction there, so a test or fixture loader must not rely on an ignored insert error inside a transaction.
 
 Makefile recipes talk to the development database through `$(MARIADB)`, which defaults to the `mariadb` client and can be overridden. The `mysql` string stays where it names the SQL driver (`PHOTOPRISM_TEST_DRIVER`, `dsn.DriverMySQL`) and in the MySQL 8 compatibility tooling (`compose.mysql.yaml`, `PHOTOPRISM_TEST_DSN_MYSQL8`).
 
@@ -70,6 +68,10 @@ Makefile recipes talk to the development database through `$(MARIADB)`, which de
   gets a name of its own via `NewIsolatedTestConfig("<name>", path, false)`, as `resetConfigAndOpenDB` does.
 - With an implicit SQLite DSN, use a distinct database name for each replacement of an open test config. Test
   database names retain letters, hyphens, and underscores but strip digits, so numeric suffixes are not distinct.
+- Close every `NewMinimalTestConfigWithDb` config in the cleanup that restores the package database: call
+  `CloseDb()` first, as it clears the entity provider, then restore the previous one (`RegisterDb()` or
+  `entity.SetDbProvider`). An unclosed config keeps its pool open for the rest of the package run, and a suite
+  that builds them per test exceeds PostgreSQL's 100-connection limit (`too many clients already`).
 
 ### Environment Traps in `internal/config` and Nested Packages
 

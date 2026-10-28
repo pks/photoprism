@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -15,7 +16,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize/english"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/photoprism/get"
@@ -103,6 +104,13 @@ func Database(backupPath, fileName string, toStdOut, force bool, retain int) (er
 		logDatabaseSsl(conn, "backup")
 		warnNonInnodbTables(c.DbIfConnected(), conn.Name)
 		password, cmd = conn.Password, conn.Cmd(mariadbDumpArgs()...)
+	case dsn.DriverPostgres:
+		if c.PgDumpBin() == "" {
+			return errors.New("pg_dump not found")
+		}
+
+		conn := newPostgresConn(c, c.PgDumpBin())
+		password, cmd = conn.Password, conn.Cmd(postgresDumpArgs()...)
 	case dsn.DriverSQLite3:
 		if !fs.FileExistsNotEmpty(c.DatabaseFile()) {
 			return fmt.Errorf("sqlite database file %s not found", clean.LogQuote(c.DatabaseFile()))
@@ -147,7 +155,14 @@ func warnNonInnodbTables(db *gorm.DB, name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), engineCheckTimeout)
 	defer cancel()
 
-	rows, err := db.DB().QueryContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = ? "+
+	sqlDb, err := db.DB()
+
+	if err != nil {
+		log.Warnf("backup: failed to check the storage engine of the database tables (%s)", clean.Error(err))
+		return
+	}
+
+	rows, err := sqlDb.QueryContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = ? "+
 		"AND table_type <> 'VIEW' AND (engine IS NULL OR engine <> 'InnoDB') ORDER BY table_name", name)
 
 	if err != nil {
@@ -475,25 +490,39 @@ func RestoreDatabase(backupPath, fileName string, fromStdIn, force bool) (err er
 		return err
 	}
 
+	// Read from stdin or file.
+	var in io.Reader
+	inputName := "stdin"
+
+	if fromStdIn {
+		in = os.Stdin
+		// #nosec G304 backup path validated by configuration
+	} else if f, openErr := os.OpenFile(fileName, os.O_RDONLY, 0); openErr != nil {
+		return fmt.Errorf("failed to open %s: %s", clean.Log(fileName), openErr)
+	} else {
+		inputName = filepath.Base(fileName)
+		defer f.Close()
+		in = f
+	}
+
+	// The backup is read before any table is dropped, so one that cannot be read or is empty leaves the
+	// index as it is.
+	input := bufio.NewReader(in)
+
+	if _, err = input.Peek(1); errors.Is(err, io.EOF) {
+		return fmt.Errorf("backup %s is empty, index cannot be restored", clean.Log(inputName))
+	} else if err != nil {
+		return fmt.Errorf("failed to read %s: %s", clean.Log(inputName), err)
+	}
+
+	log.Infof("restore: restoring database backup from %s", clean.Log(inputName))
+
 	if c.DatabaseDriver() == dsn.DriverSQLite3 {
 		log.Infoln("restore: dropping existing sqlite database tables")
 		entity.Entities.Drop(c.Db())
 	}
 
-	// Read from stdin or file.
-	var f *os.File
-	if fromStdIn {
-		log.Infof("restore: restoring database backup from stdin")
-		f = os.Stdin
-		// #nosec G304 backup path validated by configuration
-	} else if f, err = os.OpenFile(fileName, os.O_RDONLY, 0); err != nil {
-		return fmt.Errorf("failed to open %s: %s", clean.Log(fileName), err)
-	} else {
-		log.Infof("restore: restoring database backup from %s", clean.Log(filepath.Base(fileName)))
-		defer f.Close()
-	}
-
-	return restore.run(f)
+	return restore.run(input)
 }
 
 // logRestoreResult logs the outcome of a restore that completed, with a warning if statements failed.

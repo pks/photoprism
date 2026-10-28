@@ -3,10 +3,10 @@ package commands
 import (
 	"fmt"
 
-	"github.com/dustin/go-humanize/english"
 	"github.com/manifoldco/promptui"
 	"github.com/urfave/cli/v2"
 
+	"github.com/photoprism/photoprism/internal/auth/oauth"
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/form"
@@ -38,6 +38,26 @@ func clientsAddAction(ctx *cli.Context) error {
 		}
 
 		frm := form.AddClientFromCli(ctx)
+
+		if err := oauth.ValidateClientForm(frm); err != nil {
+			return err
+		}
+
+		// A client added for a user belongs to the active account with that UID or exactly that name; a client
+		// without a user is added by omitting the argument.
+		if frm.UserUID != "" {
+			if u := entity.FindUserByUID(frm.UserUID); u == nil || u.IsDeleted() {
+				return fmt.Errorf("user %s not found", clean.Log(frm.UserUID))
+			} else {
+				frm.UserName = u.UserName
+			}
+		} else if frm.UserName != "" {
+			if u := entity.FindUserByExactName(frm.UserName); u == nil || u.IsDeleted() {
+				return fmt.Errorf("user %s not found", clean.LogQuote(frm.UserName))
+			} else {
+				frm.UserUID, frm.UserName = u.UserUID, u.UserName
+			}
+		}
 
 		interactive := true
 
@@ -91,20 +111,6 @@ func clientsAddAction(ctx *cli.Context) error {
 			cols := []string{"Client ID", "Name", "Authentication Method", "User", "Role", "Scope", "Enabled", "Access Token Lifetime", "Created At"}
 			rows := make([][]string, 1)
 
-			var authExpires string
-
-			if client.AuthExpires > 0 {
-				authExpires = client.Expires().String()
-			}
-
-			if client.AuthTokens > 0 {
-				if authExpires != "" {
-					authExpires = fmt.Sprintf("%s; up to %s", authExpires, english.Plural(int(client.Tokens()), "token", "tokens"))
-				} else {
-					authExpires = fmt.Sprintf("up to %d tokens", client.AuthTokens)
-				}
-			}
-
 			rows[0] = []string{
 				client.GetUID(),
 				client.Name(),
@@ -113,7 +119,7 @@ func clientsAddAction(ctx *cli.Context) error {
 				client.AclRole().String(),
 				client.Scope(),
 				report.Bool(client.AuthEnabled, report.Yes, report.No),
-				authExpires,
+				clientTokenInfo(client),
 				client.CreatedAt.Format("2006-01-02 15:04:05"),
 			}
 
@@ -122,7 +128,13 @@ func clientsAddAction(ctx *cli.Context) error {
 			}
 		}
 
-		// Se a random secret or the secret specified in the command flags, if any.
+		// App clients authenticate without a client secret.
+		if client.IsApp() {
+			fmt.Printf("\nUsers can now connect the app with the following client ID:\n\n%s\n\n", client.ClientUID)
+			return nil
+		}
+
+		// Set a random secret or the secret specified in the command flags, if any.
 		var secret, message string
 		var err error
 

@@ -1,6 +1,6 @@
 # PhotoPrism Frontend
 
-**Last Updated:** October 6, 2026
+**Last Updated:** October 27, 2026
 
 The Vue 3 + Vuetify 4 web UI for PhotoPrism. Built with Vite, tested with Vitest, and served by the Go backend from `assets/static/build/`.
 
@@ -58,16 +58,16 @@ Run these commands from the repository root unless noted otherwise. Bare `npm ru
 
 | Package   | Pin      | Reason                                                                                                                                                                                                                                                                                                                         |
 |-----------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `vuetify` | `4.2.4`  | Check the photo edit dialog's Country and Time Zone autocompletes in Chrome before bumping: menus must stay open and filter as you type. The Vuetify 3 appearance depends on the files named in the `//vuetify` entry in `package.json` and [Production Build](#production-build). `@vuetify/v0` is held by the lockfile only. |
+| `vuetify` | `4.3.1`  | Check the photo edit dialog's Country and Time Zone autocompletes in Chrome before bumping: menus must stay open and filter as you type. The Vuetify 3 appearance depends on the files named in the `//vuetify` entry in `package.json` and [Production Build](#production-build). `@vuetify/v0` is held by the lockfile only. |
 | `axios`   | `1.20.0` | Keep an exact version so transport updates receive explicit review and validation. Check request cancellation, authentication, redirects, and error handling when upgrading; `src/common/api.js` handles canceled navigation requests through its error interceptor.                                                           |
 
 ### Override Layer (Transitive Pins)
 
 `frontend/package.json` and root `package.json` declare matching `overrides`. npm applies the root declarations when resolving the workspace; the frontend copy alone does not control installation. Keep both declarations aligned.
 
-| Override                           | Reason                                                                       |
-|------------------------------------|------------------------------------------------------------------------------|
-| `"serialize-javascript": "^7.0.5"` | Keeps the Workbox minification dependency on the reviewed maintenance range. |
+| Override                           | Reason                                                                                                                            |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `"serialize-javascript": "^7.1.2"` | Keeps the Workbox minification dependency on the reviewed maintenance range and above every release a published advisory affects. |
 
 Retire an override only when upstream dependency ranges select an acceptable version without it, then rerun `make audit` and the build/test checks.
 
@@ -97,9 +97,9 @@ MapLibre GL JS 6 renders Places, lightbox mini-maps, and the location editor. It
 
 `src/common/map.js` probes WebGL2 and shares the lazy renderer import between concurrent map mounts. `src/common/maplibregl.js` uses namespace imports, configures the same-origin module worker, and preserves the language-label adapter's fluent `setStyle` contract. Arabic and bidirectional text use MapLibre's built-in shaping rather than a separate RTL plugin.
 
-The build emits `maplibre-gl-worker.mjs` and its sibling `maplibre-gl-shared.mjs` together under `maplibre/<package-version>/`. The version is read from the installed package, so the worker and its relative import stay aligned through upgrades. Both assets appear in the flat manifest and production precache. Keep the worker as a module asset; emitting it without its shared sibling leaves maps unable to load tiles.
+The build emits the self-contained `maplibre-gl-worker.mjs` under `maplibre/<package-version>/`. The version is read from the installed package, so a cached worker from an earlier release is never loaded by a newer bundle. The worker appears in the flat manifest and production precache; keep it as a module asset. Since MapLibre 6.13, `maplibre-gl-shared.mjs` is an empty file kept only for existing copy steps, so the build does not emit it.
 
-`component/map.vue` supplies missing style images through `setMissingStyleImageResolver`. Places waits for `GeoJSONSource.setData()` before reconciling markers. Verify style/language changes, clustering, marker clicks and dragging, globe/terrain controls, and the unavailable-WebGL2 path when updating the renderer.
+`component/map.vue` supplies missing style images through `setMissingStyleImageResolver`. Places waits for `GeoJSONSource.setData()` before reconciling markers. Verify style/language changes, clustering, marker clicks and dragging, globe/terrain controls, the globe star map and atmosphere, and the unavailable-WebGL2 path when updating the renderer.
 
 In Adjust Location, dragging the pin or clicking the map preserves the current center and zoom. A drag's trailing click does not select another location; the next mouse or touch gesture can place the pin normally. Search results and typed-coordinate changes still recenter the map. Direct placement stops any active camera animation.
 

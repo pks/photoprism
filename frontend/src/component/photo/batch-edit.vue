@@ -73,8 +73,8 @@
               </template>
 
               <template #item.name="{ item, index }">
-                <span class="meta-data meta-title col-auto break-word text-start clickable" :title="item.FileName" @click.exact="openPhoto(index)">
-                  {{ item.getOriginalName() }}
+                <span class="meta-data meta-title col-auto break-word text-start clickable" :title="$util.stripBidiControls(item.FileName)" @click.exact="openPhoto(index)">
+                  <bdi dir="ltr">{{ item.getOriginalName() }}</bdi>
                 </span>
               </template>
             </v-data-table>
@@ -134,10 +134,10 @@
                     <template #item.name="{ item, index }">
                       <span
                         class="meta-data meta-title col-auto text-start clickable edit-batch__file-name"
-                        :title="item.FileName"
+                        :title="$util.stripBidiControls(item.FileName)"
                         @click.exact="openPhoto(index)"
                       >
-                        {{ item.getOriginalName() }}
+                        <bdi dir="ltr">{{ item.getOriginalName() }}</bdi>
                       </span>
                     </template>
                   </v-data-table>
@@ -511,6 +511,7 @@
   </v-dialog>
 </template>
 <script>
+import { requestErrorDetails } from "common/api";
 import * as options from "options/options";
 import * as contexts from "options/contexts";
 import IconLivePhoto from "../icon/live-photo.vue";
@@ -1623,7 +1624,7 @@ export default {
           customSlug: (label.CustomSlug || "").toLowerCase(),
         }));
       } catch (error) {
-        console.error("Error fetching available options:", error);
+        console.error("Error fetching available options:", requestErrorDetails(error));
       } finally {
         this.loading = false;
       }

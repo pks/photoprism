@@ -1,11 +1,12 @@
 package search
 
 import (
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize/english"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
@@ -16,6 +17,25 @@ import (
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
+// AlbumTypeResource returns the ACL resource that governs the albums of the type, or the default resource for
+// an unknown or empty type.
+func AlbumTypeResource(albumType string) acl.Resource {
+	switch albumType {
+	case entity.AlbumManual:
+		return acl.ResourceAlbums
+	case entity.AlbumFolder:
+		return acl.ResourceFolders
+	case entity.AlbumMoment:
+		return acl.ResourceMoments
+	case entity.AlbumMonth:
+		return acl.ResourceCalendar
+	case entity.AlbumState:
+		return acl.ResourcePlaces
+	default:
+		return acl.ResourceDefault
+	}
+}
+
 // Albums finds AlbumResults based on the search form without checking rights or permissions.
 func Albums(frm form.SearchAlbums) (results AlbumResults, err error) {
 	return UserAlbums(frm, nil)
@@ -25,7 +45,12 @@ func Albums(frm form.SearchAlbums) (results AlbumResults, err error) {
 func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResults, err error) {
 	start := time.Now()
 
-	if err = frm.ParseQueryString(); err != nil {
+	// A search that can match nothing still runs the permission check below.
+	noMatch := false
+
+	if err = frm.ParseQueryString(); errors.Is(err, form.ErrNoMatch) {
+		noMatch = true
+	} else if err != nil {
 		log.Debugf("albums: %s", err)
 		return AlbumResults{}, err
 	}
@@ -33,7 +58,7 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 	// Base query.
 	s := UnscopedDb().Table("albums").
 		Select("albums.*, cp.photo_count, cl.link_count, CASE WHEN albums.album_year = 0 THEN 0 ELSE 1 END AS has_year, CASE WHEN albums.album_location = '' THEN 1 ELSE 0 END AS no_location").
-		Joins("LEFT JOIN (SELECT album_uid, count(photo_uid) AS photo_count FROM photos_albums WHERE hidden = 0 AND missing = 0 GROUP BY album_uid) AS cp ON cp.album_uid = albums.album_uid").
+		Joins("LEFT JOIN (SELECT album_uid, count(photo_uid) AS photo_count FROM photos_albums WHERE hidden = FALSE AND missing = FALSE GROUP BY album_uid) AS cp ON cp.album_uid = albums.album_uid").
 		Joins("LEFT JOIN (SELECT share_uid, count(share_uid) AS link_count FROM links GROUP BY share_uid) AS cl ON cl.share_uid = albums.album_uid").
 		Where("albums.deleted_at IS NULL")
 
@@ -49,27 +74,12 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 	if sess != nil {
 		user := sess.GetUser()
 
-		// Determine resource to check.
-		var aclResource acl.Resource
-		switch frm.Type {
-		case entity.AlbumManual:
+		// Determine resource to check. When no album type is given and the UID filter is used, default to
+		// the "albums" resource, so requests from roles without default access to all resources are not denied.
+		aclResource := AlbumTypeResource(frm.Type)
+
+		if aclResource == acl.ResourceDefault && len(uids) > 0 {
 			aclResource = acl.ResourceAlbums
-		case entity.AlbumFolder:
-			aclResource = acl.ResourceFolders
-		case entity.AlbumMoment:
-			aclResource = acl.ResourceMoments
-		case entity.AlbumMonth:
-			aclResource = acl.ResourceCalendar
-		case entity.AlbumState:
-			aclResource = acl.ResourcePlaces
-		default:
-			// When no album type is given and the UID filter is used, default to the "albums" resource,
-			// so requests from roles without default access to all resources are not denied.
-			if len(uids) > 0 {
-				aclResource = acl.ResourceAlbums
-			} else {
-				aclResource = acl.ResourceDefault
-			}
 		}
 
 		// Check the session's effective permissions: for a client session, the intersection of the
@@ -97,10 +107,14 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 		}
 	}
 
+	if noMatch {
+		return AlbumResults{}, nil
+	}
+
 	// Set sort order.
 	switch frm.Order {
 	case sortby.Count:
-		s = s.Order(OrderExpr("photo_count DESC, albums.album_title, albums.album_uid DESC", frm.Reverse))
+		s = s.Order(OrderExprNulls("photo_count DESC, albums.album_title, albums.album_uid DESC", frm.Reverse))
 	case sortby.Moment, sortby.Newest:
 		switch frm.Type {
 		case entity.AlbumManual, entity.AlbumState:
@@ -169,15 +183,15 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 			// album_path is VARBINARY and matched case-insensitively so a lowercased query still
 			// finds uppercase folder paths; album_title and album_location are VARCHAR (already
 			// case-insensitive).
-			s = s.Where(likeCond("albums.album_title")+" OR "+likeCond("albums.album_location")+" OR "+PathLike(s.Dialect().GetName(), "albums.album_path"), q, q, q)
+			s = s.Where(likeCond("albums.album_title", false)+" OR "+likeCond("albums.album_location", false)+" OR "+PathLike(entity.DbDialect(), "albums.album_path"), q, q, q)
 		} else {
-			s = s.Where(likeCond("albums.album_title")+" OR "+likeCond("albums.album_location"), q, q)
+			s = s.Where(likeCond("albums.album_title", false)+" OR "+likeCond("albums.album_location", false), q, q)
 		}
 	}
 
 	// Filter private albums.
 	if frm.Public {
-		s = s.Where("albums.album_private = 0 AND (albums.album_type <> 'folder' OR albums.album_path IN (SELECT photo_path FROM photos WHERE photo_private = 0 AND photo_quality > -1 AND deleted_at IS NULL))")
+		s = s.Where("albums.album_private = FALSE AND (albums.album_type <> 'folder' OR albums.album_path IN (SELECT photo_path FROM photos WHERE photo_private = FALSE AND photo_quality > -1 AND deleted_at IS NULL))")
 	} else {
 		s = s.Where("albums.album_type <> 'folder' OR albums.album_path IN (SELECT photo_path FROM photos WHERE photo_quality > -1 AND deleted_at IS NULL)")
 	}
@@ -200,7 +214,7 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 
 	// Favorites only?
 	if frm.Favorite {
-		s = s.Where("albums.album_favorite = 1")
+		s = s.Where("albums.album_favorite = TRUE")
 	}
 
 	// Filter by year?
@@ -210,7 +224,7 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 		w, v := AnyInt("albums.album_year", frm.Year, txt.Or, entity.UnknownYear, txt.YearMax)
 		if frm.Type == entity.AlbumManual {
 			s = s.Where("? OR albums.album_uid IN (SELECT DISTINCT pay.album_uid FROM photos_albums pay "+
-				"JOIN photos py ON pay.photo_uid = py.photo_uid WHERE py.photo_year IN (?) AND pay.hidden = 0 AND pay.missing = 0)",
+				"JOIN photos py ON pay.photo_uid = py.photo_uid WHERE py.photo_year IN (?) AND pay.hidden = FALSE AND pay.missing = FALSE)",
 				gorm.Expr(w, v...), strings.Split(frm.Year, txt.Or))
 		} else {
 			s = s.Where(w, v...)
@@ -237,6 +251,8 @@ func UserAlbums(frm form.SearchAlbums, sess *entity.Session) (results AlbumResul
 	}
 
 	// Query database.
+	results = make(AlbumResults, 0)
+
 	if result := s.Scan(&results); result.Error != nil {
 		return results, result.Error
 	}

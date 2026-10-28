@@ -167,10 +167,17 @@
       @show="onShowMenu"
       @hide="onHideMenu"
     ></p-lightbox-menu>
+    <p-photo-export-dialog
+      :visible="exportVisible"
+      :uid="model?.UID || ''"
+      @close="exportVisible = false"
+      @leave="afterExportLeave"
+    ></p-photo-export-dialog>
   </v-dialog>
 </template>
 
 <script>
+import { markRaw } from "vue";
 import Axios from "axios";
 import PhotoSwipe from "photoswipe";
 import Lightbox from "photoswipe/lightbox";
@@ -183,6 +190,8 @@ import { Photo } from "model/photo";
 import { Album } from "model/album";
 import * as media from "common/media";
 import { isPdfDocument } from "common/pdf";
+import { canExport } from "common/export";
+import PPhotoExportDialog from "component/photo/export/dialog.vue";
 import { getAppSessionStorage, getAppStorage } from "common/storage";
 import * as contexts from "options/contexts";
 import { $faceMarkers } from "common/face-markers";
@@ -240,7 +249,7 @@ let _lastEscapeEvent = null;
 
 export default {
   name: "PLightbox",
-  components: [PLightboxMenu, PLightboxSidebar],
+  components: { PLightboxMenu, PLightboxSidebar, PPhotoExportDialog },
   emits: ["enter", "leave"],
   expose: ["onShortCut"],
   data() {
@@ -257,6 +266,8 @@ export default {
       hideCaption: shouldHideCaption() || shouldShowSidebar(),
       menuElement: null,
       menuVisible: false,
+      exportVisible: false,
+      exportBlocking: false,
       lightbox: null, // Current PhotoSwipe lightbox instance.
       captionPlugin: null, // Current PhotoSwipe caption plugin instance.
       muted: appSessionStorage.getItem("lightbox.muted") === "true",
@@ -368,6 +379,13 @@ export default {
     },
   },
   watch: {
+    // visible stops pending exports as soon as the Lightbox closes.
+    visible(value) {
+      if (!value) {
+        this.exportVisible = false;
+        this.exportBlocking = false;
+      }
+    },
     // Routes null ↔ active transitions through enterFaceMarkerMode /
     // exitFaceMarkerMode. display ↔ draw transitions (both truthy) are
     // no-ops — playback is already paused and markers stay on screen.
@@ -482,7 +500,11 @@ export default {
       this.$event.publish("lightbox.leave");
       this.$emit("leave");
     },
+    // focusContent focuses the Lightbox when no export overlay owns keyboard input.
     focusContent(ev) {
+      if (this.exportBlocking) {
+        return;
+      }
       if (this.$refs.content && this.$refs.content instanceof HTMLElement && document.activeElement !== this.$refs.content) {
         this.$refs.content.focus();
 
@@ -1363,13 +1385,14 @@ export default {
       let lightbox = new Lightbox(options);
       let firstPicture = true;
 
-      // Keep reference to PhotoSwipe instance.
-      this.lightbox = lightbox;
+      // Keep reference to PhotoSwipe instance. It stays raw, since PhotoSwipe compares
+      // its own objects by identity, e.g. before dispatching zoomPanUpdate.
+      this.lightbox = markRaw(lightbox);
       this.idleTimer = false;
 
       // Use dynamic caption plugin,
       // see https://github.com/dimsemenov/photoswipe-dynamic-caption-plugin.
-      this.captionPlugin = new Captions(this.lightbox, {
+      this.captionPlugin = markRaw(new Captions(this.lightbox, {
         type: "below",
         mobileLayoutBreakpoint: 1024,
         // Gate the plugin's panAreaSize adjustment on the user's
@@ -1387,7 +1410,7 @@ export default {
           }
           return this.models[slide.index] || null;
         },
-      });
+      }));
 
       // Register animation event handlers to prevent user actions during animations,
       // see https://photoswipe.com/events/#opening-or-closing-transition-events.
@@ -1722,7 +1745,7 @@ export default {
         }
       });
     },
-    // Returns the available menu actions.
+    // menuActions returns available actions for the current photo and permissions.
     menuActions() {
       return [
         {
@@ -1781,6 +1804,17 @@ export default {
           },
         },
         {
+          name: "export",
+          icon: "mdi-export",
+          text: this.$gettext("Export"),
+          shortcut: "Ctrl-Shift-E",
+          disabled: !this.model?.UID,
+          visible: canExport(this.$config),
+          click: () => {
+            this.onExport();
+          },
+        },
+        {
           name: "download",
           icon: "mdi-download",
           text: this.$gettext("Download"),
@@ -1822,7 +1856,9 @@ export default {
     onHideMenu() {
       this.menuVisible = false;
     },
+    // close stops pending exports and closes the Lightbox after checking sidebar edits.
     async close() {
+      this.exportVisible = false;
       if (this.closing) {
         return new Promise((resolve) => {
           this.$event.subscribeOnce("lightbox.leave", resolve);
@@ -2758,8 +2794,11 @@ export default {
         }
       }
     },
-    // Handles Ctrl/Cmd + key combinations.
+    // onShortCut handles Ctrl/Cmd key combinations outside the export overlay.
     onShortCut(ev) {
+      if (this.exportBlocking) {
+        return true;
+      }
       if (this.trace) {
         this.log("shortcut", { ev });
       }
@@ -2803,7 +2842,9 @@ export default {
           }
           return true;
         case "KeyE":
-          if (this.canEdit && this.contextAllowsEdit) {
+          if (ev.shiftKey) {
+            this.onExport();
+          } else if (this.canEdit && this.contextAllowsEdit) {
             this.onEdit();
           }
           return true;
@@ -2832,9 +2873,9 @@ export default {
           return true;
       }
     },
-    // Handles other key events.
+    // onKeyDown handles ordinary keys while the Lightbox owns keyboard input.
     onKeyDown(ev) {
-      if (!ev || !ev.code || !this.visible || !this.$view.isActive(this)) {
+      if (this.exportBlocking || !ev || !ev.code || !this.visible || !this.$view.isActive(this)) {
         return;
       }
 
@@ -2927,16 +2968,13 @@ export default {
           return false;
       }
     },
-    // Escape priority: overlay's in-flight draft → exit face-marker
-    // mode → close lightbox. Shared by the v-dialog binding and the
-    // `$view.onShortCut` forwarder.
+    // onEscapeKey unwinds a face-marker draft, marker mode, or the Lightbox outside export.
     onEscapeKey(ev) {
-      // A single Escape press reaches this handler twice — once via the
-      // v-dialog `@keydown.esc` binding and once via the `$view` window
-      // forwarder (onShortCut) — and both receive the same KeyboardEvent.
-      // Dedupe on its identity so one press unwinds a single level; without
-      // this the second call exits face-marker mode (or closes the lightbox)
-      // right after the first already consumed the in-progress draft.
+      if (this.exportBlocking) {
+        return;
+      }
+      // The dialog and shared shortcut forwarder receive the same event.
+      // Deduplicate it so one Escape unwinds only one level.
       if (ev && ev === _lastEscapeEvent) {
         return;
       }
@@ -2952,18 +2990,22 @@ export default {
       }
       this.close();
     },
-    // Commits a pending face-marker rectangle. Sidebar inputs stop
-    // Enter on their own handlers, so this only fires outside them.
+    // onEnterKey commits a pending face-marker rectangle outside export and sidebar inputs.
     onEnterKey() {
+      if (this.exportBlocking) {
+        return;
+      }
       const overlay = this.$refs.faceMarkerOverlay;
       if (overlay && typeof overlay.handleEnter === "function") {
         overlay.handleEnter();
       }
     },
-    // Stops PhotoSwipe's "z" shortcut from swallowing printable keys
-    // typed into sidebar inputs. `preventDefault` makes `_onKeyDown`
-    // bail before its switch statement.
+    // onPswpKeyDown blocks PhotoSwipe shortcuts during export or typing in sidebar inputs.
     onPswpKeyDown(ev) {
+      if (ev && this.exportBlocking) {
+        ev.preventDefault();
+        return;
+      }
       if (!ev || !this.sidebarVisible) {
         return;
       }
@@ -2972,18 +3014,33 @@ export default {
         ev.preventDefault();
       }
     },
-    // Suppresses PhotoSwipe's document-level `_focusRoot` Tab handler
-    // when focus is inside the lightbox tree, so browser-default Tab
-    // navigation reaches sidebar inputs/chips. Vuetify + `$view` re-anchor
-    // any focus that escapes the modal.
+    // onTabKey preserves native Tab navigation inside the Lightbox outside export.
+    // Vuetify and the shared view trap retain modal focus.
     onTabKey(ev) {
-      if (!ev) {
+      if (this.exportBlocking || !ev) {
         return;
       }
       const root = this.$refs.container || this.$refs.content;
       const active = document.activeElement;
       if (root && active && root.contains(active)) {
         ev.stopPropagation();
+      }
+    },
+    // onExport pauses media and opens image export for the current photo's stack.
+    onExport() {
+      if (!this.visible || !this.model?.UID || this.exportBlocking || !canExport(this.$config)) {
+        return;
+      }
+      this.pauseLightbox();
+      this.$refs.menu?.hide();
+      this.exportBlocking = true;
+      this.exportVisible = true;
+    },
+    // afterExportLeave restores keyboard handling and focus after the export overlay closes.
+    afterExportLeave() {
+      this.exportBlocking = false;
+      if (this.visible) {
+        this.focusContent();
       }
     },
     // Toggles video playback on the current video element, if any.

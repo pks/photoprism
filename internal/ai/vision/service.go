@@ -2,7 +2,6 @@ package vision
 
 import (
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/photoprism/photoprism/pkg/http/scheme"
@@ -98,8 +97,8 @@ func (m *Service) Endpoint() (uri, method string) {
 	return uri, method
 }
 
-// GetModel returns the model identifier override for the endpoint, if any, without shortening it. It
-// expands only variables whose names end in _MODEL. Case is preserved, as catalogs match it verbatim.
+// GetModel returns the model identifier override for the endpoint with variables expanded, or an empty string.
+// It expands only variables whose names end in _MODEL; Model.GetModel sanitizes the result once a tag is split off.
 func (m *Service) GetModel() string {
 	if m.Disabled {
 		return ""
@@ -111,7 +110,11 @@ func (m *Service) GetModel() string {
 		warnRefusedEnv("Service.Model", m.Model, refused, modelEnvSuffixes)
 	}
 
-	return modelIdText(expanded)
+	if !hasModelId(expanded) {
+		return ""
+	}
+
+	return strings.TrimSpace(expanded)
 }
 
 // EndpointKey returns the access token belonging to the remote service endpoint, if any.
@@ -122,7 +125,7 @@ func (m *Service) EndpointKey() string {
 
 	ensureEnv()
 
-	return strings.TrimSpace(os.ExpandEnv(m.Key))
+	return strings.TrimSpace(expandEnv(m.Key))
 }
 
 // EndpointOrg returns the organization identifier for the endpoint, if any.
@@ -133,7 +136,7 @@ func (m *Service) EndpointOrg() string {
 
 	ensureEnv()
 
-	return strings.TrimSpace(os.ExpandEnv(m.Org))
+	return strings.TrimSpace(expandEnv(m.Org))
 }
 
 // EndpointProject returns the project identifier for the endpoint, if any.
@@ -144,7 +147,7 @@ func (m *Service) EndpointProject() string {
 
 	ensureEnv()
 
-	return strings.TrimSpace(os.ExpandEnv(m.Project))
+	return strings.TrimSpace(expandEnv(m.Project))
 }
 
 // EndpointTier returns the optional service tier for the endpoint, if any.
@@ -155,7 +158,7 @@ func (m *Service) EndpointTier() string {
 
 	ensureEnv()
 
-	return strings.TrimSpace(os.ExpandEnv(m.Tier))
+	return strings.TrimSpace(expandEnv(m.Tier))
 }
 
 // EndpointThink returns the optional thinking/reasoning setting for the endpoint, if any.
@@ -166,14 +169,14 @@ func (m *Service) EndpointThink() string {
 
 	ensureEnv()
 
-	return strings.TrimSpace(os.ExpandEnv(m.Think))
+	return strings.TrimSpace(expandEnv(m.Think))
 }
 
 // BasicAuth returns the username and password for basic authentication.
 func (m *Service) BasicAuth() (username, password string) {
 	ensureEnv()
-	username = strings.TrimSpace(os.ExpandEnv(m.Username))
-	password = strings.TrimSpace(os.ExpandEnv(m.Password))
+	username = strings.TrimSpace(expandEnv(m.Username))
+	password = strings.TrimSpace(expandEnv(m.Password))
 	return username, password
 }
 

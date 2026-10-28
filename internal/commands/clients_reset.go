@@ -7,6 +7,7 @@ import (
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/pkg/authn"
 )
 
 // ClientsResetDescription explains the effect of the clients reset command.
@@ -46,8 +47,8 @@ func clientsResetAction(ctx *cli.Context) error {
 		db := conf.Db()
 
 		// Delete the secrets of all clients, including deleted ones, before their table is dropped.
-		if db.HasTable(entity.Client{}) && db.HasTable(entity.Password{}) {
-			res := db.Where("uid IN (?)", db.Unscoped().Model(&entity.Client{}).Select("client_uid").QueryExpr()).Delete(&entity.Password{})
+		if db.Migrator().HasTable(&entity.Client{}) && db.Migrator().HasTable(&entity.Password{}) {
+			res := db.Where("uid IN (?)", db.Unscoped().Model(&entity.Client{}).Select("client_uid")).Delete(&entity.Password{})
 
 			if res.Error != nil {
 				return cli.Exit(res.Error, 1)
@@ -57,18 +58,23 @@ func clientsResetAction(ctx *cli.Context) error {
 		}
 
 		// Drop existing auth_clients table.
-		if err := db.DropTableIfExists(entity.Client{}).Error; err != nil {
+		if err := db.Migrator().DropTable(&entity.Client{}); err != nil {
 			return cli.Exit(err, 1)
 		}
 
 		// Re-create auth_clients.
-		if err := db.CreateTable(entity.Client{}).Error; err != nil {
+		if err := entity.CreateTable(db, &entity.Client{}); err != nil {
 			return cli.Exit(err, 1)
 		}
 
-		// Delete the sessions of the removed clients once the table has been recreated.
-		if db.HasTable(entity.Session{}) {
-			res := db.Where("client_uid <> ''").Delete(&entity.Session{})
+		// Recreate the grants and authorization codes of apps, which belong to the removed clients.
+		if err := ResetAppGrants(db); err != nil {
+			return cli.Exit(err, 1)
+		}
+
+		// Delete the sessions of the removed clients and apps once the tables have been recreated.
+		if db.Migrator().HasTable(&entity.Session{}) {
+			res := db.Where("client_uid <> '' OR auth_provider = ?", authn.ProviderOAuthApp.String()).Delete(&entity.Session{})
 
 			if res.Error != nil {
 				return cli.Exit(res.Error, 1)

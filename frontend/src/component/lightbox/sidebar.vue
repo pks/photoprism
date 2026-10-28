@@ -85,8 +85,8 @@
           v-tooltip="fileTypeName"
           :prepend-icon="fileIcon"
           :title="fileInfo"
-          :subtitle="fileName"
-          :lines="fileName ? 'two' : 'one'"
+          :subtitle="visibleFileName"
+          :lines="visibleFileName ? 'two' : 'one'"
           :class="['metadata__item', 'meta-file', { clickable: !!fileName }]"
           @click.stop.prevent="fileName && $util.copyText(fileName)"
         >
@@ -275,7 +275,7 @@
                 ></v-btn>
               </template>
             </v-combobox>
-            <v-list-item-title v-else-if="m.Name" class="meta-person__name">{{ m.Name }}</v-list-item-title>
+            <v-list-item-title v-else-if="m.Name" class="meta-person__name"><bdi>{{ $util.balanceBidi(m.Name) }}</bdi></v-list-item-title>
             <v-list-item-title v-else class="meta-person__name meta-person__unnamed">{{ $gettext("Unknown") }}</v-list-item-title>
           </v-list-item>
         </template>
@@ -300,7 +300,7 @@
                 @keydown.enter.stop.prevent="onChipActivate('albums', a)"
                 @keydown.delete.stop.prevent="onChipDelete('albums', a)"
               >
-                <span class="meta-chip__label text-truncate">{{ a.Title }}</span>
+                <span class="meta-chip__label text-truncate"><bdi>{{ $util.balanceBidi(a.Title) }}</bdi></span>
                 <button
                   v-if="isEditable"
                   type="button"
@@ -365,7 +365,7 @@
                 @keydown.enter.stop.prevent="onChipActivate('labels', l)"
                 @keydown.delete.stop.prevent="onChipDelete('labels', l)"
               >
-                <span class="meta-chip__label text-truncate">{{ l.Label.Name }}</span>
+                <span class="meta-chip__label text-truncate"><bdi>{{ $util.balanceBidi(l.Label.Name) }}</bdi></span>
                 <button
                   v-if="isEditable"
                   type="button"
@@ -477,7 +477,7 @@
       :visible="addNameDialog.visible"
       icon="mdi-account-plus"
       :icon-size="42"
-      :text="addNameDialog.name ? $gettext('Add %{s}?', { s: addNameDialog.name }) : $gettext('Add person?')"
+      :text="addNameDialog.name ? $gettext('Add %{s}?', { s: $util.isolate(addNameDialog.name) }) : $gettext('Add person?')"
       @close="onAddNameCancel"
       @confirm="onAddNameConfirm"
     ></p-confirm-dialog>
@@ -486,6 +486,7 @@
 
 <script>
 import { DateTime } from "luxon";
+import $util from "common/util";
 import * as formats from "options/formats";
 import { $faceMarkers } from "common/face-markers";
 
@@ -1034,6 +1035,10 @@ export default {
       }
       const primary = typeof this.photo.primaryFile === "function" ? this.photo.primaryFile() : null;
       return primary?.Name || null;
+    },
+    // visibleFileName returns the file name without bidi and other control characters for display.
+    visibleFileName() {
+      return $util.stripBidiControls(this.fileName);
     },
     fileInfo() {
       // Gate on UID so the limited-access empty-Photo placeholder falls
@@ -2128,6 +2133,7 @@ export default {
           this.clearChipInput("albums");
         });
     },
+    // confirmDateTime saves the date, time and zone from the datetime dialog, using its timestamps when it passes them.
     confirmDateTime(data) {
       this.dateTimeDialog = false;
 
@@ -2141,21 +2147,11 @@ export default {
       photo.Year = data.Year;
       photo.TimeZone = data.TimeZone;
 
-      const localDate = photo.localDate(data.time);
-      if (!localDate.isValid) {
+      if (data.TakenAt && data.TakenAtLocal) {
+        photo.TakenAt = data.TakenAt;
+        photo.TakenAtLocal = data.TakenAtLocal;
+      } else if (!photo.setLocalTime(data.time).isValid) {
         return;
-      }
-
-      const isoTime =
-        localDate.toISO({
-          suppressMilliseconds: true,
-          includeOffset: false,
-        }) + "Z";
-
-      photo.TakenAtLocal = isoTime;
-
-      if (photo.currentTimeZoneUTC()) {
-        photo.TakenAt = isoTime;
       }
 
       photo

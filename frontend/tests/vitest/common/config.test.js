@@ -297,6 +297,14 @@ describe("common/config", () => {
     expect(cfg.featAppPasswords()).toBe(false);
   });
 
+  it("featOAuthApps follows the oauthApps value", () => {
+    const cfg = createTestConfig();
+    cfg.set("oauthApps", true);
+    expect(cfg.featOAuthApps()).toBe(true);
+    cfg.set("oauthApps", false);
+    expect(cfg.featOAuthApps()).toBe(false);
+  });
+
   it("returns albums when library access is restricted", () => {
     const cfg = createTestConfig();
     const settings = JSON.parse(JSON.stringify(cfg.getSettings()));
@@ -382,9 +390,112 @@ describe("common/config", () => {
     expect(cfg.getLanguageLocale()).toBe("en");
   });
 
+  describe("getLanguageLocale", () => {
+    const localeConfig = (mode, language) => new Config(new StorageShim(), { siteTitle: "Test", mode, settings: { ui: { language } } });
+    const originalUrl = window.location.href;
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      window.history.replaceState({}, "", originalUrl);
+    });
+
+    it("should use and mirror the browser language", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      const cfg = localeConfig("public", "de");
+      expect(cfg.getLanguageLocale()).toBe("en");
+      expect(cfg.values.settings.ui.language).toBe("en");
+      expect(cfg.storage.getItem(cfg.storageKey + ".locale")).toBeFalsy();
+    });
+    it("should use and mirror the stored locale", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      const cfg = localeConfig("public", "de");
+      cfg.storage.setItem(cfg.storageKey + ".locale", "fr");
+      expect(cfg.getLanguageLocale()).toBe("fr");
+      expect(cfg.values.settings.ui.language).toBe("fr");
+    });
+    it("should mirror the resolved browser locale", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("de-AT");
+      const cfg = localeConfig("public", "en");
+      expect(cfg.getLanguageLocale()).toBe("de");
+      expect(cfg.values.settings.ui.language).toBe("de");
+    });
+    it("should use, store, and mirror the query locale", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      window.history.replaceState({}, "", "?locale=fr");
+      const cfg = localeConfig("public", "de");
+      expect(cfg.getLanguageLocale()).toBe("fr");
+      expect(cfg.values.settings.ui.language).toBe("fr");
+      expect(cfg.storage.getItem(cfg.storageKey + ".locale")).toBe("fr");
+    });
+    it("should keep the user language when signed in", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      const cfg = localeConfig("user", "de");
+      cfg.storage.setItem(cfg.storageKey + ".locale", "fr");
+      expect(cfg.getLanguageLocale()).toBe("de");
+      expect(cfg.values.settings.ui.language).toBe("de");
+    });
+    it("should apply the query locale when signed in", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      window.history.replaceState({}, "", "?locale=fr");
+      const cfg = localeConfig("user", "de");
+      expect(cfg.getLanguageLocale()).toBe("fr");
+      expect(cfg.values.settings.ui.language).toBe("fr");
+      expect(cfg.storage.getItem(cfg.storageKey + ".locale")).toBe("fr");
+    });
+    it("should not change the user language when signed in", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      const cfg = localeConfig("user", "de-AT");
+      expect(cfg.getLanguageLocale()).toBe("de");
+      expect(cfg.values.settings.ui.language).toBe("de-AT");
+    });
+    it("should ignore other and invalid query parameters when signed in", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      for (const query of ["?q=foo", "?locale=toolong"]) {
+        window.history.replaceState({}, "", query);
+        const cfg = localeConfig("user", "de");
+        expect(cfg.getLanguageLocale()).toBe("de");
+        expect(cfg.values.settings.ui.language).toBe("de");
+        expect(cfg.storage.getItem(cfg.storageKey + ".locale")).toBeFalsy();
+      }
+    });
+    it("should store and mirror the resolved query locale", () => {
+      window.history.replaceState({}, "", "?locale=pt-br");
+      const cfg = localeConfig("public", "de");
+      expect(cfg.getLanguageLocale()).toBe("pt_BR");
+      expect(cfg.values.settings.ui.language).toBe("pt_BR");
+      expect(cfg.storage.getItem(cfg.storageKey + ".locale")).toBe("pt_BR");
+    });
+    it("should return the browser language without settings", () => {
+      vi.spyOn(navigator, "language", "get").mockReturnValue("en-US");
+      const cfg = new Config(new StorageShim(), { siteTitle: "Test", mode: "public" });
+      expect(cfg.getLanguageLocale()).toBe("en");
+      expect(cfg.values.settings).toBeUndefined();
+    });
+  });
+
   it("should return user time zone", () => {
     const cfg = new Config(new StorageShim(), Object.assign({}, window.__CONFIG__));
     expect(cfg.getTimeZone()).toBe("Local");
+  });
+
+  it("should return supported user time zones and fall back to Local otherwise", () => {
+    const cfg = new Config(new StorageShim(), Object.assign({}, window.__CONFIG__));
+    const ui = cfg.values.settings.ui;
+    const saved = ui.timeZone;
+
+    try {
+      for (const zone of ["Europe/Berlin", "America/New_York", "UTC", "GMT", "UTC+1", "UTC-12"]) {
+        ui.timeZone = zone;
+        expect(cfg.getTimeZone()).toBe(zone);
+      }
+
+      for (const zone of ["Nowhere/Zone", "Europe/Berlin\u0000", "", null, 42]) {
+        ui.timeZone = zone;
+        expect(cfg.getTimeZone()).toBe("Local");
+      }
+    } finally {
+      ui.timeZone = saved;
+    }
   });
 
   it("should return if language is rtl", () => {

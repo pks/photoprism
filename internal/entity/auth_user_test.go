@@ -1,7 +1,9 @@
 package entity
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"path"
 	"strings"
 	"testing"
@@ -12,10 +14,13 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 
 	"github.com/urfave/cli/v2"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/authn"
+	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/dsn"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/list"
 	"github.com/photoprism/photoprism/pkg/rnd"
@@ -56,6 +61,27 @@ func TestNewUser(t *testing.T) {
 }
 
 func TestOidcUser(t *testing.T) {
+	t.Run("UnverifiedEmail", func(t *testing.T) {
+		info := &oidc.UserInfo{}
+		info.Email = "jane@doe.com"
+		info.Subject = "e3a9f4a6-9d60-47cb-9bf5-02bd15b0c68d"
+
+		m := OidcUser(info, "", "jane.doe")
+
+		assert.Equal(t, "", m.UserEmail)
+		assert.Equal(t, "jane.doe", m.UserName)
+	})
+	t.Run("VerifiedEmailNotASCII", func(t *testing.T) {
+		info := &oidc.UserInfo{}
+		info.Email = "\u212Aate@doe.com"
+		info.EmailVerified = true
+		info.Subject = "e3a9f4a6-9d60-47cb-9bf5-02bd15b0c68d"
+
+		m := OidcUser(info, "", "kate")
+
+		assert.Equal(t, "", m.UserEmail)
+		assert.Equal(t, "kate", m.UserName)
+	})
 	t.Run("Success", func(t *testing.T) {
 		info := &oidc.UserInfo{}
 		info.Name = "Jane Doe"
@@ -132,11 +158,6 @@ func TestOidcUser(t *testing.T) {
 		assert.Equal(t, "", m.UserName)
 		assert.Equal(t, "", m.DisplayName)
 	})
-}
-
-func TestLdapUser(t *testing.T) {
-	m := LdapUser("user-ldap", "ldap@test.com")
-	assert.Equal(t, "ldap", m.AuthProvider)
 }
 
 func TestFindLocalUser(t *testing.T) {
@@ -222,6 +243,19 @@ func TestFindLocalUser(t *testing.T) {
 			t.Fatal("result should be nil")
 		}
 	})
+	t.Run("NotASCII", func(t *testing.T) {
+		existing := newExistingTestUser(t, "local-josé", acl.RoleGuest)
+
+		found := FindLocalUser("Local-José")
+		require.NotNil(t, found)
+		assert.Equal(t, existing.UserUID, found.UserUID)
+		assert.Equal(t, "local-josé", found.UserName)
+
+		assert.Nil(t, FindLocalUser("local-jose"))
+		other := newExistingTestUser(t, "local-jose", acl.RoleGuest)
+		assert.Equal(t, other.UserUID, FindLocalUser("local-jose").UserUID)
+		assert.Equal(t, existing.UserUID, FindLocalUser("local-josé").UserUID)
+	})
 }
 
 func TestFindUserByName(t *testing.T) {
@@ -301,6 +335,24 @@ func TestFindUserByName(t *testing.T) {
 			t.Fatal("result should be nil")
 		}
 	})
+	t.Run("NotASCII", func(t *testing.T) {
+		existing := newExistingTestUser(t, "find-josé", acl.RoleGuest)
+
+		found := FindUserByName("Find-José")
+		require.NotNil(t, found)
+		assert.Equal(t, existing.UserUID, found.UserUID)
+		assert.Equal(t, "find-josé", found.UserName)
+
+		// MariaDB compares names that differ only by accents as equal.
+		if IsDialect(dsn.DriverMySQL) {
+			return
+		}
+
+		assert.Nil(t, FindUserByName("find-jose"))
+		other := newRenameTestUser(t, "find-jose", acl.RoleGuest)
+		assert.Equal(t, other.UserUID, FindUserByName("find-jose").UserUID)
+		assert.Equal(t, existing.UserUID, FindUserByName("find-josé").UserUID)
+	})
 }
 
 func TestUser_Create(t *testing.T) {
@@ -348,12 +400,26 @@ func TestUser_Create(t *testing.T) {
 
 		t.Cleanup(func() {
 			assert.NoError(t, m.Delete())
-			UnscopedDb().Delete(m)
+			UnscopedDb().Delete(&m)
 		})
 
 		assert.Equal(t, "examplelong", m.Username())
 		assert.Equal(t, "examplelong", m.UserName)
 		assert.Equal(t, "012345678901234567890", m.AuthID)
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		m := NewUser()
+		m.UserName = "create-josé"
+		m.UserRole = acl.RoleGuest.String()
+
+		require.ErrorIs(t, m.Create(), authn.ErrNotASCII)
+		assert.Nil(t, FindUserByName("create-josé"))
+	})
+	t.Run("AdminNotASCII", func(t *testing.T) {
+		m := &User{ID: 1, UserName: "adminé", UserRole: acl.RoleAdmin.String()}
+
+		require.ErrorIs(t, m.Create(), authn.ErrNotASCII)
+		assert.Equal(t, "", m.UserUID)
 	})
 }
 
@@ -429,6 +495,13 @@ func TestUser_SetUsername(t *testing.T) {
 	})
 	t.Run("SameName", func(t *testing.T) {
 		assert.Nil(t, Admin.SetUsername("admin"))
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		m := &User{ID: 999902, UserUID: rnd.GenerateUID(UserUID), UserName: ""}
+
+		require.ErrorIs(t, m.SetUsername("Josè"), authn.ErrNotASCII)
+		require.ErrorIs(t, m.SetUsername("\u212Aate"), authn.ErrNotASCII)
+		assert.Equal(t, "", m.UserName)
 	})
 }
 
@@ -516,26 +589,6 @@ func TestFirstOrCreateUser(t *testing.T) {
 	})
 }
 
-func TestUserEmailAvailable(t *testing.T) {
-	alice := FindUserByName("alice")
-	require.NotNil(t, alice)
-	require.NotEmpty(t, alice.UserEmail)
-	t.Run("UnusedEmail", func(t *testing.T) {
-		assert.True(t, UserEmailAvailable("brand-new-unused-email@example.com", ""))
-	})
-	t.Run("TakenByOtherAccount", func(t *testing.T) {
-		assert.False(t, UserEmailAvailable(alice.UserEmail, ""))
-		assert.False(t, UserEmailAvailable(alice.UserEmail, "u00000000000other"))
-	})
-	t.Run("FreeForSameAccount", func(t *testing.T) {
-		assert.True(t, UserEmailAvailable(alice.UserEmail, alice.UserUID))
-	})
-	t.Run("EmptyEmail", func(t *testing.T) {
-		assert.False(t, UserEmailAvailable("", ""))
-		assert.False(t, UserEmailAvailable("   ", ""))
-	})
-}
-
 func TestUser_EmailVerified(t *testing.T) {
 	t.Run("NilVerifiedAt", func(t *testing.T) {
 		assert.False(t, (&User{}).EmailVerified())
@@ -549,7 +602,27 @@ func TestUser_EmailVerified(t *testing.T) {
 	})
 }
 
+// deleteTestUser removes an account created by a test, including its details and settings.
+func deleteTestUser(t *testing.T, m *User) {
+	t.Helper()
+
+	if m == nil || m.UserUID == "" {
+		return
+	}
+
+	assert.NoError(t, UnscopedDb().Delete(&UserDetails{}, "user_uid = ?", m.UserUID).Error)
+	assert.NoError(t, UnscopedDb().Delete(&UserSettings{}, "user_uid = ?", m.UserUID).Error)
+	assert.NoError(t, UnscopedDb().Delete(&User{}, "user_uid = ?", m.UserUID).Error)
+}
+
 func TestFindUser(t *testing.T) {
+	t.Run("EmailOnly", func(t *testing.T) {
+		alice := FindUserByName("alice")
+		require.NotNil(t, alice)
+		require.NotEmpty(t, alice.UserEmail)
+
+		assert.Nil(t, FindUser(User{UserEmail: alice.UserEmail}))
+	})
 	t.Run("ID", func(t *testing.T) {
 		m := FindUser(User{ID: 1})
 
@@ -925,6 +998,24 @@ func TestUser_InitAccount(t *testing.T) {
 			t.Fatal("expected password to be created")
 		}
 	})
+	t.Run("NotASCIIName", func(t *testing.T) {
+		// Only the initial admin account is renamed.
+		m := &User{ID: 1, UserUID: rnd.GenerateUID(UserUID), UserName: "init-admin", UserRole: acl.RoleAdmin.String(), AuthProvider: authn.ProviderLocal.String(), CanLogin: true}
+		t.Cleanup(func() { assert.NoError(t, UnscopedDb().Delete(&Password{}, "uid = ?", m.UserUID).Error) })
+
+		assert.True(t, m.InitAccount("init-ädmin", "insecure", ""))
+		assert.Equal(t, "init-admin", m.UserName)
+		assert.NotNil(t, FindPassword(m.UserUID))
+		assert.Equal(t, "admin", FindUser(User{ID: 1}).UserName)
+	})
+	t.Run("EmptyName", func(t *testing.T) {
+		m := &User{ID: 1, UserUID: rnd.GenerateUID(UserUID), UserName: "init-jürgen", UserRole: acl.RoleAdmin.String(), AuthProvider: authn.ProviderLocal.String(), CanLogin: true}
+		t.Cleanup(func() { assert.NoError(t, UnscopedDb().Delete(&Password{}, "uid = ?", m.UserUID).Error) })
+
+		assert.True(t, m.InitAccount("", "insecure", ""))
+		assert.Equal(t, "init-jürgen", m.UserName)
+		assert.Equal(t, "admin", FindUser(User{ID: 1}).UserName)
+	})
 }
 
 func TestUser_AclRole(t *testing.T) {
@@ -1001,27 +1092,34 @@ func TestUser_Validate(t *testing.T) {
 
 		assert.Error(t, u.Validate())
 	})
-	t.Run("EmailNotUnique", func(t *testing.T) {
-		FirstOrCreateUser(&User{
-			UserEmail: "notunique2@example.com",
+	t.Run("EmailShared", func(t *testing.T) {
+		shared := FirstOrCreateUser(&User{
+			UserName:    "sharedemail1",
+			UserEmail:   "sharedemail@example.com",
+			DisplayName: "Shared Email",
+			UserRole:    acl.RoleAdmin.String(),
 		})
+		require.NotNil(t, shared)
+		require.Equal(t, "sharedemail@example.com", shared.UserEmail)
+		t.Cleanup(func() { deleteTestUser(t, shared) })
 
 		u := &User{
-			UserName:    "notunique2",
-			UserEmail:   "notunique2@example.com",
-			DisplayName: "Not Unique",
+			UserName:    "sharedemail2",
+			UserEmail:   "sharedemail@example.com",
+			DisplayName: "Shared Email",
 			UserRole:    acl.RoleAdmin.String(),
 		}
 
-		assert.Error(t, u.Validate())
+		assert.NoError(t, u.Validate())
 	})
-	t.Run("EmailNotUnique", func(t *testing.T) {
-		FirstOrCreateUser(&User{
+	t.Run("NameNotUniqueSameEmail", func(t *testing.T) {
+		existing := FirstOrCreateUser(&User{
 			UserName:    "notunique3",
 			UserEmail:   "notunique3@example.com",
 			DisplayName: "Not Unique",
 			UserRole:    acl.RoleAdmin.String(),
 		})
+		t.Cleanup(func() { deleteTestUser(t, existing) })
 
 		u := FirstOrCreateUser(&User{
 			UserName:    "notunique30",
@@ -1029,6 +1127,8 @@ func TestUser_Validate(t *testing.T) {
 			DisplayName: "Not Unique",
 			UserRole:    acl.RoleAdmin.String(),
 		})
+		require.NotNil(t, u)
+		t.Cleanup(func() { deleteTestUser(t, u) })
 
 		u.UserName = "notunique3"
 
@@ -1098,9 +1198,186 @@ func TestUser_Validate(t *testing.T) {
 
 		assert.Error(t, u.Validate())
 	})
+	t.Run("NewNotASCII", func(t *testing.T) {
+		u := &User{UserName: "Validate-José", DisplayName: "José", UserRole: acl.RoleAdmin.String()}
+
+		err := u.Validate()
+		require.ErrorIs(t, err, authn.ErrNotASCII)
+		assert.EqualError(t, err, "username may only contain ASCII characters, e.g. 'validate-jose'")
+		assert.Equal(t, "Validate-José", u.UserName)
+	})
+	t.Run("ExistingNotASCII", func(t *testing.T) {
+		m := newExistingTestUser(t, "validate-zoë", acl.RoleAdmin)
+
+		require.NoError(t, m.Validate())
+		assert.Equal(t, "validate-zoë", m.UserName)
+
+		m.DisplayName = "Zoë Example"
+		require.NoError(t, m.Save())
+		assert.Equal(t, "validate-zoë", storedUser(t, m.UserUID).UserName)
+	})
+	t.Run("ExistingBesideOtherName", func(t *testing.T) {
+		newExistingTestUser(t, "validate-twin-josé", acl.RoleAdmin)
+		m := newExistingTestUser(t, "validate-twin-jose", acl.RoleAdmin)
+
+		assert.NoError(t, m.Validate())
+	})
+	t.Run("ExistingLegacyBesideOtherName", func(t *testing.T) {
+		newExistingTestUser(t, "validate-keep-josé", acl.RoleAdmin)
+		m := newExistingTestUser(t, "Validate-Keep-Jose", acl.RoleAdmin)
+
+		require.NoError(t, m.Validate())
+
+		// MariaDB finds the normalized name held by the other account, so the stored form is kept.
+		if IsDialect(dsn.DriverMySQL) {
+			assert.Equal(t, "Validate-Keep-Jose", m.UserName)
+		} else {
+			assert.Equal(t, "validate-keep-jose", m.UserName)
+		}
+	})
+	t.Run("ExistingSameName", func(t *testing.T) {
+		newExistingTestUser(t, "validate-same-twice", acl.RoleAdmin)
+		m := newExistingTestUser(t, "validate-same-twice", acl.RoleAdmin)
+
+		assert.EqualError(t, m.Validate(), "user 'validate-same-twice' already exists")
+	})
+	t.Run("NewBesideOtherName", func(t *testing.T) {
+		newExistingTestUser(t, "validate-new-josé", acl.RoleAdmin)
+		u := &User{UserName: "validate-new-jose", UserRole: acl.RoleAdmin.String()}
+
+		// MariaDB compares names that differ only by accents as equal.
+		if IsDialect(dsn.DriverMySQL) {
+			assert.EqualError(t, u.Validate(), "user 'validate-new-jose' already exists")
+		} else {
+			assert.NoError(t, u.Validate())
+		}
+	})
+	t.Run("NewNotASCIIHeld", func(t *testing.T) {
+		newExistingTestUser(t, "validate-held-josé", acl.RoleAdmin)
+		u := &User{UserName: "validate-held-josé", DisplayName: "José", UserRole: acl.RoleAdmin.String()}
+
+		assert.EqualError(t, u.Validate(), "user 'validate-held-josé' already exists")
+	})
+	t.Run("ExistingNotASCIIUppercase", func(t *testing.T) {
+		m := newExistingTestUser(t, "Validate-Zoë-Upper", acl.RoleAdmin)
+
+		require.NoError(t, m.Validate())
+		assert.Equal(t, "validate-zoë-upper", m.UserName)
+	})
+}
+
+func TestIsUserValidationError(t *testing.T) {
+	t.Run("Wrapped", func(t *testing.T) {
+		assert.True(t, IsUserValidationError(UserValidationError{Err: authn.ErrAuthIDRequired}))
+		assert.True(t, IsUserValidationError(fmt.Errorf("add: %w", UserValidationError{Err: authn.ErrAuthIDRequired})))
+	})
+	t.Run("Other", func(t *testing.T) {
+		assert.False(t, IsUserValidationError(nil))
+		assert.False(t, IsUserValidationError(authn.ErrAuthIDRequired))
+	})
+}
+
+// closedDbProvider returns a database whose connection pool is closed, so that every query fails.
+type closedDbProvider struct {
+	db *gorm.DB
+}
+
+// Db returns the closed database.
+func (p closedDbProvider) Db() *gorm.DB {
+	return p.db
+}
+
+func TestUser_ValidateQueryError(t *testing.T) {
+	conn, ok := dbConn.(*DbConn)
+	require.True(t, ok, "test database provider")
+
+	db, err := OpenDb(conn.Driver, conn.Dsn)
+	require.NoError(t, err)
+	require.NoError(t, CloseDb(db))
+
+	SetDbProvider(closedDbProvider{db: db})
+	t.Cleanup(func() { SetDbProvider(conn) })
+
+	m := NewUser()
+	m.UserName = "validate-query-error"
+	m.UserRole = acl.RoleAdmin.String()
+
+	err = m.Validate()
+	require.Error(t, err)
+	assert.False(t, IsUserValidationError(err), err.Error())
 }
 
 func TestAddUser(t *testing.T) {
+	t.Run("SettingsAndDetails", func(t *testing.T) {
+		t.Cleanup(func() { deleteTestUser(t, FindUserByName("adduser-related")) })
+		require.NoError(t, AddUser(form.User{UserName: "adduser-related", UserRole: acl.RoleAdmin.String(),
+			AuthProvider: "none"}))
+		// Rows are counted before the user is loaded, as loading creates missing ones.
+		var uid string
+		require.NoError(t, UnscopedDb().Raw("SELECT user_uid FROM auth_users WHERE user_name = ?", "adduser-related").Row().Scan(&uid))
+
+		var settings, details int64
+		require.NoError(t, UnscopedDb().Model(&UserSettings{}).Where("user_uid = ?", uid).Count(&settings).Error)
+		require.NoError(t, UnscopedDb().Model(&UserDetails{}).Where("user_uid = ?", uid).Count(&details).Error)
+		assert.Equal(t, int64(1), settings)
+		assert.Equal(t, int64(1), details)
+	})
+	t.Run("AuthID", func(t *testing.T) {
+		const authId = "adduser-subject-5f3a"
+
+		t.Cleanup(func() {
+			deleteTestUser(t, FindUserByName("adduser-holder"))
+			deleteTestUser(t, FindUserByName("adduser-taker"))
+		})
+
+		require.NoError(t, AddUser(form.User{UserName: "adduser-holder", UserRole: acl.RoleAdmin.String(),
+			AuthProvider: authn.ProviderOIDC.String(), AuthID: authId, Password: "adduser-password"}))
+
+		holder := func() *User {
+			u := FindUserByName("adduser-holder")
+			require.NotNil(t, u)
+			return u
+		}
+
+		// A refused add leaves the account that holds the auth ID unchanged.
+		err := AddUser(form.User{UserName: "adduser-tak\u00e9r", UserRole: acl.RoleAdmin.String(),
+			AuthProvider: authn.ProviderOIDC.String(), AuthID: authId, Password: "adduser-password"})
+		require.ErrorIs(t, err, authn.ErrNotASCII)
+		assert.Equal(t, authId, holder().AuthID)
+		assert.Equal(t, authn.ProviderOIDC.String(), holder().AuthProvider)
+
+		// An added account takes the auth ID over.
+		require.NoError(t, AddUser(form.User{UserName: "adduser-taker", UserRole: acl.RoleAdmin.String(),
+			AuthProvider: authn.ProviderOIDC.String(), AuthID: authId, AuthIssuer: "https://adduser.example.com",
+			Password: "adduser-password"}))
+		assert.Equal(t, "", holder().AuthID)
+		assert.Equal(t, authn.ProviderNone.String(), holder().AuthProvider)
+
+		taker := FindUserByName("adduser-taker")
+		require.NotNil(t, taker)
+		assert.Equal(t, authId, taker.AuthID)
+		assert.Equal(t, "https://adduser.example.com", taker.AuthIssuer)
+		assert.Equal(t, authn.ProviderOIDC.String(), taker.AuthProvider)
+	})
+	t.Run("ValidationError", func(t *testing.T) {
+		err := AddUser(form.User{UserName: "adduser-bad-email", UserEmail: "x@localhost", UserRole: acl.RoleAdmin.String(),
+			AuthProvider: "none"})
+		require.Error(t, err)
+		assert.True(t, IsUserValidationError(err))
+		assert.Equal(t, "email 'x@localhost' does not have a fully qualified domain", err.Error())
+		assert.Nil(t, FindUserByName("adduser-bad-email"))
+
+		err = AddUser(form.User{UserName: "adduser-josé", UserRole: acl.RoleAdmin.String(), AuthProvider: "none"})
+		assert.True(t, IsUserValidationError(err))
+		assert.ErrorIs(t, err, authn.ErrNotASCII)
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		for _, name := range []string{"adduser-josé", "\u212Aate-adduser", "adduser-jo\u200bse"} {
+			err := AddUser(form.User{UserName: name, UserRole: acl.RoleAdmin.String(), AuthProvider: "none"})
+			assert.ErrorIs(t, err, authn.ErrNotASCII, name)
+			assert.Nil(t, FindUserByName(clean.Username(name)), name)
+		}
+	})
 	t.Run("TooShort", func(t *testing.T) {
 		u := form.User{
 			UserName:  "thomas1",
@@ -1110,6 +1387,7 @@ func TestAddUser(t *testing.T) {
 
 		err := AddUser(u)
 		assert.Error(t, err)
+		assert.True(t, IsUserValidationError(err))
 	})
 	t.Run("TooLong", func(t *testing.T) {
 		u := form.User{
@@ -1121,6 +1399,7 @@ func TestAddUser(t *testing.T) {
 
 		err := AddUser(u)
 		assert.Error(t, err)
+		assert.True(t, IsUserValidationError(err))
 	})
 	t.Run("InvalidRole", func(t *testing.T) {
 		u := form.User{
@@ -1132,6 +1411,7 @@ func TestAddUser(t *testing.T) {
 
 		err := AddUser(u)
 		assert.Error(t, err)
+		assert.True(t, IsUserValidationError(err))
 	})
 	t.Run("ValidLocalUser", func(t *testing.T) {
 		u := form.User{
@@ -1169,6 +1449,7 @@ func TestAddUser(t *testing.T) {
 
 		err := AddUser(u)
 		assert.Error(t, err)
+		assert.True(t, IsUserValidationError(err))
 	})
 }
 
@@ -1246,7 +1527,7 @@ func TestUser_UpdateLoginTime(t *testing.T) {
 	t.Run("UserDeleted", func(t *testing.T) {
 		u := NewUser()
 		var deleted = time.Date(2020, 3, 6, 2, 6, 51, 0, time.UTC)
-		u.DeletedAt = &deleted
+		u.DeletedAt = DeletedAtTime(deleted)
 		assert.Nil(t, u.UpdateLoginTime())
 	})
 	t.Run("NormalizesOutOfEditionSuperAdminRole", func(t *testing.T) {
@@ -1406,6 +1687,16 @@ func TestUser_Form(t *testing.T) {
 		t.Logf("User.UserDetails: %#v", m.UserDetails)
 		t.Logf("Form: %#v", frm)
 		t.Logf("Form.UserDetails: %#v", frm.UserDetails)
+		assert.Nil(t, frm.DeletedAt)
+	})
+	t.Run("Deleted", func(t *testing.T) {
+		deletedAt := time.Date(2022, 10, 18, 8, 15, 21, 0, time.UTC)
+		m := &User{UserName: "form-deleted", UserDetails: &UserDetails{}, DeletedAt: DeletedAtTime(deletedAt)}
+
+		frm, err := m.Form()
+		require.NoError(t, err)
+		require.NotNil(t, frm.DeletedAt)
+		assert.True(t, deletedAt.Equal(*frm.DeletedAt))
 	})
 }
 
@@ -1513,6 +1804,56 @@ func TestUser_PrivilegeLevelChange(t *testing.T) {
 }
 
 func TestUser_SaveForm(t *testing.T) {
+	t.Run("EmailChangeClearsVerification", func(t *testing.T) {
+		m := FirstOrCreateUser(&User{
+			UserName:    "saveformemail",
+			UserEmail:   "saveform-old@example.com",
+			DisplayName: "Save Form Email",
+			UserRole:    acl.RoleGuest.String(),
+		})
+		require.NotNil(t, m)
+		t.Cleanup(func() { deleteTestUser(t, m) })
+		require.NoError(t, UnscopedDb().Model(m).Update("VerifiedAt", TimeStamp()).Error)
+
+		m = FindUserByUID(m.UserUID)
+		require.True(t, m.EmailVerified())
+		frm, err := m.Form()
+		require.NoError(t, err)
+
+		frm.UserEmail = "saveform-old@example.com"
+		require.NoError(t, m.SaveForm(frm, UserFixtures.Pointer("alice"), true, false))
+		assert.True(t, FindUserByUID(m.UserUID).EmailVerified())
+
+		frm.UserEmail = "saveform-new@example.com"
+		require.NoError(t, m.SaveForm(frm, UserFixtures.Pointer("alice"), true, false))
+		saved := FindUserByUID(m.UserUID)
+		assert.Equal(t, "saveform-new@example.com", saved.UserEmail)
+		assert.False(t, saved.EmailVerified())
+	})
+	t.Run("EmailRequiresAdmin", func(t *testing.T) {
+		m := FirstOrCreateUser(&User{
+			UserName:    "saveformemailowner",
+			UserEmail:   "saveform-owner@example.com",
+			DisplayName: "Save Form Email Owner",
+			UserRole:    acl.RoleGuest.String(),
+		})
+		require.NotNil(t, m)
+		t.Cleanup(func() { deleteTestUser(t, m) })
+		require.NoError(t, UnscopedDb().Model(m).Update("VerifiedAt", TimeStamp()).Error)
+
+		m = FindUserByUID(m.UserUID)
+		frm, err := m.Form()
+		require.NoError(t, err)
+
+		frm.UserEmail = "saveform-changed@example.com"
+		frm.DisplayName = "Changed By Owner"
+		require.NoError(t, m.SaveForm(frm, m, false, false))
+
+		saved := FindUserByUID(m.UserUID)
+		assert.Equal(t, "saveform-owner@example.com", saved.UserEmail)
+		assert.True(t, saved.EmailVerified())
+		assert.Equal(t, "Changed By Owner", saved.DisplayName)
+	})
 	t.Run("UnknownUser", func(t *testing.T) {
 		frm, err := UnknownUser.Form()
 		assert.NoError(t, err)
@@ -1535,7 +1876,7 @@ func TestUser_SaveForm(t *testing.T) {
 
 		frm.UserEmail = "admin@example.com"
 		frm.UserDetails.UserLocation = "GoLand"
-		err = Admin.SaveForm(frm, UserFixtures.Pointer("guest"), false, false)
+		err = Admin.SaveForm(frm, &Admin, true, false)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "admin@example.com", Admin.UserEmail)
@@ -1919,6 +2260,33 @@ func TestUser_SaveForm(t *testing.T) {
 		m := FindUserByUID(u.UserUID)
 		assert.True(t, m.Method().Is(authn.Method2FA))
 	})
+	t.Run("RestoreHeld", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "saveform-restore-held", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newRenameTestUser(t, "saveform-restore-held", acl.RoleGuest)
+
+		m := FindUser(User{UserUID: deleted.UserUID})
+		require.NotNil(t, m)
+		frm, err := m.Form()
+		require.NoError(t, err)
+		frm.DeletedAt = nil
+
+		require.EqualError(t, m.SaveForm(frm, FindUserByName("admin"), true, true), "user 'saveform-restore-held' already exists")
+		assert.True(t, FindUser(User{UserUID: deleted.UserUID}).IsDeleted())
+	})
+	t.Run("Restore", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "saveform-restore-free", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		m := FindUser(User{UserUID: deleted.UserUID})
+		require.NotNil(t, m)
+		frm, err := m.Form()
+		require.NoError(t, err)
+		frm.DeletedAt = nil
+
+		require.NoError(t, m.SaveForm(frm, FindUserByName("admin"), true, true))
+		assert.False(t, FindUser(User{UserUID: deleted.UserUID}).IsDeleted())
+	})
 }
 
 func TestUser_SetDisplayName(t *testing.T) {
@@ -2298,6 +2666,95 @@ func TestUser_Create_ValidHandle(t *testing.T) {
 		u.UserRole = acl.RoleAdmin.String()
 		require.NoError(t, u.Create())
 		t.Cleanup(func() { _ = UnscopedDb().Delete(u).Error })
+	})
+}
+
+func TestUser_Validate_StoredEmail(t *testing.T) {
+	m := FirstOrCreateUser(&User{
+		UserName:    "storedemail",
+		UserEmail:   "storedemail@example.com",
+		DisplayName: "Stored Email",
+		UserRole:    acl.RoleGuest.String(),
+	})
+	require.NotNil(t, m)
+	require.NoError(t, UnscopedDb().Model(m).Update("UserEmail", "not-an-email").Error)
+	t.Cleanup(func() { deleteTestUser(t, m) })
+
+	t.Run("UnchangedInvalid", func(t *testing.T) {
+		u := FindUserByUID(m.UserUID)
+		require.NotNil(t, u)
+		require.Equal(t, "not-an-email", u.UserEmail)
+		u.UserRole = acl.RoleAdmin.String()
+
+		assert.NoError(t, u.Validate())
+	})
+	t.Run("ChangedInvalid", func(t *testing.T) {
+		u := FindUserByUID(m.UserUID)
+		require.NotNil(t, u)
+		u.UserEmail = "still-not-an-email"
+
+		assert.Error(t, u.Validate())
+	})
+	t.Run("UnchangedInvalidDeleted", func(t *testing.T) {
+		require.NoError(t, UnscopedDb().Model(m).Update("DeletedAt", Now()).Error)
+		t.Cleanup(func() { UnscopedDb().Model(m).Update("DeletedAt", nil) })
+
+		u := FindUser(User{ID: m.ID})
+		require.NotNil(t, u)
+		require.True(t, u.IsDeleted())
+		u.UserRole = acl.RoleAdmin.String()
+
+		assert.NoError(t, u.Validate())
+	})
+	t.Run("ChangedValid", func(t *testing.T) {
+		u := FindUserByUID(m.UserUID)
+		require.NotNil(t, u)
+		u.UserEmail = "Stored Email <stored-email@example.com>"
+
+		assert.NoError(t, u.Validate())
+		assert.Equal(t, "stored-email@example.com", u.UserEmail)
+	})
+}
+
+func TestUser_SetEmail(t *testing.T) {
+	verified := TimeStamp()
+	t.Run("Changed", func(t *testing.T) {
+		m := &User{UserEmail: "old@example.com", VerifiedAt: verified, VerifyToken: "token"}
+		m.SetEmail("new@example.com")
+
+		assert.Equal(t, "new@example.com", m.UserEmail)
+		assert.Nil(t, m.VerifiedAt)
+		assert.NotEqual(t, "token", m.VerifyToken)
+		assert.NotEmpty(t, m.VerifyToken)
+	})
+	t.Run("Unchanged", func(t *testing.T) {
+		m := &User{UserEmail: "same@example.com", VerifiedAt: verified, VerifyToken: "token"}
+		m.SetEmail("same@example.com")
+
+		assert.Equal(t, verified, m.VerifiedAt)
+		assert.Equal(t, "token", m.VerifyToken)
+	})
+	t.Run("Cleared", func(t *testing.T) {
+		m := &User{UserEmail: "old@example.com", VerifiedAt: verified}
+		m.SetEmail("")
+
+		assert.Equal(t, "", m.UserEmail)
+		assert.Nil(t, m.VerifiedAt)
+	})
+}
+
+func TestUser_storedEmail(t *testing.T) {
+	t.Run("Saved", func(t *testing.T) {
+		alice := FindUserByName("alice")
+		require.NotNil(t, alice)
+		require.NotEmpty(t, alice.UserEmail)
+
+		assert.Equal(t, alice.UserEmail, (&User{ID: alice.ID, UserEmail: "changed@example.com"}).storedEmail())
+	})
+	t.Run("NotSaved", func(t *testing.T) {
+		assert.Equal(t, "", (&User{UserEmail: "new@example.com"}).storedEmail())
+		assert.Equal(t, "", (&User{ID: -1}).storedEmail())
+		assert.Equal(t, "", (&User{ID: 999999999}).storedEmail())
 	})
 }
 
@@ -2984,6 +3441,52 @@ func TestUser_SetValuesFromCliScope(t *testing.T) {
 	assert.Equal(t, "videos:view", user.UserScope)
 }
 
+func TestUser_SetValuesFromCliAuthID(t *testing.T) {
+	const authId = "usersmod-subject-7c2e"
+
+	t.Cleanup(func() {
+		deleteTestUser(t, FindUserByName("usersmod-holder"))
+		deleteTestUser(t, FindUserByName("usersmod-editor"))
+	})
+
+	for _, name := range []string{"usersmod-holder", "usersmod-editor"} {
+		require.NoError(t, AddUser(form.User{UserName: name, UserRole: acl.RoleAdmin.String(),
+			AuthProvider: authn.ProviderOIDC.String(), AuthID: name + "-subject", Password: "usersmod-password"}))
+	}
+
+	holder := func() *User {
+		u := FindUserByName("usersmod-holder")
+		require.NotNil(t, u)
+		return u
+	}
+
+	require.NoError(t, holder().UpdateAuthID(authId, ""))
+
+	modContext := func(args ...string) *cli.Context {
+		set := flag.NewFlagSet("users mod", flag.ContinueOnError)
+		_ = set.String("auth-id", "", "")
+		_ = set.String("email", "", "")
+		require.NoError(t, set.Parse(args))
+		return cli.NewContext(cli.NewApp(), set, nil)
+	}
+
+	editor := FindUserByName("usersmod-editor")
+	require.NotNil(t, editor)
+
+	// A refused change leaves the account that holds the auth ID unchanged.
+	require.Error(t, editor.SetValuesFromCli(modContext("--auth-id", authId, "--email", "usersmod@localhost")))
+	assert.Equal(t, authId, holder().AuthID)
+	assert.Equal(t, authn.ProviderOIDC.String(), holder().AuthProvider)
+
+	// An accepted change takes the auth ID over.
+	editor = FindUserByName("usersmod-editor")
+	require.NotNil(t, editor)
+	require.NoError(t, editor.SetValuesFromCli(modContext("--auth-id", authId)))
+	assert.Equal(t, authId, editor.AuthID)
+	assert.Equal(t, "", holder().AuthID)
+	assert.Equal(t, authn.ProviderNone.String(), holder().AuthProvider)
+}
+
 func TestUser_AuthIDSQLite(t *testing.T) {
 	user := FindLocalUser("alice")
 	require.NotNil(t, user)
@@ -3124,5 +3627,440 @@ func TestValidatePasswordLength(t *testing.T) {
 	})
 	t.Run("TooLong", func(t *testing.T) {
 		assert.ErrorContains(t, ValidatePasswordLength(strings.Repeat("a", txt.ClipPassword+1)), "less than")
+	})
+}
+
+func TestUser_UsernameASCIIError(t *testing.T) {
+	m := &User{ID: 999903, UserUID: rnd.GenerateUID(UserUID), UserName: "ascii-error"}
+
+	t.Run("Suggestion", func(t *testing.T) {
+		err := m.usernameASCIIError("Zoë")
+		require.ErrorIs(t, err, authn.ErrNotASCII)
+		assert.EqualError(t, err, "username may only contain ASCII characters, e.g. 'zoe'")
+	})
+	t.Run("SuggestionHeld", func(t *testing.T) {
+		assert.EqualError(t, m.usernameASCIIError("alicé"), "username may only contain ASCII characters")
+	})
+	t.Run("SuggestionTooShort", func(t *testing.T) {
+		orig := UsernameLength
+		UsernameLength = 4
+		t.Cleanup(func() { UsernameLength = orig })
+
+		assert.EqualError(t, m.usernameASCIIError("zoë"), "username may only contain ASCII characters")
+	})
+	t.Run("SuggestionWithoutHandle", func(t *testing.T) {
+		assert.EqualError(t, m.usernameASCIIError(".zoë"), "username may only contain ASCII characters")
+	})
+	t.Run("NoSuggestion", func(t *testing.T) {
+		assert.EqualError(t, m.usernameASCIIError("\u0301"), "username may only contain ASCII characters")
+	})
+	t.Run("SuggestionHeldDeleted", func(t *testing.T) {
+		holder := newRenameTestUser(t, "ascii-error-deleted", acl.RoleGuest)
+		require.NoError(t, Db().Delete(holder).Error)
+
+		assert.EqualError(t, m.usernameASCIIError("ascii-error-delëted"), "username may only contain ASCII characters")
+	})
+	t.Run("NameHeld", func(t *testing.T) {
+		newExistingTestUser(t, "ascii-error-josé", acl.RoleGuest)
+
+		err := m.usernameASCIIError("Ascii-Error-José")
+		require.NotErrorIs(t, err, authn.ErrNotASCII)
+		assert.EqualError(t, err, "user 'ascii-error-josé' already exists")
+	})
+}
+
+func TestUser_create(t *testing.T) {
+	t.Run("NotASCII", func(t *testing.T) {
+		m := NewUser()
+		m.UserName = "create-keep-josé"
+		m.UserRole = acl.RoleGuest.String()
+
+		require.ErrorIs(t, m.create(false), authn.ErrNotASCII)
+		assert.Nil(t, FindUserByName("create-keep-josé"))
+	})
+	t.Run("KeepName", func(t *testing.T) {
+		m := NewUser()
+		m.UserName = "create-keep-zoë"
+		m.UserRole = acl.RoleGuest.String()
+
+		require.NoError(t, m.create(true))
+		t.Cleanup(func() { deleteTestUser(t, m) })
+		assert.Equal(t, "create-keep-zoë", storedUser(t, m.UserUID).UserName)
+	})
+	t.Run("NotPortable", func(t *testing.T) {
+		for _, name := range []string{"create-50%off", "__create", "_.create"} {
+			m := NewUser()
+			m.UserName = name
+			m.UserRole = acl.RoleGuest.String()
+
+			assert.EqualError(t, m.create(false), "username '"+name+"' is not supported", name)
+			assert.Nil(t, FindUserByName(name), name)
+		}
+	})
+	t.Run("KeepNotPortable", func(t *testing.T) {
+		m := NewUser()
+		m.UserName = "__create-keep"
+		m.UserRole = acl.RoleGuest.String()
+
+		require.NoError(t, m.create(true))
+		t.Cleanup(func() { deleteTestUser(t, m) })
+		assert.Equal(t, "__create-keep", storedUser(t, m.UserUID).UserName)
+	})
+}
+
+func TestUser_SetUsernameNotPortable(t *testing.T) {
+	t.Run("Refused", func(t *testing.T) {
+		for _, name := range []string{"set-50%off", "__set", "_.set"} {
+			m := NewUser()
+			m.ID = 0
+			assert.EqualError(t, m.SetUsername(name), "username '"+name+"' is not supported", name)
+			assert.Equal(t, "", m.UserName, name)
+		}
+	})
+	t.Run("Accepted", func(t *testing.T) {
+		m := NewUser()
+		require.NoError(t, m.SetUsername("set_portable"))
+		assert.Equal(t, "set_portable", m.UserName)
+	})
+}
+
+func TestFindRestorableUser(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		m, held := FindRestorableUser("")
+		assert.Nil(t, m)
+		assert.False(t, held)
+	})
+	t.Run("NotFound", func(t *testing.T) {
+		m, held := FindRestorableUser("restorable-missing")
+		assert.Nil(t, m)
+		assert.False(t, held)
+	})
+	t.Run("Active", func(t *testing.T) {
+		m, held := FindRestorableUser("Alice")
+		assert.Nil(t, m)
+		assert.True(t, held)
+	})
+	t.Run("Deleted", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "restorable-deleted", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		m, held := FindRestorableUser("Restorable-Deleted")
+		require.NotNil(t, m)
+		assert.True(t, held)
+		assert.Equal(t, deleted.UserUID, m.UserUID)
+	})
+	t.Run("DeletedOtherName", func(t *testing.T) {
+		deleted := newExistingTestUser(t, "restorable-josé", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		m, held := FindRestorableUser("restorable-jose")
+		assert.Nil(t, m)
+
+		// MariaDB compares names that differ only by accents as equal.
+		assert.Equal(t, IsDialect(dsn.DriverMySQL), held)
+	})
+	t.Run("DeletedBesideOtherName", func(t *testing.T) {
+		other := newExistingTestUser(t, "restorable-twin-josé", acl.RoleGuest)
+		require.NoError(t, Db().Delete(other).Error)
+		deleted := newRenameTestUser(t, "restorable-twin-jose", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		m, held := FindRestorableUser("restorable-twin-jose")
+		require.NotNil(t, m)
+		assert.True(t, held)
+		assert.Equal(t, deleted.UserUID, m.UserUID)
+	})
+	t.Run("DeletedBesideActiveSameName", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "restorable-active-same", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newRenameTestUser(t, "restorable-active-same", acl.RoleGuest)
+
+		m, held := FindRestorableUser("restorable-active-same")
+		assert.Nil(t, m)
+		assert.True(t, held)
+	})
+	t.Run("DeletedBesideActiveOtherName", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "restorable-active-jose", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newExistingTestUser(t, "restorable-active-josé", acl.RoleGuest)
+
+		m, held := FindRestorableUser("restorable-active-jose")
+		assert.True(t, held)
+
+		// MariaDB compares names that differ only by accents as equal.
+		if IsDialect(dsn.DriverMySQL) {
+			assert.Nil(t, m)
+		} else {
+			require.NotNil(t, m)
+			assert.Equal(t, deleted.UserUID, m.UserUID)
+		}
+	})
+}
+
+func TestUser_CheckRestore(t *testing.T) {
+	t.Run("NotHeld", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "check-restore-free", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		assert.NoError(t, deleted.CheckRestore())
+	})
+	t.Run("HeldSameName", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "check-restore-same", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newRenameTestUser(t, "check-restore-same", acl.RoleGuest)
+
+		assert.EqualError(t, deleted.CheckRestore(), "user 'check-restore-same' already exists")
+	})
+	t.Run("HeldDeleted", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "check-restore-twice", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		other := newRenameTestUser(t, "check-restore-twice", acl.RoleGuest)
+		require.NoError(t, Db().Delete(other).Error)
+
+		assert.NoError(t, deleted.CheckRestore())
+	})
+	t.Run("HeldNormalized", func(t *testing.T) {
+		deleted := newExistingTestUser(t, "Check-Restore-Upper", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newRenameTestUser(t, "check-restore-upper", acl.RoleGuest)
+
+		assert.EqualError(t, deleted.CheckRestore(), "user 'Check-Restore-Upper' already exists")
+	})
+	t.Run("SanitizedEmpty", func(t *testing.T) {
+		deleted := newExistingTestUser(t, "***", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		assert.NoError(t, deleted.CheckRestore())
+	})
+	t.Run("HeldOtherName", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "check-restore-jose", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		newExistingTestUser(t, "check-restore-josé", acl.RoleGuest)
+
+		// MariaDB compares names that differ only by accents as equal.
+		if IsDialect(dsn.DriverMySQL) {
+			assert.Error(t, deleted.CheckRestore())
+		} else {
+			assert.NoError(t, deleted.CheckRestore())
+		}
+	})
+}
+
+func TestFindUserByExactName(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		assert.Nil(t, FindUserByExactName(""))
+	})
+	t.Run("Active", func(t *testing.T) {
+		m := FindUserByExactName("Alice")
+		require.NotNil(t, m)
+		assert.Equal(t, "alice", m.UserName)
+	})
+	t.Run("ActiveBesideDeletedLowerID", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "exact-entity-dup", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+		active := newRenameTestUser(t, "exact-entity-dup", acl.RoleGuest)
+
+		m := FindUserByExactName("exact-entity-dup")
+		require.NotNil(t, m)
+		assert.Equal(t, active.UserUID, m.UserUID)
+	})
+	t.Run("DeletedOnly", func(t *testing.T) {
+		deleted := newRenameTestUser(t, "exact-entity-deleted", acl.RoleGuest)
+		require.NoError(t, Db().Delete(deleted).Error)
+
+		m := FindUserByExactName("exact-entity-deleted")
+		require.NotNil(t, m)
+		assert.Equal(t, deleted.UserUID, m.UserUID)
+	})
+	t.Run("OtherName", func(t *testing.T) {
+		newExistingTestUser(t, "exact-entity-josé", acl.RoleGuest)
+
+		assert.Nil(t, FindUserByExactName("exact-entity-jose"))
+	})
+	t.Run("OtherNameBeside", func(t *testing.T) {
+		newExistingTestUser(t, "exact-entity-twin-josé", acl.RoleGuest)
+		m := newRenameTestUser(t, "exact-entity-twin-jose", acl.RoleGuest)
+
+		found := FindUserByExactName("exact-entity-twin-jose")
+		require.NotNil(t, found)
+		assert.Equal(t, m.UserUID, found.UserUID)
+	})
+	t.Run("DeletedTwice", func(t *testing.T) {
+		first := newRenameTestUser(t, "exact-entity-twice", acl.RoleGuest)
+		require.NoError(t, Db().Delete(first).Error)
+		second := newRenameTestUser(t, "exact-entity-twice", acl.RoleGuest)
+		require.NoError(t, Db().Delete(second).Error)
+
+		m := FindUserByExactName("exact-entity-twice")
+		require.NotNil(t, m)
+		assert.Equal(t, first.UserUID, m.UserUID)
+	})
+	t.Run("IdenticalBeforeLegacy", func(t *testing.T) {
+		newExistingTestUser(t, "Exact-Entity-Rank", acl.RoleGuest)
+		m := newExistingTestUser(t, "exact-entity-rank", acl.RoleGuest)
+
+		found := FindUserByExactName("exact-entity-rank")
+		require.NotNil(t, found)
+		assert.Equal(t, m.UserUID, found.UserUID)
+	})
+	t.Run("LegacyName", func(t *testing.T) {
+		m := newExistingTestUser(t, "Exact-Entity-Legacy", acl.RoleGuest)
+
+		// Only MariaDB finds the stored name by its sanitized form.
+		if found := FindUserByExactName("exact-entity-legacy"); IsDialect(dsn.DriverMySQL) {
+			require.NotNil(t, found)
+			assert.Equal(t, m.UserUID, found.UserUID)
+		} else {
+			assert.Nil(t, found)
+		}
+	})
+}
+
+func TestUser_ExactUsernameHolder(t *testing.T) {
+	m := &User{ID: 999904, UserUID: rnd.GenerateUID(UserUID), UserName: "exact-holder"}
+
+	t.Run("Active", func(t *testing.T) {
+		assert.True(t, m.exactUsernameHolder("alice"))
+	})
+	t.Run("Deleted", func(t *testing.T) {
+		holder := newRenameTestUser(t, "exact-holder-deleted", acl.RoleGuest)
+		require.NoError(t, Db().Delete(holder).Error)
+		assert.True(t, m.exactUsernameHolder("exact-holder-deleted"))
+	})
+	t.Run("OtherName", func(t *testing.T) {
+		newExistingTestUser(t, "exact-holder-josé", acl.RoleGuest)
+		assert.False(t, m.exactUsernameHolder("exact-holder-jose"))
+	})
+	t.Run("Own", func(t *testing.T) {
+		own := newRenameTestUser(t, "exact-holder-own", acl.RoleGuest)
+		assert.False(t, own.exactUsernameHolder("exact-holder-own"))
+	})
+	t.Run("None", func(t *testing.T) {
+		assert.False(t, m.exactUsernameHolder("exact-holder-none"))
+	})
+}
+
+func TestCountNonASCIIUsernames(t *testing.T) {
+	base := CountNonASCIIUsernames()
+
+	newExistingTestUser(t, "count-josé", acl.RoleGuest)
+	assert.Equal(t, base+1, CountNonASCIIUsernames())
+
+	deleted := newExistingTestUser(t, "count-zoë", acl.RoleGuest)
+	require.NoError(t, Db().Delete(deleted).Error)
+	assert.Equal(t, base+1, CountNonASCIIUsernames())
+
+	newRenameTestUser(t, "count-ascii", acl.RoleGuest)
+	assert.Equal(t, base+1, CountNonASCIIUsernames())
+}
+
+func TestUser_SaveRelated(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		m := &User{UserUID: rnd.GenerateUID(UserUID)}
+		m.Settings().UILanguage = "de"
+		m.Details().GivenName = "Jane"
+		m.SaveRelated()
+		t.Cleanup(func() {
+			_ = UnscopedDb().Delete(m.UserSettings).Error
+			_ = UnscopedDb().Delete(m.UserDetails).Error
+		})
+		assert.Equal(t, int64(1), countUserSettings(t, m.UserUID))
+		assert.Equal(t, int64(1), countUserDetails(t, m.UserUID))
+
+		settings, details := UserSettings{}, UserDetails{}
+		require.NoError(t, UnscopedDb().Where("user_uid = ?", m.UserUID).First(&settings).Error)
+		require.NoError(t, UnscopedDb().Where("user_uid = ?", m.UserUID).First(&details).Error)
+		assert.Equal(t, "de", settings.UILanguage)
+		assert.Equal(t, "Jane", details.GivenName)
+	})
+	t.Run("NoUid", func(t *testing.T) {
+		settings, details := countUserSettings(t, ""), countUserDetails(t, "")
+		m := &User{UserName: "related-without-uid"}
+		m.Settings().UILanguage = "de"
+		m.Details().GivenName = "Jane"
+		m.SaveRelated()
+		assert.Equal(t, settings, countUserSettings(t, ""))
+		assert.Equal(t, details, countUserDetails(t, ""))
+	})
+}
+
+// failUserDetailsWrites makes every write to the user details table fail until the test ends.
+func failUserDetailsWrites(t *testing.T) {
+	t.Helper()
+
+	name := "test:fail_" + strings.ReplaceAll(t.Name(), "/", "_")
+	fail := func(db *gorm.DB) {
+		if db.Statement.Table == (UserDetails{}).TableName() {
+			_ = db.AddError(errors.New("details write failed"))
+		}
+	}
+
+	require.NoError(t, Db().Callback().Create().Before("gorm:create").Register(name, fail))
+	require.NoError(t, Db().Callback().Update().Before("gorm:update").Register(name, fail))
+	t.Cleanup(func() {
+		_ = Db().Callback().Create().Remove(name)
+		_ = Db().Callback().Update().Remove(name)
+	})
+}
+
+func TestUser_SaveForm_RelatedError(t *testing.T) {
+	m := FirstOrCreateUser(&User{
+		UserName:    "saveformrelated",
+		DisplayName: "Save Form Related",
+		UserRole:    acl.RoleGuest.String(),
+	})
+	require.NotNil(t, m)
+	t.Cleanup(func() { deleteTestUser(t, m) })
+
+	t.Run("Success", func(t *testing.T) {
+		frm, err := m.Form()
+		require.NoError(t, err)
+		frm.UserDetails.UserLocation = "Berlin"
+		require.NoError(t, m.SaveForm(frm, UserFixtures.Pointer("alice"), true, false))
+		assert.Equal(t, "Berlin", FindUserByUID(m.UserUID).Details().UserLocation)
+	})
+	t.Run("DetailsFailed", func(t *testing.T) {
+		failUserDetailsWrites(t)
+
+		frm, err := m.Form()
+		require.NoError(t, err)
+		frm.UserDetails.UserLocation = "Hamburg"
+		frm.UserRole = acl.RoleAdmin.String()
+		frm.CanLogin = !m.CanLogin
+		assert.Error(t, m.SaveForm(frm, UserFixtures.Pointer("alice"), true, false))
+
+		stored := FindUserByUID(m.UserUID)
+		require.NotNil(t, stored)
+		assert.Equal(t, acl.RoleGuest.String(), stored.UserRole)
+		assert.Equal(t, !frm.CanLogin, stored.CanLogin)
+		assert.Equal(t, "Berlin", stored.Details().UserLocation)
+	})
+	t.Run("SaveIgnoresDetails", func(t *testing.T) {
+		failUserDetailsWrites(t)
+
+		assert.NoError(t, m.Save())
+	})
+}
+
+func TestUser_saveRelated(t *testing.T) {
+	m := FirstOrCreateUser(&User{
+		UserName:    "saverelatedhelper",
+		DisplayName: "Save Related Helper",
+		UserRole:    acl.RoleGuest.String(),
+	})
+	require.NotNil(t, m)
+	t.Cleanup(func() { deleteTestUser(t, m) })
+
+	t.Run("Success", func(t *testing.T) {
+		m.Details().UserLocation = "Paris"
+		require.NoError(t, m.saveRelated())
+		assert.Equal(t, "Paris", FindUserByUID(m.UserUID).Details().UserLocation)
+	})
+	t.Run("DetailsFailed", func(t *testing.T) {
+		failUserDetailsWrites(t)
+
+		m.Details().UserLocation = "Rome"
+		assert.Error(t, m.saveRelated())
+		assert.Same(t, m, m.SaveRelated())
 	})
 }

@@ -122,6 +122,153 @@ func TestSavePhotoForm(t *testing.T) {
 	})
 }
 
+// createTakenAtTestPhoto creates a photo with a manual capture time and removes it after the test.
+func createTakenAtTestPhoto(t *testing.T, zone string, takenAt, takenAtLocal time.Time) *Photo {
+	t.Helper()
+	photo := NewPhoto(false)
+	photo.TakenAt, photo.TakenAtLocal = takenAt, takenAtLocal
+	photo.TimeZone, photo.TakenSrc = zone, SrcManual
+	photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay = takenAtLocal.Year(), int(takenAtLocal.Month()), takenAtLocal.Day()
+	require.NoError(t, photo.Create())
+	t.Cleanup(func() {
+		UnscopedDb().Delete(&PhotoKeyword{}, "photo_id = ?", photo.ID)
+		UnscopedDb().Delete(&Details{}, "photo_id = ?", photo.ID)
+		UnscopedDb().Delete(photo)
+	})
+	return &photo
+}
+
+// TestSavePhotoForm_TimeZoneCycles checks that converted UTC times stay stable through later unrelated saves.
+func TestSavePhotoForm_TimeZoneCycles(t *testing.T) {
+	taken := time.Date(2020, 1, 1, 0, 30, 0, 0, time.UTC)
+	for _, zone := range []string{"UTC-12", "Pacific/Kiritimati", "Europe/Berlin", "America/New_York", "Asia/Kathmandu"} {
+		t.Run(zone, func(t *testing.T) {
+			photo := createTakenAtTestPhoto(t, tz.UTC, taken, taken)
+			expected := taken.In(tz.Find(zone))
+			frm, err := form.NewPhoto(photo)
+			require.NoError(t, err)
+			frm.TimeZone = zone
+			frm.TakenAtLocal = time.Date(expected.Year(), expected.Month(), expected.Day(), expected.Hour(), expected.Minute(), expected.Second(), 0, time.UTC)
+			frm.PhotoYear, frm.PhotoMonth, frm.PhotoDay = expected.Year(), int(expected.Month()), expected.Day()
+			require.NoError(t, SavePhotoForm(photo, frm))
+			for range 3 {
+				frm, err = form.NewPhoto(photo)
+				require.NoError(t, err)
+				require.NoError(t, SavePhotoForm(photo, frm))
+				require.NoError(t, Db().First(photo, photo.ID).Error)
+				assert.True(t, photo.TakenAt.Equal(taken), "capture instant changed in %s", zone)
+				assert.Equal(t, expected.Format("2006-01-02T15:04:05"), photo.TakenAtLocal.Format("2006-01-02T15:04:05"))
+				assert.Equal(t, []int{expected.Year(), int(expected.Month()), expected.Day()}, []int{photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay})
+			}
+		})
+	}
+}
+
+// TestSavePhotoForm_TakenAt checks how TakenAt is derived from the submitted wall time and zone.
+func TestSavePhotoForm_TakenAt(t *testing.T) {
+	berlin := time.Date(2025, 6, 30, 12, 0, 0, 0, time.UTC)
+	berlinLocal := time.Date(2025, 6, 30, 14, 0, 0, 0, time.UTC)
+	repeated := time.Date(2025, 10, 26, 0, 30, 0, 0, time.UTC)
+	repeatedLocal := time.Date(2025, 10, 26, 2, 30, 0, 0, time.UTC)
+	t.Run("ZoneOnlyKeepsWallTime", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, "Europe/Berlin", berlin, berlinLocal)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone = "America/New_York"
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T18:00:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-06-30T14:00:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+	t.Run("ZoneOnlyFromUTCConverts", func(t *testing.T) {
+		taken := time.Date(2025, 6, 30, 23, 30, 0, 0, time.UTC)
+		photo := createTakenAtTestPhoto(t, tz.UTC, taken, taken)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone = "Europe/Berlin"
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T23:30:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-07-01T01:30:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+		assert.Equal(t, []int{2025, 7, 1}, []int{photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay})
+	})
+	t.Run("ZoneOnlyFromUTCUnknownDay", func(t *testing.T) {
+		taken := time.Date(2020, 1, 1, 3, 0, 0, 0, time.UTC)
+		photo := createTakenAtTestPhoto(t, tz.UTC, taken, taken)
+		require.NoError(t, photo.Update("PhotoDay", -1))
+		photo.PhotoDay = -1
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone = "America/New_York"
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2019-12-31T22:00:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+		assert.Equal(t, []int{2020, 1, -1}, []int{photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay})
+	})
+	t.Run("ZoneOnlyToUTCKeepsWallTime", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, "Europe/Berlin", berlin, berlinLocal)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone = tz.UTC
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T14:00:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-06-30T14:00:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+	t.Run("ZoneAndDateChangeKeepsWallTime", func(t *testing.T) {
+		taken := time.Date(2025, 6, 30, 23, 30, 0, 0, time.UTC)
+		photo := createTakenAtTestPhoto(t, tz.UTC, taken, taken)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone, frm.PhotoDay = "Europe/Berlin", 15
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T23:30:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+		assert.Equal(t, "2025-06-30T21:30:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, []int{2025, 6, 15}, []int{photo.PhotoYear, photo.PhotoMonth, photo.PhotoDay})
+	})
+	t.Run("FromUTCWithLocalTimeUsesIt", func(t *testing.T) {
+		taken := time.Date(2025, 6, 30, 23, 30, 0, 0, time.UTC)
+		photo := createTakenAtTestPhoto(t, tz.UTC, taken, taken)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone, frm.TakenAtLocal = "Europe/Berlin", time.Date(2025, 7, 2, 3, 45, 0, 0, time.UTC)
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-07-02T01:45:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-07-02T03:45:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+	t.Run("InconsistentTakenAtIsDerived", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, "Europe/Berlin", berlin, berlinLocal)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TakenAt = berlin.Add(5 * time.Hour)
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T12:00:00Z", photo.TakenAt.Format(time.RFC3339))
+	})
+	t.Run("RepeatedHourZoneChange", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, tz.UTC, repeated, repeated)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone, frm.TakenAtLocal = "Europe/Berlin", repeatedLocal
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-10-26T00:30:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-10-26T02:30:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+	t.Run("RepeatedHourUnrelatedSave", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, "Europe/Berlin", repeated, repeatedLocal)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.PhotoTitle, frm.TitleSrc = "Repeated Hour", SrcManual
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-10-26T00:30:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-10-26T02:30:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+	t.Run("LocalUsesWallTime", func(t *testing.T) {
+		photo := createTakenAtTestPhoto(t, "Europe/Berlin", berlin, berlinLocal)
+		frm, err := form.NewPhoto(photo)
+		require.NoError(t, err)
+		frm.TimeZone = tz.Local
+		require.NoError(t, SavePhotoForm(photo, frm))
+		assert.Equal(t, "2025-06-30T14:00:00Z", photo.TakenAt.Format(time.RFC3339))
+		assert.Equal(t, "2025-06-30T14:00:00Z", photo.TakenAtLocal.Format(time.RFC3339))
+	})
+}
+
 func TestPhoto_LabelKeywords(t *testing.T) {
 	t.Run("CollectsSearchableKeywords", func(t *testing.T) {
 		photo := Photo{
@@ -503,13 +650,13 @@ func TestPhoto_ShouldGenerateCaption(t *testing.T) {
 func TestPhoto_ClassifyLabels(t *testing.T) {
 	t.Run("NewPhoto", func(t *testing.T) {
 		m := PhotoFixtures.Get("Photo19")
-		Db().Set("gorm:auto_preload", true).Model(&m).Related(&m.Labels)
+		Db().Where("photo_id = ?", m.ID).Preload("Label").Preload("Label.LabelCategories").Find(&m.Labels)
 		labels := m.ClassifyLabels()
 		assert.Empty(t, labels)
 	})
 	t.Run("ExistingPhoto", func(t *testing.T) {
 		m := PhotoFixtures.Get("19800101_000002_D640C559")
-		Db().Set("gorm:auto_preload", true).Model(&m).Related(&m.Labels)
+		Db().Where("photo_id = ?", m.ID).Preload("Label").Preload("Label.LabelCategories").Find(&m.Labels)
 		labels := m.ClassifyLabels()
 		assert.LessOrEqual(t, 2, labels.Len())
 	})
@@ -703,7 +850,7 @@ func TestPhoto_AddLabels(t *testing.T) {
 		photo := PhotoFixtures.Get("Photo15")
 		initialLen := len(photo.Labels)
 
-		var labelCountBefore int
+		var labelCountBefore int64
 		if err := Db().Model(&Label{}).Where("label_slug = ?", "unknown").Count(&labelCountBefore).Error; err != nil {
 			t.Fatalf("count before failed: %v", err)
 		}
@@ -713,11 +860,11 @@ func TestPhoto_AddLabels(t *testing.T) {
 
 		assert.Equal(t, initialLen, len(photo.Labels))
 
-		var labelCountAfter int
+		var labelCountAfter int64
 		if err := Db().Model(&Label{}).Where("label_slug = ?", "unknown").Count(&labelCountAfter).Error; err != nil {
 			t.Fatalf("count after failed: %v", err)
 		}
-		assert.Equal(t, labelCountBefore, labelCountAfter)
+		assert.EqualValues(t, labelCountBefore, labelCountAfter)
 	})
 	t.Run("ReusesRenamedLabelFromClassifier", func(t *testing.T) {
 		// Reproduces the AI ingestion path from issue #5531: a classifier
@@ -735,20 +882,20 @@ func TestPhoto_AddLabels(t *testing.T) {
 		require.NoError(t, Db().Save(original).Error)
 		FlushLabelCache()
 
-		var before int
+		var before int64
 		require.NoError(t, UnscopedDb().Model(&Label{}).
 			Where("label_slug LIKE ? OR custom_slug LIKE ?", "renameclassify%", "renameclassify%").
 			Count(&before).Error)
-		assert.Equal(t, 1, before)
+		assert.EqualValues(t, 1, before)
 
 		photo := PhotoFixtures.Get("19800101_000002_D640C559")
 		photo.AddLabels(classify.Labels{{Name: "RenameClassifyA", Uncertainty: 30, Source: SrcImage, Priority: 0}})
 
-		var after int
+		var after int64
 		require.NoError(t, UnscopedDb().Model(&Label{}).
 			Where("label_slug LIKE ? OR custom_slug LIKE ?", "renameclassify%", "renameclassify%").
 			Count(&after).Error)
-		assert.Equal(t, 1, after, "classifier with old name must not create a duplicate label")
+		assert.EqualValues(t, 1, after, "classifier with old name must not create a duplicate label")
 
 		joined, err := FindPhotoLabel(photo.ID, original.ID, false)
 		require.NoError(t, err)
@@ -759,7 +906,7 @@ func TestPhoto_AddLabels(t *testing.T) {
 		initialLen := len(photo.Labels)
 
 		labelSlug := "zero-probability"
-		var labelCountBefore int
+		var labelCountBefore int64
 		if err := Db().Model(&Label{}).Where("label_slug = ?", labelSlug).Count(&labelCountBefore).Error; err != nil {
 			t.Fatalf("count before failed: %v", err)
 		}
@@ -769,11 +916,11 @@ func TestPhoto_AddLabels(t *testing.T) {
 
 		assert.Equal(t, initialLen, len(photo.Labels))
 
-		var labelCountAfter int
+		var labelCountAfter int64
 		if err := Db().Model(&Label{}).Where("label_slug = ?", labelSlug).Count(&labelCountAfter).Error; err != nil {
 			t.Fatalf("count after failed: %v", err)
 		}
-		assert.Equal(t, labelCountBefore, labelCountAfter)
+		assert.EqualValues(t, labelCountBefore, labelCountAfter)
 	})
 }
 
@@ -796,7 +943,7 @@ func TestPhoto_Delete(t *testing.T) {
 	})
 	t.Run("Archived", func(t *testing.T) {
 		archivedAt := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
-		m := &Photo{PhotoUID: rnd.GenerateUID(PhotoUID), PhotoName: "DeleteArchived", PhotoQuality: 3, DeletedAt: &archivedAt}
+		m := &Photo{PhotoUID: rnd.GenerateUID(PhotoUID), PhotoName: "DeleteArchived", PhotoQuality: 3, DeletedAt: DeletedAtTime(archivedAt)}
 		require.NoError(t, UnscopedDb().Create(m).Error)
 
 		t.Cleanup(func() {
@@ -809,7 +956,7 @@ func TestPhoto_Delete(t *testing.T) {
 		var result Photo
 		require.NoError(t, UnscopedDb().Where("id = ?", m.ID).First(&result).Error)
 		assert.Equal(t, -1, result.PhotoQuality)
-		require.NotNil(t, result.DeletedAt)
+		require.True(t, result.DeletedAt.Valid)
 		assert.False(t, result.IsArchived())
 	})
 	t.Run("NoID", func(t *testing.T) {
@@ -924,6 +1071,62 @@ func TestPhoto_Save(t *testing.T) {
 	})
 }
 
+func TestPhoto_BeforeSave(t *testing.T) {
+	t.Run("Create", func(t *testing.T) {
+		photo := Photo{PhotoUID: rnd.GenerateUID(PhotoUID), PhotoName: "BeforeSave", OriginalName: "beforeSaveOriginal"}
+		require.NoError(t, photo.Create())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(&photo).Error })
+
+		found := Photo{}
+		require.NoError(t, UnscopedDb().Where("id = ?", photo.ID).First(&found).Error)
+		assert.False(t, found.TakenAt.IsZero())
+		assert.False(t, found.TakenAtLocal.IsZero())
+	})
+	t.Run("Save", func(t *testing.T) {
+		photo := Photo{PhotoUID: rnd.GenerateUID(PhotoUID), PhotoName: "BeforeSave", OriginalName: "beforeSaveOriginal"}
+		require.NoError(t, photo.Create())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(&photo).Error })
+
+		photo.TakenAt = time.Time{}
+		photo.TakenAtLocal = time.Time{}
+		require.NoError(t, photo.Save())
+
+		found := Photo{}
+		require.NoError(t, UnscopedDb().Where("id = ?", photo.ID).First(&found).Error)
+		assert.Greater(t, found.TakenAt.Year(), 2000)
+		assert.Greater(t, found.TakenAtLocal.Year(), 2000)
+	})
+	t.Run("ColumnUpdate", func(t *testing.T) {
+		fixture := PhotoFixtures.Get("Photo04")
+		title := fixture.PhotoTitle
+		t.Cleanup(func() {
+			_ = UnscopedDb().Model(&Photo{}).Where("id = ?", fixture.ID).UpdateColumn("photo_title", title).Error
+		})
+
+		require.NoError(t, UnscopedDb().Model(&Photo{}).Where("id = ?", fixture.ID).Update("photo_title", "BeforeSave").Error)
+
+		found := Photo{}
+		require.NoError(t, UnscopedDb().Where("id = ?", fixture.ID).First(&found).Error)
+		assert.Equal(t, "BeforeSave", found.PhotoTitle)
+		assert.True(t, fixture.TakenAt.Equal(found.TakenAt), "taken_at changed to %s", found.TakenAt)
+		assert.True(t, fixture.TakenAtLocal.Equal(found.TakenAtLocal), "taken_at_local changed to %s", found.TakenAtLocal)
+	})
+	t.Run("StructUpdate", func(t *testing.T) {
+		fixture := PhotoFixtures.Get("Photo04")
+		title := fixture.PhotoTitle
+		t.Cleanup(func() {
+			_ = UnscopedDb().Model(&Photo{}).Where("id = ?", fixture.ID).UpdateColumn("photo_title", title).Error
+		})
+
+		require.NoError(t, UnscopedDb().Model(&Photo{}).Where("id = ?", fixture.ID).Updates(Photo{PhotoTitle: "BeforeSave"}).Error)
+
+		found := Photo{}
+		require.NoError(t, UnscopedDb().Where("id = ?", fixture.ID).First(&found).Error)
+		assert.Equal(t, "BeforeSave", found.PhotoTitle)
+		assert.True(t, fixture.TakenAt.Equal(found.TakenAt), "taken_at changed to %s", found.TakenAt)
+	})
+}
+
 func TestFindPhoto(t *testing.T) {
 	t.Run("Save", func(t *testing.T) {
 		photo := Photo{PhotoUID: "pt9atdre2lvl0yhx", PhotoName: "Holiday", OriginalName: "holidayOriginal2"}
@@ -938,6 +1141,26 @@ func TestFindPhoto(t *testing.T) {
 		photo := Photo{PhotoUID: "ps6sg6be2lvl0yh0"}
 		assert.NotNil(t, photo.Find())
 		assert.NotNil(t, FindPhoto(photo))
+	})
+	t.Run("DeletedLabel", func(t *testing.T) {
+		photo := NewPhoto(false)
+		require.NoError(t, photo.Save())
+		label := NewLabel("Deleted Preload "+rnd.GenerateUID('l'), 0)
+		require.NoError(t, label.Create())
+		require.NoError(t, NewPhotoLabel(photo.ID, label.ID, 10, SrcManual).Create())
+		t.Cleanup(func() {
+			UnscopedDb().Delete(&PhotoLabel{}, "photo_id = ?", photo.ID)
+			UnscopedDb().Delete(&Details{}, "photo_id = ?", photo.ID)
+			UnscopedDb().Delete(&photo)
+			UnscopedDb().Delete(label)
+		})
+		require.NoError(t, UnscopedDb().Model(label).UpdateColumn("deleted_at", Now()).Error)
+
+		found := FindPhoto(photo)
+		require.NotNil(t, found)
+		require.Len(t, found.Labels, 1)
+		assert.Nil(t, found.Labels[0].Label, "soft-deleted labels are not loaded")
+		assert.NotContains(t, found.LabelKeywords(), "preload")
 	})
 	t.Run("EmptyStruct", func(t *testing.T) {
 		photo := Photo{}
@@ -983,7 +1206,7 @@ func TestPhoto_UpdateLabels(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		labelNative := Label{LabelName: "Native", LabelSlug: "native"}
 		var deletedTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		labelWindow := Label{LabelName: "Window", LabelSlug: "window", DeletedAt: &deletedTime}
+		labelWindow := Label{LabelName: "Window", LabelSlug: "window", DeletedAt: DeletedAtTime(deletedTime)}
 
 		err := labelWindow.Save()
 		if err != nil {
@@ -1055,7 +1278,7 @@ func TestPhoto_SubjectNames(t *testing.T) {
 func TestPhoto_UpdateSubjectLabels(t *testing.T) {
 	labelEgg := Label{LabelName: "Egg", LabelSlug: "egg"}
 	var deletedTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	labelBird := Label{LabelName: "Bird", LabelSlug: "bird", DeletedAt: &deletedTime}
+	labelBird := Label{LabelName: "Bird", LabelSlug: "bird", DeletedAt: DeletedAtTime(deletedTime)}
 
 	if err := labelBird.Save(); err != nil {
 		t.Fatal(err)
@@ -1112,7 +1335,7 @@ func TestPhoto_UpdateSubjectLabels(t *testing.T) {
 func TestPhoto_UpdateKeywordLabels(t *testing.T) {
 	labelOtter := Label{LabelName: "Otter", LabelSlug: "otter"}
 	var deletedTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	labelSnake := Label{LabelName: "Snake", LabelSlug: "snake", DeletedAt: &deletedTime}
+	labelSnake := Label{LabelName: "Snake", LabelSlug: "snake", DeletedAt: DeletedAtTime(deletedTime)}
 
 	if err := labelSnake.Save(); err != nil {
 		t.Fatal(err)
@@ -1422,7 +1645,7 @@ func TestPhoto_SetPrimary(t *testing.T) {
 			tempConn.Close()
 		})
 
-		require.NoError(t, tempConn.Db().AutoMigrate(&File{}).Error)
+		require.NoError(t, tempConn.Db().AutoMigrate(&File{}))
 
 		m := Photo{
 			ID:           1001,
@@ -1659,7 +1882,7 @@ func TestPhoto_ArchiveRestore(t *testing.T) {
 	})
 	t.Run("AlreadyArchived", func(t *testing.T) {
 		var deletedTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		m := &Photo{ID: 10000, PhotoUID: "prjwufg1z97rcxff", PhotoTitle: "HappyLilly", DeletedAt: &deletedTime}
+		m := &Photo{ID: 10000, PhotoUID: "prjwufg1z97rcxff", PhotoTitle: "HappyLilly", DeletedAt: DeletedAtTime(deletedTime)}
 		assert.NotEmpty(t, m.DeletedAt)
 		err := m.Archive()
 		if err != nil {
@@ -1685,15 +1908,15 @@ func TestPhoto_IsArchived(t *testing.T) {
 	deletedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	t.Run("Archived", func(t *testing.T) {
-		assert.True(t, (&Photo{DeletedAt: &deletedAt}).IsArchived())
-		assert.True(t, (&Photo{DeletedAt: &deletedAt, PhotoQuality: 3}).IsArchived())
+		assert.True(t, (&Photo{DeletedAt: DeletedAtTime(deletedAt)}).IsArchived())
+		assert.True(t, (&Photo{DeletedAt: DeletedAtTime(deletedAt), PhotoQuality: 3}).IsArchived())
 	})
 	t.Run("NotArchived", func(t *testing.T) {
 		assert.False(t, (&Photo{}).IsArchived())
 		assert.False(t, (&Photo{PhotoQuality: 3}).IsArchived())
 	})
 	t.Run("Removed", func(t *testing.T) {
-		assert.False(t, (&Photo{DeletedAt: &deletedAt, PhotoQuality: -1}).IsArchived())
+		assert.False(t, (&Photo{DeletedAt: DeletedAtTime(deletedAt), PhotoQuality: -1}).IsArchived())
 		assert.False(t, (&Photo{PhotoQuality: -1}).IsArchived())
 	})
 	t.Run("Nil", func(t *testing.T) {
@@ -1781,7 +2004,7 @@ func TestPhoto_IsNewlyIndexed(t *testing.T) {
 		assert.False(t, photo.IsNewlyIndexed())
 	})
 	t.Run("HasDeletedAt", func(t *testing.T) {
-		photo := Photo{IndexedAt: nil, DeletedAt: TimeStamp()}
+		photo := Photo{IndexedAt: nil, DeletedAt: DeletedAtTime(*TimeStamp())}
 		assert.False(t, photo.IsNewlyIndexed())
 	})
 }

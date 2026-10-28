@@ -2,6 +2,7 @@ package clean
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -70,9 +71,43 @@ func replaceFoldASCII(s, needle, repl string) string {
 	return string(out)
 }
 
+// SearchBindable removes NUL bytes and invalid UTF-8 from a search value.
+func SearchBindable(s string) string {
+	if strings.IndexByte(s, 0) >= 0 {
+		s = strings.ReplaceAll(s, "\x00", "")
+	}
+
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "")
+	}
+
+	return s
+}
+
+// SearchFilter removes NUL bytes and invalid UTF-8 from a search filter value, and reports false if bytes were
+// removed and nothing usable is left, since such a filter can match nothing.
+func SearchFilter(s string) (string, bool) {
+	if b := SearchBindable(s); b != s {
+		return b, SearchUsable(b)
+	}
+
+	return s, true
+}
+
+// searchSyntax lists the characters that only form search syntax, such as wildcards and operators.
+const searchSyntax = "|&*%<>${}\\:\"'+!/"
+
+// SearchUsable reports whether a search value has a character other than whitespace, control characters,
+// and the characters that only form search syntax.
+func SearchUsable(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return !unicode.IsSpace(r) && !unicode.IsControl(r) && !strings.ContainsRune(searchSyntax, r)
+	})
+}
+
 // SearchString replaces search operator with default symbols.
 func SearchString(s string) string {
-	if s == "" || reject(s, LengthLimit) {
+	if s = SearchBindable(s); s == "" || reject(s, LengthLimit) {
 		return Empty
 	}
 
@@ -86,10 +121,10 @@ func SearchString(s string) string {
 }
 
 // SearchTerms bounds a search value to LengthLimit, the limit SearchString applies to a value
-// parsed from a query expression. Each term expands into its own condition, so this input sizes
-// the statement, and a value within the limit is returned unchanged.
+// parsed from a query expression, and removes NUL bytes and invalid UTF-8. Each term expands into
+// its own condition, so this input sizes the statement.
 func SearchTerms(s string) string {
-	if len(s) <= LengthLimit {
+	if s = SearchBindable(s); len(s) <= LengthLimit {
 		return s
 	}
 
@@ -110,7 +145,7 @@ func SearchTerms(s string) string {
 
 // SearchQuery replaces search operator with default symbols.
 func SearchQuery(s string) string {
-	if s == "" || reject(s, LengthLimit) {
+	if s = SearchBindable(s); s == "" || reject(s, LengthLimit) {
 		return Empty
 	}
 

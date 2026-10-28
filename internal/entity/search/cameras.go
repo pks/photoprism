@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/photoprism/photoprism/internal/form"
@@ -9,7 +10,9 @@ import (
 
 // Cameras searches cameras based on their name.
 func Cameras(frm form.SearchCameras) (results []Camera, err error) {
-	if err = frm.ParseQueryString(); err != nil {
+	if err = frm.ParseQueryString(); errors.Is(err, form.ErrNoMatch) {
+		return []Camera{}, nil
+	} else if err != nil {
 		return results, err
 	}
 
@@ -37,6 +40,8 @@ func Cameras(frm form.SearchCameras) (results []Camera, err error) {
 	if frm.ID != "" {
 		s = s.Where("cameras.id IN (?)", strings.Split(frm.ID, txt.Or))
 
+		results = make([]Camera, 0)
+
 		if result := s.Scan(&results); result.Error != nil {
 			return results, result.Error
 		}
@@ -46,8 +51,10 @@ func Cameras(frm form.SearchCameras) (results []Camera, err error) {
 
 	if frm.Query != "" {
 		likeString := SqlParam(frm.Query, "%", "%")
-		s = s.Where(likeCond("cameras.camera_name")+" OR "+likeCond("cameras.camera_make")+" OR "+likeCond("cameras.camera_model"), likeString, likeString, likeString)
+		s = s.Where(likeCond("cameras.camera_name", false)+" OR "+likeCond("cameras.camera_make", false)+" OR "+likeCond("cameras.camera_model", false), likeString, likeString, likeString)
 	}
+
+	results = make([]Camera, 0)
 
 	if result := s.Scan(&results); result.Error != nil {
 		return results, result.Error

@@ -1,14 +1,15 @@
 package entity
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
-	"github.com/jinzhu/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/ai/face"
 	"github.com/photoprism/photoprism/internal/config/customize"
@@ -99,7 +100,7 @@ func TestRegenerateIndexForPhotoIDs(t *testing.T) {
 	t.Run("UpdatesFileIndex", func(t *testing.T) {
 		// Find a photo whose primary file carries a search time index.
 		var f File
-		if err := UnscopedDb().Where("photo_id > 0 AND file_primary = 1 AND time_index IS NOT NULL").First(&f).Error; err != nil {
+		if err := UnscopedDb().Where("photo_id > 0 AND file_primary = TRUE AND time_index IS NOT NULL").First(&f).Error; err != nil {
 			t.Skip("no suitable file fixture")
 			return
 		}
@@ -151,6 +152,64 @@ func TestFirstFileByHash(t *testing.T) {
 	})
 }
 
+func TestFilesByName(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		files, err := FilesByName(RootOriginals, "")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+	})
+	t.Run("NotFound", func(t *testing.T) {
+		files, err := FilesByName(RootOriginals, "zz-name/missing.jpg")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+	})
+	t.Run("Found", func(t *testing.T) {
+		row := &File{PhotoID: 1000000, FileRoot: RootOriginals, FileName: "zz-name/found.xmp", FileHash: "zz-name"}
+		require.NoError(t, row.Save())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(row).Error })
+		require.NoError(t, row.Delete(false))
+
+		files, err := FilesByName(RootOriginals, "zz-name/found.xmp")
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		assert.Equal(t, row.ID, files[0].ID)
+
+		files, err = FilesByName(RootSidecar, "zz-name/found.xmp")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+	})
+}
+
+func TestFilesByHash(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		unhashed := &File{PhotoID: 1000000, FileRoot: RootOriginals, FileName: "zz-hash/unhashed.jpg"}
+		require.NoError(t, unhashed.Save())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(unhashed).Error })
+
+		files, err := FilesByHash("")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+	})
+	t.Run("NotFound", func(t *testing.T) {
+		files, err := FilesByHash("xxx")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+	})
+	t.Run("All", func(t *testing.T) {
+		hash := "2cad9168fa6acc5c5c2965ddf6ec465ca42fd818"
+		second := &File{PhotoID: 1000000, FileRoot: RootOriginals, FileName: "zz-hash/second.jpg", FileHash: hash}
+		require.NoError(t, second.Save())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(second).Error })
+		require.NoError(t, second.Delete(false))
+
+		files, err := FilesByHash(hash)
+		require.NoError(t, err)
+		require.Len(t, files, 2)
+		assert.Equal(t, uint(0xf4240), files[0].ID)
+		assert.Equal(t, second.ID, files[1].ID)
+	})
+}
+
 func TestFile_ShareFileName(t *testing.T) {
 	t.Run("WithPhotoTitle", func(t *testing.T) {
 		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: "Berlin / Morning Mood"}
@@ -171,6 +230,24 @@ func TestFile_ShareFileName(t *testing.T) {
 		assert.Contains(t, filename, "20190115-000000-Berlin-Morning-Mood")
 		assert.Equal(t, "20190115-000000-Berlin-Morning-Mood (2).jpg", filename)
 		assert.Contains(t, filename, fs.ExtJpeg)
+	})
+	t.Run("LongPhotoTitle", func(t *testing.T) {
+		// A title that transliterates to a long slug is shortened, so the name fits a file system.
+		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: strings.Repeat("東京タワー", 40)}
+		file := &File{Photo: photo, FileType: "jpg", FileUID: "foobar345678765", FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc"}
+
+		for _, seq := range []int{0, 2, 9999} {
+			filename := file.ShareBase(seq)
+			assert.LessOrEqual(t, len(filename), fs.NameMaxLen, filename)
+			assert.Greater(t, len(filename), fs.NameMaxLen-10, filename)
+			assert.True(t, strings.HasPrefix(filename, "20190115-000000-Dong"), filename)
+			assert.True(t, strings.HasSuffix(filename, ".jpg"), filename)
+			if seq > 0 {
+				assert.True(t, strings.HasSuffix(filename, fmt.Sprintf(" (%d).jpg", seq)), filename)
+			}
+			assert.NotContains(t, filename, "-.", filename)
+			assert.NotContains(t, filename, "- (", filename)
+		}
 	})
 	t.Run("EmptyPhotoTitle", func(t *testing.T) {
 		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: ""}
@@ -230,7 +307,7 @@ func TestFile_Changed(t *testing.T) {
 		assert.Equal(t, false, file.Changed(500, d))
 	})
 	t.Run("Deleted", func(t *testing.T) {
-		file := &File{Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: &deletedAt}
+		file := &File{Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: DeletedAtTime(deletedAt)}
 		d := time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC)
 		assert.Equal(t, false, file.Changed(500, d))
 	})
@@ -240,15 +317,15 @@ func TestFile_Missing(t *testing.T) {
 	var deletedAt = time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC)
 
 	t.Run("Deleted", func(t *testing.T) {
-		file := &File{FileMissing: false, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: &deletedAt}
+		file := &File{FileMissing: false, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: DeletedAtTime(deletedAt)}
 		assert.Equal(t, true, file.Missing())
 	})
 	t.Run("Missing", func(t *testing.T) {
-		file := &File{FileMissing: true, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: nil}
+		file := &File{FileMissing: true, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix()}
 		assert.Equal(t, true, file.Missing())
 	})
 	t.Run("NotMissing", func(t *testing.T) {
-		file := &File{FileMissing: false, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix(), DeletedAt: nil}
+		file := &File{FileMissing: false, Photo: nil, FileType: "jpg", FileSize: 500, ModTime: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC).Unix()}
 		assert.Equal(t, false, file.Missing())
 	})
 }
@@ -352,7 +429,7 @@ func TestFile_UpdateVideoInfos(t *testing.T) {
 
 		var files Files
 
-		if err := Db().Where("photo_id = ? AND file_video = 1", file.PhotoID).Find(&files).Error; err != nil {
+		if err := Db().Where("photo_id = ? AND file_video = TRUE", file.PhotoID).Find(&files).Error; err != nil {
 			t.Fatal(err)
 		}
 
@@ -603,11 +680,44 @@ func TestFile_DownloadName(t *testing.T) {
 		filename3 := file.DownloadName("xxx", 0)
 		assert.Contains(t, filename3, "20190115-000000-Berlin-Morning-Mood")
 	})
+	t.Run("ControlCharacters", func(t *testing.T) {
+		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: "Morning"}
+		file := &File{Photo: photo, FileType: "jpg", FileUID: "foobar345678765", FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc",
+			OriginalName: "orig\x00inal\u202Eabc.jpg", FileName: "2019/file\x1b\nname.jpg"}
+
+		assert.Equal(t, "file name.jpg", file.DownloadName(customize.DownloadNameFile, 0))
+		assert.Equal(t, "file name (2).jpg", file.DownloadName(customize.DownloadNameFile, 2))
+		assert.Equal(t, "originalabc.jpg", file.DownloadName(customize.DownloadNameOriginal, 0))
+	})
+	t.Run("NonLatin", func(t *testing.T) {
+		file := &File{FileType: "jpg", FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc", FileName: "2019/صورة 日本.jpg"}
+		assert.Equal(t, "صورة 日本.jpg", file.DownloadName(customize.DownloadNameFile, 0))
+	})
+	t.Run("Avc", func(t *testing.T) {
+		photo := &Photo{TakenAtLocal: time.Date(2019, 01, 15, 0, 0, 0, 0, time.UTC), PhotoTitle: "Morning"}
+		file := &File{Photo: photo, FileType: "avc", FileRoot: RootSidecar, FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc", FileName: "2019/clip.mov.avc"}
+		assert.Equal(t, "clip.mp4", file.DownloadName(customize.DownloadNameFile, 0))
+		assert.Equal(t, "clip.mp4", file.DownloadName(customize.DownloadNameOriginal, 0))
+		assert.Equal(t, "20190115-000000-Morning.mp4", file.DownloadName(customize.DownloadNameShare, 0))
+		file.OriginalName = "camera/Holiday.MOV.avc"
+		assert.Equal(t, "Holiday.mp4", file.DownloadName(customize.DownloadNameOriginal, 0))
+	})
+	t.Run("AvcOriginal", func(t *testing.T) {
+		file := &File{FileType: "avc", FileRoot: RootOriginals, FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc", FileName: "2019/clip.h264"}
+		assert.Equal(t, "clip.h264", file.DownloadName(customize.DownloadNameFile, 0))
+	})
+	t.Run("Mp4", func(t *testing.T) {
+		file := &File{FileType: "mp4", FileHash: "e98eb86480a72bd585d228a709f0622f90e86cbc", FileName: "2019/clip.gif.mp4"}
+		assert.Equal(t, "clip.gif.mp4", file.DownloadName(customize.DownloadNameFile, 0))
+	})
 }
 
 func TestFile_Undelete(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
-		file := &File{Photo: nil, FileType: "jpg", FileSize: 500}
+		file := &File{PhotoID: 1000000, FileUID: rnd.GenerateUID(FileUID), FileName: "undelete/" + rnd.Base36(8) + ".jpg", FileRoot: RootOriginals, FileType: "jpg", FileSize: 500}
+		require.NoError(t, file.Create())
+		t.Cleanup(func() { _ = UnscopedDb().Delete(file).Error })
+
 		assert.Equal(t, nil, file.Purge())
 		assert.Equal(t, true, file.FileMissing)
 		err := file.Undelete()
@@ -616,6 +726,16 @@ func TestFile_Undelete(t *testing.T) {
 			t.Fatal(err)
 		}
 		assert.Equal(t, false, file.FileMissing)
+
+		found := File{}
+		require.NoError(t, UnscopedDb().Where("id = ?", file.ID).First(&found).Error)
+		assert.False(t, found.FileMissing)
+		assert.False(t, found.DeletedAt.Valid)
+	})
+	t.Run("NoKey", func(t *testing.T) {
+		file := &File{FileType: "jpg", FileSize: 500, FileMissing: true}
+
+		assert.ErrorIs(t, file.Undelete(), gorm.ErrMissingWhereClause)
 	})
 	t.Run("FileNotMissing", func(t *testing.T) {
 		file := &File{Photo: nil, FileType: "jpg", FileSize: 500}
@@ -751,7 +871,7 @@ func TestFile_Rename(t *testing.T) {
 		assert.Equal(t, "2790/07/27900704_070228_D6D51B6C.jpg", m.FileName)
 		assert.Equal(t, RootOriginals, m.FileRoot)
 		assert.Equal(t, false, m.FileMissing)
-		assert.Nil(t, m.DeletedAt)
+		assert.False(t, m.DeletedAt.Valid)
 
 		p := m.RelatedPhoto()
 
@@ -765,7 +885,7 @@ func TestFile_Rename(t *testing.T) {
 		assert.Equal(t, "x/y/newName.jpg", m.FileName)
 		assert.Equal(t, "newRoot", m.FileRoot)
 		assert.Equal(t, false, m.FileMissing)
-		assert.Nil(t, m.DeletedAt)
+		assert.False(t, m.DeletedAt.Valid)
 		assert.Equal(t, "x/y", p.PhotoPath)
 		assert.Equal(t, "newBase", p.PhotoName)
 
@@ -776,7 +896,7 @@ func TestFile_Rename(t *testing.T) {
 		assert.Equal(t, "2790/07/27900704_070228_D6D51B6C.jpg", m.FileName)
 		assert.Equal(t, RootOriginals, m.FileRoot)
 		assert.Equal(t, false, m.FileMissing)
-		assert.Nil(t, m.DeletedAt)
+		assert.False(t, m.DeletedAt.Valid)
 		assert.Equal(t, "2790/07", p.PhotoPath)
 		assert.Equal(t, "27900704_070228_D6D51B6C", p.PhotoName)
 	})
@@ -1205,5 +1325,38 @@ func TestFile_KeepStackedWith(t *testing.T) {
 	})
 	t.Run("Nil", func(t *testing.T) {
 		assert.False(t, (*File)(nil).KeepStackedWith(Files{right}))
+	})
+}
+
+func TestShareName(t *testing.T) {
+	t.Run("Short", func(t *testing.T) {
+		assert.Equal(t, "20190115-000000-Berlin.jpg", ShareName("20190115-000000", "Berlin", 0, "jpg"))
+		assert.Equal(t, "20190115-000000-Berlin (3).jpg", ShareName("20190115-000000", "Berlin", 3, "jpg"))
+	})
+	t.Run("AtLimit", func(t *testing.T) {
+		title := strings.Repeat("a", fs.NameMaxLen-len("20190115-000000-.jpg"))
+		name := ShareName("20190115-000000", title, 0, "jpg")
+		assert.Len(t, name, fs.NameMaxLen)
+		assert.Contains(t, name, title)
+	})
+	t.Run("Shortened", func(t *testing.T) {
+		// The cut falls right after a dash, which is removed.
+		room := fs.NameMaxLen - len("20190115-000000-") - len(" (12).mp4")
+		title := strings.Repeat("A", room-1) + "-" + strings.Repeat("B", 100)
+		name := ShareName("20190115-000000", title, 12, "mp4")
+		assert.Len(t, name, fs.NameMaxLen-1)
+		assert.True(t, strings.HasSuffix(name, "A (12).mp4"), name)
+	})
+	t.Run("MultiByte", func(t *testing.T) {
+		// A cut never splits a character.
+		name := ShareName("20190115-000000", strings.Repeat("é", 200), 0, "jpg")
+		assert.LessOrEqual(t, len(name), fs.NameMaxLen)
+		assert.True(t, utf8.ValidString(name))
+	})
+	t.Run("LongFileType", func(t *testing.T) {
+		// A file type that leaves no room for a title is cut as well.
+		name := ShareName("20190115-000000", "Berlin", 3, strings.Repeat("x", fs.NameMaxLen))
+		assert.Len(t, name, fs.NameMaxLen)
+		assert.True(t, strings.HasPrefix(name, "20190115-000000- (3)."), name)
 	})
 }

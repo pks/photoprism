@@ -3,22 +3,32 @@ package search
 import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/form"
+	"github.com/photoprism/photoprism/pkg/clean"
 )
 
 // Accounts returns a list of accounts.
 func Accounts(frm form.SearchServices) (result entity.Services, err error) {
 	s := Db().Where(&entity.Service{})
 
+	var queryOk, statusOk bool
+
+	// A filter value whose removed NUL bytes and invalid UTF-8 leave nothing usable matches nothing.
+	if frm.Query, queryOk = clean.SearchFilter(frm.Query); !queryOk {
+		return entity.Services{}, nil
+	} else if frm.Status, statusOk = clean.SearchFilter(frm.Status); !statusOk {
+		return entity.Services{}, nil
+	}
+
 	if frm.Query != "" {
-		s = s.Where(likeCond("acc_name"), SqlParam(frm.Query, "%", "%"))
+		s = s.Where(likeCond("acc_name", false), SqlParam(frm.Query, "%", "%"))
 	}
 
 	if frm.Share {
-		s = s.Where("acc_share = 1")
+		s = s.Where("acc_share = TRUE")
 	}
 
 	if frm.Sync {
-		s = s.Where("acc_sync = 1")
+		s = s.Where("acc_sync = TRUE")
 	}
 
 	if frm.Status != "" {

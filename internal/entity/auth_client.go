@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/dustin/go-humanize/english"
 	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/list"
 	"github.com/photoprism/photoprism/pkg/log/status"
 	"github.com/photoprism/photoprism/pkg/rnd"
 	"github.com/photoprism/photoprism/pkg/time/unix"
@@ -26,39 +28,47 @@ const (
 	ClientUID = byte('c')
 )
 
+// clientChangeFields lists the settings SaveChanges writes, so that identifiers and activity data changed
+// meanwhile are kept. Updates with Select("*") would insert a missing row.
+var clientChangeFields = []string{"ClientName", "ClientRole", "ClientType", "AuthProvider", "AuthMethod", "AuthScope",
+	"AuthExpires", "AuthTokens", "AuthEnabled", "DataJSON", "UpdatedAt"}
+
+// ErrClientNotFound is returned when a client does not exist or has been deleted.
+var ErrClientNotFound = errors.New("client not found")
+
 // Clients is a convenience alias for slices of Client.
 type Clients []Client
 
 // Client represents an OAuth/OpenID client registered with PhotoPrism.
 type Client struct {
-	ClientUID    string          `gorm:"type:VARBINARY(42);primary_key;auto_increment:false;" json:"-" yaml:"ClientUID"`
-	NodeUUID     string          `gorm:"type:VARBINARY(64);index;default:'';" json:"NodeUUID,omitempty" yaml:"NodeUUID,omitempty"`
-	UserUID      string          `gorm:"type:VARBINARY(42);index;default:'';" json:"UserUID" yaml:"UserUID,omitempty"`
+	ClientUID    string          `gorm:"type:bytes;size:42;primaryKey;autoIncrement:false;" json:"-" yaml:"ClientUID"`
+	NodeUUID     string          `gorm:"type:bytes;size:64;index;default:'';" json:"NodeUUID,omitempty" yaml:"NodeUUID,omitempty"`
+	UserUID      string          `gorm:"type:bytes;size:42;index;default:'';" json:"UserUID" yaml:"UserUID,omitempty"`
 	UserName     string          `gorm:"size:200;index;" json:"UserName" yaml:"UserName,omitempty"`
 	user         *User           `gorm:"-" yaml:"-"`
 	AppName      string          `gorm:"size:64;" json:"AppName" yaml:"AppName,omitempty"`
 	AppVersion   string          `gorm:"size:64;" json:"AppVersion" yaml:"AppVersion,omitempty"`
 	ClientName   string          `gorm:"size:200;" json:"ClientName" yaml:"ClientName,omitempty"`
 	DisplayName  string          `gorm:"size:200;" json:"DisplayName" yaml:"DisplayName,omitempty"`
-	NameSrc      string          `gorm:"type:VARBINARY(8);default:'';" json:"NameSrc,omitempty" yaml:"NameSrc,omitempty"`
+	NameSrc      string          `gorm:"type:bytes;size:8;default:'';" json:"NameSrc,omitempty" yaml:"NameSrc,omitempty"`
 	ClientRole   string          `gorm:"size:64;default:'';" json:"ClientRole" yaml:"ClientRole,omitempty"`
-	ClientType   string          `gorm:"type:VARBINARY(16)" json:"ClientType" yaml:"ClientType,omitempty"`
-	ClientURL    string          `gorm:"type:VARBINARY(255);default:'';column:client_url;" json:"ClientURL" yaml:"ClientURL,omitempty"`
-	CallbackURL  string          `gorm:"type:VARBINARY(255);default:'';column:callback_url;" json:"CallbackURL" yaml:"CallbackURL,omitempty"`
-	AuthProvider string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
-	AuthMethod   string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
+	ClientType   string          `gorm:"type:bytes;size:16" json:"ClientType" yaml:"ClientType,omitempty"`
+	ClientURL    string          `gorm:"type:bytes;size:255;default:'';column:client_url;" json:"ClientURL" yaml:"ClientURL,omitempty"`
+	AuthProvider string          `gorm:"type:bytes;size:128;default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
+	AuthMethod   string          `gorm:"type:bytes;size:128;default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
 	AuthScope    string          `gorm:"size:1024;default:'';" json:"AuthScope" yaml:"AuthScope,omitempty"`
 	AuthExpires  int64           `json:"AuthExpires" yaml:"AuthExpires,omitempty"`
 	AuthTokens   int64           `json:"AuthTokens" yaml:"AuthTokens,omitempty"`
 	AuthEnabled  bool            `json:"AuthEnabled" yaml:"AuthEnabled,omitempty"`
-	RefreshToken string          `gorm:"type:VARBINARY(2048);column:refresh_token;default:'';" json:"-" yaml:"-"`
-	IdToken      string          `gorm:"type:VARBINARY(2048);column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
-	DataJSON     json.RawMessage `gorm:"type:VARBINARY(4096);" json:"-" yaml:"Data,omitempty"`
+	RefreshToken string          `gorm:"type:bytes;size:2048;column:refresh_token;default:'';" json:"-" yaml:"-"`
+	IdToken      string          `gorm:"type:bytes;size:2048;column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
+	DataJSON     json.RawMessage `gorm:"type:bytes;size:4096;" json:"-" yaml:"Data,omitempty"`
 	data         *ClientData     `gorm:"-" yaml:"-"`
+	secretHash   string          `gorm:"-" yaml:"-"`
 	LastActive   int64           `json:"LastActive" yaml:"LastActive,omitempty"`
 	CreatedAt    time.Time       `json:"CreatedAt" yaml:"-"`
 	UpdatedAt    time.Time       `json:"UpdatedAt" yaml:"-"`
-	DeletedAt    *time.Time      `sql:"index" json:"DeletedAt,omitempty" yaml:"-"`
+	DeletedAt    DeletedAt       `gorm:"index" json:"DeletedAt,omitzero" yaml:"-"`
 }
 
 // TableName returns the entity table name.
@@ -74,7 +84,6 @@ func NewClient() *Client {
 		ClientRole:   acl.RoleClient.String(),
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
-		CallbackURL:  "",
 		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "",
@@ -86,14 +95,16 @@ func NewClient() *Client {
 }
 
 // BeforeCreate creates a random UID if needed before inserting a new row to the database.
-func (m *Client) BeforeCreate(scope *gorm.Scope) error {
+func (m *Client) BeforeCreate(tx *gorm.DB) error {
 	if rnd.IsUID(m.ClientUID, ClientUID) {
 		return nil
 	}
 
 	m.ClientUID = rnd.GenerateUID(ClientUID)
 
-	return scope.SetColumn("ClientUID", m.ClientUID)
+	tx.Statement.SetColumn("ClientUID", m.ClientUID)
+
+	return nil
 }
 
 // FindClientByUID returns the matching client or nil if it was not found. The lookup reads
@@ -174,6 +185,42 @@ func FindClientsByNodeUUID(nodeUUID string) []Client {
 	}
 
 	return list
+}
+
+// clientScope returns the sanitized scope, reading an empty scope as "*", which SetFormValues stores for it.
+func clientScope(s string) string {
+	if s = clean.Scope(s); s == "" {
+		return list.Any
+	}
+
+	return s
+}
+
+// CountClientSessions returns the number of sessions per client UID for the specified client UIDs, leaving out
+// those whose expiration time has passed.
+func CountClientSessions(clientUIDs []string) (map[string]int, error) {
+	result := make(map[string]int, len(clientUIDs))
+
+	if len(clientUIDs) == 0 {
+		return result, nil
+	}
+
+	rows := []struct {
+		ClientUID string
+		Count     int
+	}{}
+
+	if err := Db().Model(&Session{}).Select("client_uid, COUNT(*) AS count").
+		Where("client_uid IN (?)", clientUIDs).Where("(sess_expires <= 0 OR sess_expires >= ?)", unix.Now()).
+		Group("client_uid").Scan(&rows).Error; err != nil {
+		return result, err
+	}
+
+	for _, row := range rows {
+		result[row.ClientUID] = row.Count
+	}
+
+	return result, nil
 }
 
 // GetUID returns the client uid string.
@@ -372,53 +419,121 @@ func (m *Client) AuthInfo() string {
 
 // Create new entity in the database.
 func (m *Client) Create() error {
-	return Db().Create(m).Error
+	err := Db().Create(m).Error
+	flushClientCache(m.ClientUID)
+
+	return err
 }
 
 // Save updates the record in the database or inserts a new record if it does not already exist.
 func (m *Client) Save() error {
-	if err := Db().Save(m).Error; err != nil {
+	err := Db().Save(m).Error
+	flushClientCache(m.ClientUID)
+
+	if err != nil {
 		return err
 	}
 
-	// Delete related sessions if authentication is disabled.
+	return m.endDisabledSessions()
+}
+
+// SaveChanges writes the specified settings, or all of clientChangeFields if none are specified, of a client that
+// exists and is not deleted, and returns ErrClientNotFound otherwise, as Save would insert a missing row. It ends
+// the sessions of a disabled client if it writes AuthEnabled.
+func (m *Client) SaveChanges(fields ...string) error {
+	if m == nil || !m.HasUID() {
+		return ErrClientNotFound
+	}
+
+	selected := clientChangeFields
+
+	if len(fields) > 0 {
+		selected = make([]string, 0, len(fields)+1)
+
+		for _, field := range fields {
+			if !slices.Contains(clientChangeFields, field) {
+				return fmt.Errorf("unsupported client field %s", clean.Log(field))
+			} else if field != "UpdatedAt" && !slices.Contains(selected, field) {
+				selected = append(selected, field)
+			}
+		}
+
+		selected = append(selected, "UpdatedAt")
+	}
+
+	result := Db().Model(m).Select(selected).Updates(m)
+	flushClientCache(m.ClientUID)
+
+	if result.Error != nil {
+		return result.Error
+	} else if result.RowsAffected == 0 {
+		// MariaDB reports no affected rows for an update that changes nothing.
+		if stored := m.Stored(); stored == nil || stored.Deleted() {
+			return ErrClientNotFound
+		}
+	}
+
+	if !slices.Contains(selected, "AuthEnabled") {
+		return nil
+	}
+
+	return m.endDisabledSessions()
+}
+
+// endDisabledSessions deletes the sessions and app access tokens of a client whose authentication is disabled.
+func (m *Client) endDisabledSessions() error {
 	if m.AuthEnabled {
 		return nil
 	} else if _, err := m.DeleteSessions(); err != nil {
 		return err
+	} else if m.IsApp() {
+		SuspendClientGrants(m.ClientUID)
 	}
 
 	return nil
 }
 
-// Delete marks the entity as deleted. The record is retained, so the identifiers it holds stay
-// reserved and remain unavailable to any other record. Use Purge to release them.
+// RevokeChangedAccess revokes the sessions of a client that is not an app client if its role or scope
+// differs from the specified previous values, and returns the number of revoked sessions. App clients are
+// skipped, since their next access token takes the new scope.
+func (m *Client) RevokeChangedAccess(prevRole, prevScope string) int {
+	if m == nil || m.IsApp() {
+		return 0
+	} else if m.ClientRole == prevRole && m.Scope() == clientScope(prevScope) {
+		return 0
+	}
+
+	return m.RevokeSessions(nil)
+}
+
+// Delete removes the secret, sessions, and grants of the client, and then marks it as deleted. The record
+// is retained, so the identifiers it holds stay reserved and remain unavailable to any other record. Use
+// Purge to release them.
 func (m *Client) Delete() (err error) {
 	if m.ClientUID == "" {
 		return fmt.Errorf("client uid is empty")
+	}
+
+	if err = m.DeleteSecret(); err != nil {
+		return err
 	}
 
 	if _, err = m.DeleteSessions(); err != nil {
 		return err
 	}
 
-	if err = Db().Delete(m).Error; err != nil {
-		return err
-	}
+	// Removing an app client ends the grants of the users who connected it.
+	DeleteClientGrants(m.ClientUID)
 
-	// Carry the mark onto the in-memory record, which the driver does not do, so a caller
-	// that keeps using it sees the same state as one that reads the row again.
-	if m.DeletedAt == nil {
-		deletedAt := UTC()
-		m.DeletedAt = &deletedAt
-	}
+	err = Db().Delete(m).Error
+	flushClientCache(m.ClientUID)
 
-	return nil
+	return err
 }
 
-// Restore removes the deletion mark, so the client can be used again. A deletion releases the
-// client name, so this refuses when a current record has taken an identifier since, rather than
-// leaving two live holders of it.
+// Restore removes the deletion mark, so the client can be used again once a new secret is set. A
+// deletion releases the client name, so this refuses when a current record has taken an identifier
+// since, rather than leaving two live holders of it.
 func (m *Client) Restore() error {
 	if m == nil {
 		return fmt.Errorf("client is nil")
@@ -430,11 +545,21 @@ func (m *Client) Restore() error {
 		return fmt.Errorf("%s is already in use by client %s", conflict, m.conflictingClient(conflict))
 	}
 
-	if err := UnscopedDb().Model(m).Update("DeletedAt", nil).Error; err != nil {
+	// A secret stored before the deletion is not carried over.
+	if stored := m.Stored(); stored != nil && stored.Deleted() {
+		if err := m.DeleteSecret(); err != nil {
+			return err
+		}
+	}
+
+	err := UnscopedDb().Model(m).Update("DeletedAt", nil).Error
+	flushClientCache(m.ClientUID)
+
+	if err != nil {
 		return err
 	}
 
-	m.DeletedAt = nil
+	m.DeletedAt = DeletedAt{}
 
 	return nil
 }
@@ -511,18 +636,37 @@ func (m *Client) Purge() (err error) {
 		return fmt.Errorf("client uid is empty")
 	}
 
+	// The client UID becomes available again, so its stored secret does not outlive it.
+	if err = m.DeleteSecret(); err != nil {
+		return err
+	}
+
 	if _, err = m.DeleteSessions(); err != nil {
 		return err
 	}
 
-	// The client UID becomes available again, so its stored secret does not outlive it.
-	if pw := FindPassword(m.ClientUID); pw != nil {
-		if err = pw.Delete(); err != nil {
-			return err
-		}
+	DeleteClientGrants(m.ClientUID)
+
+	err = UnscopedDb().Delete(m).Error
+	flushClientCache(m.ClientUID)
+
+	return err
+}
+
+// DeleteSecret removes the stored client secret, if any.
+func (m *Client) DeleteSecret() error {
+	if !m.HasUID() {
+		return fmt.Errorf("invalid client uid")
 	}
 
-	return UnscopedDb().Delete(m).Error
+	if pw := FindPassword(m.ClientUID); pw != nil {
+		err := pw.Delete()
+		flushClientCache(m.ClientUID)
+
+		return err
+	}
+
+	return nil
 }
 
 // DeleteSessions deletes all sessions that belong to this client.
@@ -538,16 +682,50 @@ func (m *Client) DeleteSessions() (deleted int, err error) {
 	return deleted, nil
 }
 
+// RevokeSessions deletes the sessions of this client, except for the ones specified to omit.
+func (m *Client) RevokeSessions(omit []string) (deleted int) {
+	if m == nil || m.ClientUID == "" {
+		return 0
+	}
+
+	stmt := Db().Where("client_uid = ?", m.ClientUID)
+
+	if len(omit) > 0 {
+		stmt = stmt.Where("id NOT IN (?)", omit)
+	}
+
+	found := Sessions{}
+
+	if err := stmt.Find(&found).Error; err != nil {
+		event.AuditErr([]string{"client %s", "revoke sessions", status.Error(err)}, m.String())
+		return 0
+	}
+
+	for _, sess := range found {
+		if err := sess.Delete(); err != nil {
+			event.AuditWarn([]string{"client %s", "revoke session %s", status.Error(err)}, m.String(), clean.Log(sess.RefID))
+		} else {
+			deleted++
+		}
+	}
+
+	if deleted > 0 {
+		event.AuditInfo([]string{"client %s", "revoke %s", status.Deleted}, m.String(), english.Plural(deleted, "session", "sessions"))
+	}
+
+	return deleted
+}
+
 // Deleted checks if the client has been deleted. A missing client reads as deleted,
 // so a failed lookup and a retired record reach the same decision.
 func (m *Client) Deleted() bool {
 	if m == nil {
 		return true
-	} else if m.DeletedAt == nil {
+	} else if !m.DeletedAt.Valid {
 		return false
 	}
 
-	return !m.DeletedAt.IsZero()
+	return !m.DeletedAt.Time.IsZero()
 }
 
 // Disabled checks if the client has been deleted or its authentication is turned off.
@@ -561,7 +739,10 @@ func (m *Client) Disabled() bool {
 
 // Updates multiple properties in the database.
 func (m *Client) Updates(values any) error {
-	return UnscopedDb().Model(m).Updates(values).Error
+	err := UnscopedDb().Model(m).Updates(values).Error
+	flushClientCache(m.ClientUID)
+
+	return err
 }
 
 // NewSecret sets a random client secret and returns it if successful.
@@ -588,8 +769,10 @@ func (m *Client) SetSecret(secret string) (err error) {
 	}
 
 	pw := NewPassword(m.ClientUID, secret, false)
+	err = pw.Save()
+	flushClientCache(m.ClientUID)
 
-	return pw.Save()
+	return err
 }
 
 // VerifySecret checks if the given client secret is correct.
@@ -626,7 +809,29 @@ func (m *Client) InvalidSecret(s string) bool {
 		return true
 	}
 
+	m.secretHash = pw.Hash
+
 	return false
+}
+
+// AuthChanged reports whether the stored client differs from the settings this copy was
+// authenticated with: it is missing, deleted, or disabled, its role or scope differs, or its secret
+// hash differs from the one InvalidSecret matched. Secrets are not compared again.
+func (m *Client) AuthChanged() bool {
+	stored := m.Stored()
+
+	switch {
+	case stored == nil || stored.Disabled():
+		return true
+	case stored.AclRole() != m.AclRole() || clientScope(stored.AuthScope) != clientScope(m.AuthScope):
+		return true
+	case m.secretHash == "":
+		return true
+	}
+
+	pw := FindPassword(m.ClientUID)
+
+	return pw == nil || pw.Hash != m.secretHash
 }
 
 // Provider returns the client authentication provider.
@@ -669,6 +874,7 @@ func (m *Client) SetScope(s string) *Client {
 }
 
 // UpdateLastActive sets the time of last activity to now and optionally also updates the auth_clients table.
+// It does not flush the client cache, since no cached read depends on LastActive.
 func (m *Client) UpdateLastActive(save bool) *Client {
 	if m == nil {
 		return &Client{}
@@ -777,9 +983,13 @@ func (m *Client) SetFormValues(frm form.Client) *Client {
 		m.ClientUID = id
 	}
 
-	// Set values from form.
+	// Set values from form; an empty role keeps the current one.
 	m.SetName(frm.Name())
-	m.SetRole(frm.Role())
+
+	if role := frm.Role(); role != "" {
+		m.SetRole(role)
+	}
+
 	m.SetProvider(frm.Provider())
 	m.SetMethod(frm.Method())
 	m.SetScope(frm.Scope())
@@ -812,7 +1022,37 @@ func (m *Client) SetFormValues(frm form.Client) *Client {
 		m.AuthTokens = -1
 	}
 
+	// Set the redirect URIs of app clients, which authenticate without a client secret.
+	if frm.RedirectURIs != nil {
+		data := m.GetData()
+		data.RedirectURIs = frm.RedirectURIs
+		m.SetData(data)
+	}
+
+	if m.IsApp() {
+		m.ClientType = authn.ClientPublic
+		m.ClientRole = acl.RoleClient.String()
+	}
+
 	return m
+}
+
+// IsApp reports whether this is an app client that users connect with the authorization code flow.
+func (m *Client) IsApp() bool {
+	if m == nil {
+		return false
+	}
+
+	return m.Method() == authn.MethodPKCE
+}
+
+// RedirectURIs returns the registered redirect URIs of the client.
+func (m *Client) RedirectURIs() []string {
+	if m == nil {
+		return nil
+	}
+
+	return m.GetData().RedirectURIs
 }
 
 // Validate checks the client application properties before saving them.
@@ -840,6 +1080,16 @@ func (m *Client) Validate() (err error) {
 	// Empty authorization scope?
 	if m.AuthScope == "" {
 		return errors.New("authorization scope must not be empty")
+	}
+
+	// App clients need at least one redirect URI.
+	if m.IsApp() && len(m.RedirectURIs()) == 0 {
+		return errors.New("app clients require at least one redirect URI")
+	}
+
+	// App client data, which holds the redirect URIs, exceeds the column size?
+	if m.IsApp() && len(m.DataJSON) > ClientDataMaxBytes {
+		return errors.New("client data is too large")
 	}
 
 	return nil

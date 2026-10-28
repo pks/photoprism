@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jinzhu/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/pkg/rnd"
@@ -59,6 +59,8 @@ func TestUsersResetCommand(t *testing.T) {
 		require.NotNil(t, entity.FindPassword(aliceUID))
 		_, clientSecrets := countResetTestPasswords(t, c.Db())
 
+		seedAppGrant(t)
+
 		dbDrv := os.Getenv("PHOTOPRISM_TEST_DRIVER")
 		dbDSN := os.Getenv("PHOTOPRISM_TEST_DSN")
 		// Run command with test context.
@@ -91,6 +93,10 @@ func TestUsersResetCommand(t *testing.T) {
 			return
 		}
 		assert.Equal(t, int64(0), count)
+
+		grants, codes := countAppGrants(t, c.Db())
+		assert.Zero(t, grants)
+		assert.Zero(t, codes)
 
 		// The client applications registered to users are deleted with the accounts.
 		remaining, otherClients := int64(1), int64(0)
@@ -210,9 +216,10 @@ func TestDeleteUserClients(t *testing.T) {
 		}
 		require.NoError(t, tx.Where("client_uid = ?", aliceClientUID).Delete(&entity.Client{}).Error)
 
-		countPasswords := func(uid string) (n int) {
+		countPasswords := func(uid string) int {
+			var n int64
 			require.NoError(t, tx.Model(&entity.Password{}).Where("uid = ?", uid).Count(&n).Error)
-			return n
+			return int(n)
 		}
 
 		require.Equal(t, 1, countPasswords(aliceClientUID))

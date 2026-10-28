@@ -13,6 +13,7 @@ import (
 	"github.com/photoprism/photoprism/internal/config/ttl"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
+	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/txt"
@@ -80,8 +81,17 @@ func (c *Config) Public() bool {
 	return c.AuthMode() == AuthModePublic
 }
 
-// AdminUser returns the admin auth name.
+// AdminUser returns the admin auth name, or "admin" if none is configured or the configured name
+// contains characters other than ASCII.
 func (c *Config) AdminUser() string {
+	if !authn.IsASCIIUsername(c.options.AdminUser) {
+		if _, warned := c.warnedOnce.LoadOrStore("admin-user: "+c.options.AdminUser, true); !warned {
+			event.SystemWarn([]string{"config", "admin user", "%s, value ignored"}, authn.ErrNotASCII.Error())
+		}
+
+		return "admin"
+	}
+
 	c.options.AdminUser = clean.Username(c.options.AdminUser)
 
 	if c.options.AdminUser == "" {
@@ -89,6 +99,16 @@ func (c *Config) AdminUser() string {
 	}
 
 	return c.options.AdminUser
+}
+
+// AdminInitName returns the name InitAccount gives the initial admin account, or an empty string if the
+// configured name was refused, so that an existing account keeps its name.
+func (c *Config) AdminInitName() string {
+	if name := c.AdminUser(); authn.IsASCIIUsername(c.options.AdminUser) {
+		return name
+	}
+
+	return ""
 }
 
 // AdminPassword returns the initial admin password.
@@ -287,10 +307,10 @@ func (c *Config) DownloadTokenMaxAge() time.Duration {
 	return time.Duration(maxAge) * time.Second
 }
 
-// PreviewToken returns the thumbnail and video streaming API token, derived from the instance signing
-// key unless a static one is configured.
+// PreviewToken returns the instance-wide thumbnail and video streaming API token, derived from the
+// instance signing key unless a static one is configured. It is accepted but not delivered to sessions.
 // It is not derived from the storage serial, which is world-readable by design so that it survives a
-// UID/GID change, and is replaced by signed preview tokens once those land.
+// UID/GID change.
 func (c *Config) PreviewToken() string {
 	if c.Public() {
 		return entity.TokenPublic

@@ -163,16 +163,22 @@ var Flags = CliFlags{
 			Usage:   "disables single sign-on via OpenID Connect, even if an identity provider has been configured",
 			EnvVars: EnvVars("DISABLE_OIDC"),
 		}}, {
+		Flag: &cli.StringFlag{
+			Name:    "oauth-apps",
+			Usage:   "`POLICY` for connecting apps via OAuth sign-in and consent (registered, none, a comma-separated list of HTTPS origins whose client metadata documents are trusted, or any to fetch them from every public host)",
+			Value:   OAuthAppsRegistered,
+			EnvVars: EnvVars("OAUTH_APPS"),
+		}}, {
 		Flag: &cli.Int64Flag{
 			Name:    "session-maxage",
 			Value:   DefaultSessionMaxAge,
-			Usage:   "session expiration time in `SECONDS`, doubled for accounts with 2FA (-1 to disable)",
+			Usage:   "session expiration time in `SECONDS`, doubled for accounts with 2FA, not used for OIDC (-1 to disable)",
 			EnvVars: EnvVars("SESSION_MAXAGE"),
 		}}, {
 		Flag: &cli.Int64Flag{
 			Name:    "session-timeout",
 			Value:   DefaultSessionTimeout,
-			Usage:   "session idle time in `SECONDS`, doubled for accounts with 2FA (-1 to disable)",
+			Usage:   "idle time in `SECONDS` for sessions without expiration, doubled for accounts with 2FA, not used for OIDC (-1 to disable)",
 			EnvVars: EnvVars("SESSION_TIMEOUT"),
 		}}, {
 		Flag: &cli.Int64Flag{
@@ -1035,7 +1041,7 @@ var Flags = CliFlags{
 		Flag: &cli.StringFlag{
 			Name:    "database-driver",
 			Aliases: []string{"db"},
-			Usage:   "database `DRIVER` (sqlite, mysql)",
+			Usage:   "database `DRIVER` (sqlite, mysql, postgres)",
 			Value:   "sqlite",
 			EnvVars: EnvVars("DATABASE_DRIVER"),
 		}}, {
@@ -1044,7 +1050,7 @@ var Flags = CliFlags{
 			Aliases: []string{"dsn"},
 			Usage:   "database connection `DSN` (sqlite file, optional for mysql)",
 			EnvVars: EnvVars("DATABASE_DSN"),
-		}}, {
+		}, Secret: true}, {
 		Flag: &cli.StringFlag{
 			Name:    "database-name",
 			Aliases: []string{"db-name"},
@@ -1107,13 +1113,13 @@ var Flags = CliFlags{
 			Usage:   "auto-provisioning `DSN`",
 			EnvVars: EnvVars("DATABASE_PROVISION_DSN"),
 			Hidden:  true,
-		}}, {
+		}, Secret: true}, {
 		Flag: &cli.StringFlag{
 			Name:    "database-provision-proxy-dsn",
 			Usage:   "ProxySQL admin `DSN` (port 6032 by default) for keeping user accounts in sync",
 			EnvVars: EnvVars("DATABASE_PROVISION_PROXY_DSN"),
 			Hidden:  true,
-		}}, {
+		}, Secret: true}, {
 		Flag: &cli.StringFlag{
 			Name:    "ffmpeg-bin",
 			Usage:   "FFmpeg `COMMAND` for video transcoding and thumbnail extraction",

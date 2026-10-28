@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/photoprism/photoprism/internal/event"
@@ -150,6 +151,21 @@ func TestNewConfig(t *testing.T) {
 	assert.False(t, c.ReadOnly())
 	assert.Equal(t, Develop, c.Develop())
 	assert.False(t, c.Experimental())
+}
+
+func TestConfig_CliApp(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		ctx := CliTestContext()
+		c := &Config{cliCtx: ctx}
+		assert.Same(t, ctx.App, c.CliApp())
+	})
+	t.Run("NoContext", func(t *testing.T) {
+		assert.Nil(t, (&Config{}).CliApp())
+	})
+	t.Run("NilConfig", func(t *testing.T) {
+		var c *Config
+		assert.Nil(t, c.CliApp())
+	})
 }
 
 func TestConfig_Prod(t *testing.T) {
@@ -324,6 +340,44 @@ func TestConfig_AdminUser(t *testing.T) {
 	assert.Equal(t, "foo", c.AdminUser())
 	c.options.AdminUser = "  Admin"
 	assert.Equal(t, "admin", c.AdminUser())
+
+	t.Run("NotASCII", func(t *testing.T) {
+		hook := captureVisionSystemLog(t)
+		c.options.AdminUser = "Adminé"
+
+		assert.Equal(t, "admin", c.AdminUser())
+		require.NotNil(t, hook.LastEntry())
+		assert.Equal(t, logrus.WarnLevel, hook.LastEntry().Level)
+		assert.Equal(t, "config: admin user › username may only contain ASCII characters, value ignored", hook.LastEntry().Message)
+
+		hook.Reset()
+		assert.Equal(t, "admin", c.AdminUser())
+		assert.Nil(t, hook.LastEntry())
+
+		c.options.AdminUser = "\u212Aate"
+		assert.Equal(t, "admin", c.AdminUser())
+		require.NotNil(t, hook.LastEntry())
+	})
+}
+
+func TestConfig_AdminInitName(t *testing.T) {
+	c := NewConfig(CliTestContext())
+
+	t.Run("Configured", func(t *testing.T) {
+		c.options.AdminUser = " Jane "
+		assert.Equal(t, "jane", c.AdminInitName())
+	})
+	t.Run("Unset", func(t *testing.T) {
+		c.options.AdminUser = ""
+		assert.Equal(t, "admin", c.AdminInitName())
+	})
+	t.Run("NotASCII", func(t *testing.T) {
+		captureVisionSystemLog(t)
+		c.options.AdminUser = "Jürgen"
+		assert.Equal(t, "", c.AdminInitName())
+		assert.Equal(t, "admin", c.AdminUser())
+		assert.Equal(t, "", c.AdminInitName())
+	})
 }
 
 func TestConfig_SamplesPath(t *testing.T) {
@@ -735,6 +789,132 @@ func TestConfig_SaveOptionsPatchTypesValues(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidOptionValue)
 		assert.False(t, wrote)
 		assert.NoFileExists(t, c.OptionsYaml(), "a rejected patch must not write the file")
+	})
+}
+
+func TestConfig_saveOptionsPatch(t *testing.T) {
+	newTestOptions := func(t *testing.T) *Config {
+		t.Helper()
+
+		c := NewConfig(CliTestContext())
+		c.options.ConfigPath = t.TempDir()
+		c.options.OptionsYaml = filepath.Join(c.options.ConfigPath, "options.yml")
+
+		b, err := yaml.Marshal(Values{"FaceModel": "facenet", "SiteUrl": "https://photos.example.com/"})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(c.OptionsYaml(), b, fs.ModeFile))
+
+		return c
+	}
+
+	readOptions := func(t *testing.T, c *Config) map[string]any {
+		t.Helper()
+		content, err := os.ReadFile(c.OptionsYaml())
+		require.NoError(t, err)
+
+		var merged map[string]any
+		require.NoError(t, yaml.Unmarshal(content, &merged))
+
+		return merged
+	}
+
+	t.Run("PatchAndRemove", func(t *testing.T) {
+		c := newTestOptions(t)
+		wrote, removed, err := c.saveOptionsPatch(Values{"SiteTitle": "Example"}, "FaceModel", "DatabaseDSN")
+		require.NoError(t, err)
+		assert.True(t, wrote)
+		assert.Equal(t, []string{"FaceModel"}, removed)
+
+		merged := readOptions(t, c)
+		assert.NotContains(t, merged, "FaceModel")
+		assert.Equal(t, "Example", merged["SiteTitle"])
+		assert.Equal(t, "Example", c.options.SiteTitle)
+	})
+	t.Run("RemoveOnly", func(t *testing.T) {
+		c := newTestOptions(t)
+		wrote, removed, err := c.saveOptionsPatch(nil, "FaceModel")
+		require.NoError(t, err)
+		assert.True(t, wrote)
+		assert.Equal(t, []string{"FaceModel"}, removed)
+		assert.NotContains(t, readOptions(t, c), "FaceModel")
+	})
+	t.Run("Unchanged", func(t *testing.T) {
+		c := newTestOptions(t)
+		wrote, removed, err := c.saveOptionsPatch(Values{"SiteUrl": "https://photos.example.com/"}, "DatabaseDSN")
+		require.NoError(t, err)
+		assert.False(t, wrote)
+		assert.Empty(t, removed)
+		wrote, removed, err = c.saveOptionsPatch(nil)
+		require.NoError(t, err)
+		assert.False(t, wrote)
+		assert.Empty(t, removed)
+	})
+}
+
+func TestConfig_Starting(t *testing.T) {
+	ctx := CliTestContext()
+	ctx.Command = &cli.Command{Name: "start"}
+	assert.True(t, NewConfig(ctx).Starting())
+
+	c := NewConfig(CliTestContext())
+	assert.False(t, c.Starting())
+	c.SetStarting(true)
+	assert.True(t, c.Starting())
+	c.SetStarting(false)
+	assert.False(t, c.Starting())
+
+	var nilConfig *Config
+	nilConfig.SetStarting(true)
+	assert.False(t, nilConfig.Starting())
+}
+
+func TestConfig_StartReport(t *testing.T) {
+	// startReport runs a start command whose -c/--config flag shares its names with the global config path.
+	startReport := func(t *testing.T, args ...string) (report bool) {
+		t.Helper()
+
+		app := cli.NewApp()
+		app.Flags = []cli.Flag{&cli.StringFlag{Name: "config-path", Aliases: []string{"config", "c"}}}
+		action := func(ctx *cli.Context) error {
+			report = NewConfig(ctx).StartReport()
+			return nil
+		}
+		app.Commands = []*cli.Command{
+			{Name: "start", Aliases: []string{"up"}, Flags: []cli.Flag{&cli.BoolFlag{Name: "config", Aliases: []string{"c"}}}, Action: action},
+			{Name: "index", Action: action},
+		}
+
+		require.NoError(t, app.Run(append([]string{"photoprism"}, args...)))
+
+		return report
+	}
+
+	configPath := t.TempDir()
+
+	t.Run("Report", func(t *testing.T) {
+		assert.True(t, startReport(t, "start", "--config"))
+		assert.True(t, startReport(t, "up", "-c"))
+		assert.True(t, startReport(t, "--config-path", configPath, "start", "-c"))
+	})
+	t.Run("Server", func(t *testing.T) {
+		assert.False(t, startReport(t, "start"))
+		assert.False(t, startReport(t, "--config", configPath, "start"))
+		assert.False(t, startReport(t, "-c", configPath, "up"))
+	})
+	t.Run("OtherCommand", func(t *testing.T) {
+		assert.False(t, startReport(t, "-c", configPath, "index"))
+	})
+	t.Run("Setter", func(t *testing.T) {
+		c := NewConfig(CliTestContext())
+		assert.False(t, c.StartReport())
+		c.SetStartReport(true)
+		assert.True(t, c.StartReport())
+		c.SetStartReport(false)
+		assert.False(t, c.StartReport())
+
+		var nilConfig *Config
+		nilConfig.SetStartReport(true)
+		assert.False(t, nilConfig.StartReport())
 	})
 }
 

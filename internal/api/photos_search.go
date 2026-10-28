@@ -32,19 +32,9 @@ func searchPhotosForm(c *gin.Context) (frm form.SearchPhotos, s *entity.Session,
 		return frm, s, err
 	}
 
-	settings := get.Config().Settings()
-
-	// Ignore private flag if feature is disabled.
-	if !settings.Features.Private {
-		frm.Public = false
-	}
-
-	// Ignore private flag if feature is disabled.
-	if frm.Scope == "" &&
-		settings.Features.Review &&
-		s.Denies(acl.ResourcePhotos, acl.ActionManage) {
-		frm.Quality = 3
-	}
+	// Apply the feature settings.
+	features := get.Config().Settings().Features
+	search.ApplyPhotoFeatures(&frm, s, features.Private, features.Review)
 
 	return frm, s, nil
 }
@@ -140,7 +130,7 @@ func SearchPhotosView(router *gin.RouterGroup) {
 
 		conf := get.Config()
 
-		result, count, err := search.UserPhotosViewerResults(f, s, conf.ContentUri(), conf.ApiUri(), s.PreviewToken, SessionDownloadToken(s))
+		result, count, err := search.UserPhotosViewerResults(f, s, SessionContentUri(s), conf.ApiUri(), SessionPreviewToken(s), SessionDownloadToken(s))
 
 		if err != nil {
 			event.AuditWarn([]string{ClientIP(c), "session %s", string(acl.ResourcePhotos), "view", status.Error(err)}, s.RefID)

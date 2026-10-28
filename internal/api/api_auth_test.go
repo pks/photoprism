@@ -571,6 +571,28 @@ func TestAuthAnyPortalJWT_MissingScope(t *testing.T) {
 	assert.True(t, s.Abort(c))
 }
 
+func TestAuthAnyPortalJWT_ClientsScope(t *testing.T) {
+	fx := newPortalJWTFixture(t, "clients-scope")
+	spec := fx.defaultClaimsSpec()
+	spec.Scope = []string{"cluster", "clients"}
+	token := fx.issue(t, spec)
+
+	gin.SetMode(gin.TestMode)
+
+	for _, perm := range []acl.Permission{acl.ActionSearch, acl.ActionView, acl.ActionManage} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/clients", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.RemoteAddr = "10.0.0.5:1234"
+		c.Request = req
+
+		// The default JWT scope allowlist does not include clients.
+		s := AuthAny(c, acl.ResourceClients, acl.Permissions{perm})
+		require.NotNil(t, s)
+		assert.True(t, s.Abort(c), perm)
+	}
+}
+
 func TestAuthAnyPortalJWT_InvalidIssuer(t *testing.T) {
 	fx := newPortalJWTFixture(t, "invalid-issuer")
 	spec := fx.defaultClaimsSpec()
@@ -631,6 +653,7 @@ func newPortalJWTFixture(t *testing.T, suffix string) portalJWTFixture {
 	})
 
 	nodeConf := config.NewMinimalTestConfigWithDb("auth-any-portal-jwt-"+suffix, t.TempDir())
+	closeConfigDb(t, nodeConf)
 
 	nodeConf.Options().NodeRole = cluster.RoleInstance
 	nodeConf.Options().Public = false
@@ -640,6 +663,7 @@ func newPortalJWTFixture(t *testing.T, suffix string) portalJWTFixture {
 	nodeConf.Options().PortalUrl = "https://portal.example.test"
 
 	portalConf := config.NewMinimalTestConfigWithDb("auth-any-portal-jwt-issuer-"+suffix, t.TempDir())
+	closeConfigDb(t, portalConf)
 
 	enablePortalAPIs(t, portalConf)
 	portalConf.Options().ClusterUUID = clusterUUID
@@ -669,16 +693,19 @@ func newPortalJWTFixture(t *testing.T, suffix string) portalJWTFixture {
 	}
 }
 
-// TestPortalJWTFixtureRestoresProvider checks that the shared database resumes after an isolated fixture.
+// TestPortalJWTFixtureRestoresProvider checks that the shared database resumes and the fixture database is closed.
 func TestPortalJWTFixtureRestoresProvider(t *testing.T) {
 	original := get.Config()
+	var fixture *config.Config
 
 	t.Run("Fixture", func(t *testing.T) {
-		newPortalJWTFixture(t, "provider-restore")
+		fixture = newPortalJWTFixture(t, "provider-restore").nodeConf
+		require.True(t, fixture.IsDbOpen())
 	})
 
 	require.Same(t, original, get.Config())
 	require.Same(t, original.Db(), entity.Db())
+	assert.False(t, fixture.IsDbOpen())
 }
 
 func (fx portalJWTFixture) defaultClaimsSpec() clusterjwt.ClaimsSpec {

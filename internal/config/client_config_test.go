@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +11,34 @@ import (
 	"github.com/photoprism/photoprism/internal/config/customize"
 	"github.com/photoprism/photoprism/internal/entity"
 )
+
+// TestConfig_ClientConfigThumbLimit checks the serving limit in all client configurations.
+func TestConfig_ClientConfigThumbLimit(t *testing.T) {
+	c := NewMinimalTestConfigWithDb("client-thumb-limit", t.TempDir())
+	c.options.ThumbSize = 1920
+	c.options.ThumbSizeUncached = 7680
+
+	for _, tc := range []struct {
+		name     string
+		uncached bool
+		want     int
+	}{
+		{"CachedOnly", false, 1920},
+		{"OnDemand", true, 7680},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c.options.ThumbUncached = tc.uncached
+			for _, cfg := range []*ClientConfig{c.ClientPublic(), c.ClientShare(), c.ClientUser(true)} {
+				assert.Equal(t, tc.want, cfg.ThumbLimit)
+				data, err := json.Marshal(cfg)
+				assert.NoError(t, err)
+				var values map[string]any
+				assert.NoError(t, json.Unmarshal(data, &values))
+				assert.Equal(t, float64(tc.want), values["thumbLimit"])
+			}
+		})
+	}
+}
 
 func TestConfig_ClientConfig(t *testing.T) {
 	t.Run("TestConfig", func(t *testing.T) {
@@ -172,6 +202,21 @@ func TestClientConfig_ApplyACL(t *testing.T) {
 		assert.Equal(t, -1, u.FilesUsedPct)
 		assert.EqualValues(t, 0, u.FilesTotal)
 	})
+	t.Run("McpRoles", func(t *testing.T) {
+		// Community Edition admins manage only their own account, so they do not receive the list.
+		assert.Nil(t, (&ClientConfig{}).ApplyACL(acl.Rules, acl.RoleAdmin).McpRoles)
+
+		a := acl.ACL{
+			acl.ResourceUsers: acl.Roles{acl.RoleAdmin: acl.GrantFullAccess, acl.RoleGuest: acl.GrantViewUpdateOwn},
+			acl.ResourceMCP:   acl.Roles{acl.RoleAdmin: acl.GrantFullAccess, acl.RoleGuest: acl.GrantSearchAll},
+		}
+
+		admin := (&ClientConfig{}).ApplyACL(a, acl.RoleAdmin)
+		assert.Equal(t, []string{"admin", "guest"}, admin.McpRoles)
+
+		// Roles that cannot manage all accounts do not receive the list, and a reused config is cleared.
+		assert.Nil(t, admin.ApplyACL(a, acl.RoleGuest).McpRoles)
+	})
 }
 
 func TestConfig_ClientUser(t *testing.T) {
@@ -254,6 +299,7 @@ func TestConfig_ClientUser(t *testing.T) {
 	})
 }
 
+// TestConfig_ClientRoleConfig checks feature settings across session grants.
 func TestConfig_ClientRoleConfig(t *testing.T) {
 	c := NewMinimalTestConfigWithDb("client-role", t.TempDir())
 	c.SetAuthMode(AuthModePasswd)
@@ -276,6 +322,7 @@ func TestConfig_ClientRoleConfig(t *testing.T) {
 			Archive:      true,
 			Delete:       true,
 			Download:     true,
+			Export:       true,
 			Edit:         true,
 			BatchEdit:    true,
 			Estimates:    true,
@@ -319,6 +366,7 @@ func TestConfig_ClientRoleConfig(t *testing.T) {
 			Archive:      false,
 			Delete:       false,
 			Download:     true,
+			Export:       false,
 			Edit:         false,
 			BatchEdit:    false,
 			Estimates:    true,
@@ -362,6 +410,7 @@ func TestConfig_ClientRoleConfig(t *testing.T) {
 			Archive:      false,
 			Delete:       false,
 			Download:     true,
+			Export:       false,
 			Edit:         false,
 			BatchEdit:    false,
 			Estimates:    true,
@@ -429,6 +478,7 @@ func TestConfig_ClientRoleConfig(t *testing.T) {
 
 func TestConfig_ClientSessionConfig(t *testing.T) {
 	c := NewTestConfig("config")
+	assert.Equal(t, filepath.Dir(c.StoragePath()), c.testFolder, "test folder")
 	c.SetAuthMode(AuthModePasswd)
 
 	// Propagate configures the download signer; without it no session gets a signed token and the

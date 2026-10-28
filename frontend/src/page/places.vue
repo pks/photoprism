@@ -50,6 +50,7 @@
 </template>
 
 <script>
+import { markRaw } from "vue";
 import $api from "common/api";
 import $fullscreen from "common/fullscreen";
 import * as sky from "common/sky";
@@ -145,7 +146,6 @@ export default {
       settings: settings.maps,
       animate: this.$util.mapAnimateDuration(settings),
       loaded: false,
-      skyRendered: false,
     };
   },
   watch: {
@@ -165,6 +165,8 @@ export default {
   },
   created() {
     this._mapDataHandler = null;
+    this._sky = null;
+    this._styleSky = null;
     this.mapStyles = options.MapsStyle(this.featExperimental, this.$config.has("mapKey"));
   },
   // mounted initializes the map and keeps renderer failures inside the Places view.
@@ -194,8 +196,17 @@ export default {
     this.$view.leave(this);
   },
   methods: {
-    // Removes map event listeners and marker handlers before the component is disposed.
+    // teardownMap releases the map and the sky renderer before the component is disposed.
     teardownMap() {
+      this.removeMap();
+
+      if (this._sky) {
+        this._sky.destroy();
+        this._sky = null;
+      }
+    },
+    // removeMap removes the map with its event listeners and markers, and detaches the sky renderer from it.
+    removeMap() {
       if (!this.map) {
         return;
       }
@@ -210,6 +221,8 @@ export default {
         this.map.off("idle", this.updateMarkers);
       }
 
+      this._sky?.detach();
+      this._styleSky = null;
       this._mapDataHandler = null;
 
       this.clearAllMarkerClicks();
@@ -285,12 +298,55 @@ export default {
         this.clearMarkerClick(markerId, marker);
       });
     },
+    // renderSky shows the star map behind the globe, or CSS stars if it cannot be rendered.
     renderSky() {
-      if (!this.skyRendered && sky.render && this.$refs.background) {
-        this.$nextTick(() => {
-          sky.render(this.$refs.background, 320);
-          this.skyRendered = true;
+      const el = this.$refs.background;
+
+      if (!el || !this.map) {
+        return;
+      }
+
+      if (!this._sky) {
+        const fallback = () => {
+          if (!this._mapUnmounted) {
+            sky.render(el, 320);
+          }
+        };
+        const renderer = new sky.Sky(el, { onLost: fallback });
+        this._sky = renderer;
+        renderer.load(`${this.$config.staticUri}/img/sky/stars.avif`).catch((err) => {
+          if (this.$config.debug) {
+            console.debug("places: sky fallback", err);
+          }
+          renderer.destroy();
+          fallback();
         });
+      }
+
+      this._sky.attach(this.map);
+    },
+    // updateAtmosphere draws the atmosphere around the globe and restores the style sky otherwise.
+    updateAtmosphere() {
+      const map = this.map;
+
+      if (!map || typeof map.setSky !== "function") {
+        return;
+      }
+
+      // Setters throw while the style is loading; the next projection change or style load retries.
+      try {
+        if (this.getProjection() === ProjectionGlobe) {
+          if (this._styleSky?.map !== map) {
+            const styleSky = map.getSky();
+            map.setSky(sky.atmosphere());
+            this._styleSky = { map, sky: styleSky };
+          }
+        } else if (this._styleSky?.map === map) {
+          map.setSky(sky.styleSky(this._styleSky.sky));
+          this._styleSky = null;
+        }
+      } catch {
+        // Ignore.
       }
     },
     onKeyDown(ev) {
@@ -319,7 +375,7 @@ export default {
             }
             break;
         }
-      } else if (this.initialized) {
+      } else if (this.initialized && this.map) {
         // Use the arrow keys to move around the map with game-like controls.
         switch (ev.code) {
           case "ArrowUp":
@@ -352,7 +408,7 @@ export default {
       }
     },
     toggleProjection() {
-      if (!this.initialized || this.loading) {
+      if (!this.map || !this.initialized || this.loading) {
         return;
       }
 
@@ -413,6 +469,7 @@ export default {
         }
       }
     },
+    // onProjectionChange remembers the projection and shows the sky and atmosphere in globe view.
     onProjectionChange(ev) {
       // Update current projection.
       this.projection = ev.newProjection;
@@ -424,6 +481,8 @@ export default {
       if (ev.newProjection === ProjectionGlobe) {
         this.renderSky();
       }
+
+      this.updateAtmosphere();
     },
     // showMapError provides a readable fallback for rendering and loading failures.
     showMapError() {
@@ -455,9 +514,10 @@ export default {
 
       this.lastFilter = {};
       this.initialized = false;
-      this.$refs.map.innerHTML = "";
 
       try {
+        this.removeMap();
+        this.$refs.map.innerHTML = "";
         this.configureMap(style);
         this.renderMap();
         this.mapError = false;
@@ -656,7 +716,7 @@ export default {
       }
 
       this.filter = filter;
-      this.options = mapOptions;
+      this.options = markRaw(mapOptions);
     },
     getClusterFromUrl() {
       const hasLatLng = this.$route.query.latlng !== undefined && this.$route.query.latlng !== "";
@@ -848,9 +908,10 @@ export default {
       }).catch(() => {});
     },
     // search loads locations and waits for the active map source before updating markers.
+    // While busy, it returns the last search instead of starting another one.
     search(force) {
       if (this.loading) {
-        return;
+        return this._searchPromise;
       }
 
       // Do not query the same data more than once unless search results need to be updated.
@@ -872,7 +933,7 @@ export default {
       };
 
       // Fetch results from server.
-      return $api
+      this._searchPromise = $api
         .get("geo", options)
         .then(async (response) => {
           if (!response.data.features || response.data.features.length === 0) {
@@ -889,8 +950,8 @@ export default {
 
           const map = this.map;
 
+          // Without a map source, nothing is shown, so the search stays uninitialized and is repeated on load.
           if (!map || typeof map.getSource !== "function") {
-            this.initialized = true;
             this.loading = false;
             return;
           }
@@ -898,7 +959,6 @@ export default {
           const source = map.getSource("photos");
 
           if (!source || typeof source.setData !== "function") {
-            this.initialized = true;
             this.loading = false;
             return;
           }
@@ -932,15 +992,22 @@ export default {
           this.initialized = true;
           this.loading = false;
         });
+
+      return this._searchPromise;
     },
     renderMap() {
       const lastProjection = this.getProjection(true);
 
-      this.map = new maplibregl.Map({ ...this.options, locale: maps.locale() });
+      // MapLibre stays raw, since a reactive proxy breaks the read-only values it
+      // memoizes on its own objects, e.g. the channels of parsed style colors.
+      this.map = markRaw(new maplibregl.Map({ ...this.options, locale: maps.locale() }));
       this.map.setLanguage(this.$config.values.settings.ui.language.split("-")[0]);
 
       // Get informed about projection type changes.
       this.map.on("projectiontransition", (ev) => this.onProjectionChange(ev));
+
+      // Add the atmosphere to a style that loads in globe projection.
+      this.map.on("style.load", () => this.updateAtmosphere());
 
       // Restore last used projection type, if any.
       if (lastProjection) {
@@ -1059,9 +1126,11 @@ export default {
         el.style.width = "50px";
         el.style.height = "50px";
 
-        marker = this.markers[id] = new maplibregl.Marker({
-          element: el,
-        }).setLngLat(coords);
+        marker = this.markers[id] = markRaw(
+          new maplibregl.Marker({
+            element: el,
+          }).setLngLat(coords)
+        );
       } else {
         marker.setLngLat(coords);
       }
@@ -1116,9 +1185,11 @@ export default {
 
         el.append(imageContainer);
         el.append(counterBubble);
-        marker = this.markers[id] = new maplibregl.Marker({
-          element: el,
-        }).setLngLat(coords);
+        marker = this.markers[id] = markRaw(
+          new maplibregl.Marker({
+            element: el,
+          }).setLngLat(coords)
+        );
       } else {
         marker.setLngLat(coords);
       }
@@ -1213,9 +1284,11 @@ export default {
 
             el.append(imageContainer);
             el.append(counterBubble);
-            marker = this.markers[id] = new maplibregl.Marker({
-              element: el,
-            }).setLngLat(coords);
+            marker = this.markers[id] = markRaw(
+              new maplibregl.Marker({
+                element: el,
+              }).setLngLat(coords)
+            );
           } else {
             marker.setLngLat(coords);
           }
@@ -1318,8 +1391,8 @@ export default {
       this.map.on("resize", this.updateMarkers);
       this.map.on("idle", this.updateMarkers);
 
-      // Load pictures.
-      this.search().finally(() => {
+      // Load pictures, or wait for the search that is already running.
+      Promise.resolve(this.search()).finally(() => {
         this.loaded = true;
       });
     },

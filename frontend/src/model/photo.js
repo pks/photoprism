@@ -22,6 +22,21 @@ export const DayUnknown = -1;
 export const TimeZoneUTC = "UTC";
 export const TimeZoneLocal = "Local";
 
+// isTimeZoneUTC reports whether the time zone is UTC.
+export function isTimeZoneUTC(zone) {
+  return typeof zone === "string" && zone.toLowerCase() === TimeZoneUTC.toLowerCase();
+}
+
+// isTimeZoneLocal reports whether the time zone is Local or not set, so the wall time is all that is known.
+export function isTimeZoneLocal(zone) {
+  return !zone || zone === TimeZoneLocal;
+}
+
+// localTimeString formats the wall time of a date as the naive UTC timestamp stored in TakenAtLocal.
+function localTimeString(date) {
+  return date.toISO({ suppressMilliseconds: true, includeOffset: false }) + "Z";
+}
+
 export let BatchSize = 156;
 
 // MaxLength mirrors the backend Set*-helper clips (txt.ClipShortText / ClipText)
@@ -63,7 +78,7 @@ export class Photo extends RestModel {
       TakenSrc: "",
       TimeZone: "",
       Path: "",
-      Color: 0,
+      Color: -1,
       Name: "",
       OriginalName: "",
       Title: "",
@@ -223,6 +238,7 @@ export class Photo extends RestModel {
     return this.Year.toString();
   }
 
+  // localDateString combines calendar fields and wall time in the current time zone.
   localDateString(time) {
     if (!this.localYearString()) {
       return this.TakenAtLocal;
@@ -234,13 +250,7 @@ export class Photo extends RestModel {
       time = this.TakenAtLocal.substring(11, 19);
     }
 
-    let iso = `${date}T${time}`;
-
-    if (this.originalTimeZoneUTC()) {
-      iso += "Z";
-    }
-
-    return iso;
+    return `${date}T${time}${this.currentTimeZoneUTC() ? "Z" : ""}`;
   }
 
   getTimeZone() {
@@ -251,8 +261,9 @@ export class Photo extends RestModel {
     return "";
   }
 
+  // timeIsUTC reports whether the displayed time uses UTC.
   timeIsUTC() {
-    return this.originalTimeZoneUTC() || this.currentTimeZoneUTC();
+    return this.currentTimeZoneUTC();
   }
 
   getDateTime() {
@@ -263,24 +274,96 @@ export class Photo extends RestModel {
     }
   }
 
-  currentTimeZoneUTC() {
-    const tz = this.getTimeZone();
-
-    if (tz) {
-      return tz.toLowerCase() === TimeZoneUTC.toLowerCase();
+  // setValues also resets the time anchor when the values carry a time or zone, since they are the known time again.
+  setValues(values, scalarOnly) {
+    if (values && ["TakenAt", "TakenAtLocal", "TimeZone"].some((key) => Object.hasOwn(values, key))) {
+      this.__timeAnchor = null;
     }
 
-    return false;
+    return super.setValues(values, scalarOnly);
   }
 
-  originalTimeZoneUTC() {
-    const tz = this.originalValue("TimeZone");
+  // rollback also resets the time anchor to the saved values.
+  rollback() {
+    this.__timeAnchor = null;
+    return super.rollback();
+  }
 
-    if (tz) {
-      return tz.toLowerCase() === TimeZoneUTC.toLowerCase();
+  // timeAnchor returns the known time that time zone changes start from: the time entered last with
+  // setLocalTime, or else the saved one, so changing the zone several times gives the same result as once.
+  timeAnchor() {
+    if (this.__timeAnchor) {
+      return this.__timeAnchor;
     }
 
-    return false;
+    return {
+      fromUTC: this.originalTimeZoneUTC(),
+      TakenAt: this.originalValue("TakenAt"),
+      TakenAtLocal: this.originalValue("TakenAtLocal"),
+    };
+  }
+
+  // setLocalTime sets the capture time from the date parts and a wall time in the current zone,
+  // and makes it the known time for later zone changes. It returns the parsed local date.
+  setLocalTime(time) {
+    const localDate = this.localDate(time);
+
+    if (!localDate.isValid) {
+      return localDate;
+    }
+
+    this.TakenAtLocal = localTimeString(localDate);
+
+    if (!isTimeZoneLocal(this.TimeZone)) {
+      this.TakenAt = localDate.toUTC().toISO({ suppressMilliseconds: true });
+    }
+
+    this.__timeAnchor = { fromUTC: this.currentTimeZoneUTC(), TakenAt: this.TakenAt, TakenAtLocal: this.TakenAtLocal };
+
+    return localDate;
+  }
+
+  // changeTimeZone sets a new zone without editing the time: a known UTC time is converted to the local time
+  // in that zone, and a known local time is kept, see timeAnchor. Month and Year follow only while all finer
+  // date parts are known, since an unknown day leaves a placeholder.
+  changeTimeZone(zone) {
+    if (zone === this.TimeZone) {
+      return;
+    }
+
+    const anchor = this.timeAnchor();
+    const toLocal = isTimeZoneLocal(zone);
+    const taken =
+      anchor.fromUTC && !toLocal
+        ? DateTime.fromISO(anchor.TakenAt, { zone: "UTC" }).setZone(zone)
+        : DateTime.fromISO(anchor.TakenAtLocal, { zone: "UTC" }).setZone(toLocal ? "UTC" : zone, { keepLocalTime: true });
+
+    if (!taken.isValid) {
+      return;
+    }
+
+    this.TimeZone = zone;
+    this.TakenAtLocal = localTimeString(taken);
+    this.TakenAt = taken.toUTC().toISO({ suppressMilliseconds: true });
+
+    if (this.Day > 0) {
+      this.Day = taken.day;
+      if (this.Month > 0) {
+        this.Month = taken.month;
+        if (this.Year > 0) {
+          this.Year = taken.year;
+        }
+      }
+    }
+  }
+
+  currentTimeZoneUTC() {
+    return isTimeZoneUTC(this.getTimeZone());
+  }
+
+  // originalTimeZoneUTC reports whether the saved time zone is UTC.
+  originalTimeZoneUTC() {
+    return isTimeZoneUTC(this.originalValue("TimeZone"));
   }
 
   localDate(time) {
@@ -288,14 +371,11 @@ export class Photo extends RestModel {
       return this.utcDate();
     }
 
-    let iso = this.localDateString(time);
-    let zone = this.getTimeZone();
+    const iso = this.localDateString(time);
+    const zone = this.getTimeZone();
 
-    if (zone === "") {
-      zone = "UTC";
-    }
-
-    return DateTime.fromISO(iso, { zone });
+    // A Local wall time is naive, so it is read as UTC rather than in the browser's zone.
+    return DateTime.fromISO(iso, { zone: isTimeZoneLocal(zone) ? "UTC" : zone });
   }
 
   utcDate() {
@@ -347,6 +427,7 @@ export class Photo extends RestModel {
     return result;
   }
 
+  // fileBase returns the last element of a file path, without bidi and other control characters.
   fileBase(name) {
     let result = name;
     const slash = result.lastIndexOf("/");
@@ -355,7 +436,7 @@ export class Photo extends RestModel {
       result = name.substring(slash + 1);
     }
 
-    return result;
+    return $util.stripBidiControls(result);
   }
 
   getEntityName() {

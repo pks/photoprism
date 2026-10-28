@@ -3,8 +3,10 @@ package commands
 import (
 	"fmt"
 
+	"github.com/dustin/go-humanize/english"
 	"github.com/urfave/cli/v2"
 
+	"github.com/photoprism/photoprism/internal/auth/oauth"
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/form"
@@ -49,6 +51,15 @@ func clientsModAction(ctx *cli.Context) error {
 			return fmt.Errorf("client %s not found", clean.Log(id))
 		}
 
+		// App clients keep their type, role and lack of a secret; callbacks can only be set on them.
+		if err := oauth.ValidateClientChange(client, frm, oauth.ClientChange{
+			Method:    ctx.IsSet("method"),
+			Role:      ctx.IsSet("role"),
+			NewSecret: ctx.Bool("regenerate"),
+		}); err != nil {
+			return err
+		}
+
 		// Check if the client exists but has been deleted.
 		if client.Deleted() {
 			if restore, err := ConfirmRestore(ctx.Bool("restore"), fmt.Sprintf("Restore client %s", client.String()), "--restore"); err != nil {
@@ -62,9 +73,14 @@ func clientsModAction(ctx *cli.Context) error {
 			}
 
 			log.Infof("client %s has been restored", client.String())
+
+			if !client.IsApp() && !ctx.Bool("regenerate") && frm.Secret() == "" {
+				log.Warnf("client %s has no secret, use --regenerate to create one", client.String())
+			}
 		}
 
 		// Update client from form values.
+		prevRole, prevScope := client.ClientRole, client.AuthScope
 		client.SetFormValues(frm)
 
 		if ctx.IsSet("enable") || ctx.IsSet("disable") {
@@ -87,6 +103,11 @@ func clientsModAction(ctx *cli.Context) error {
 			log.Infof("client %s has been updated", clean.LogQuote(client.ClientName))
 		}
 
+		// Revoke issued tokens if the role or scope of a client that is not an app client has changed.
+		if revoked := client.RevokeChangedAccess(prevRole, prevScope); revoked > 0 {
+			log.Infof("revoked %s after the role or scope changed", english.Plural(revoked, "session", "sessions"))
+		}
+
 		// Change client secret if requested.
 		var secret, message string
 		var err error
@@ -107,6 +128,7 @@ func clientsModAction(ctx *cli.Context) error {
 
 		// Show new client secret.
 		if secret != "" && err == nil {
+			client.RevokeSessions(nil)
 			fmt.Println(message)
 			result := report.Credentials("Client ID", client.ClientUID, "Client Secret", secret)
 			fmt.Printf("\n%s\n", result)

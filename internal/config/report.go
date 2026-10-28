@@ -41,6 +41,7 @@ func (c *Config) Report() (rows [][]string, cols []string) {
 		{"register-uri", c.RegisterUri()},
 		{"login-uri", c.LoginUri()},
 		{"login-info", c.LoginInfo()},
+		{"oauth-apps", c.OAuthApps()},
 		{"session-maxage", fmt.Sprintf("%d", c.SessionMaxAge())},
 		{"session-timeout", fmt.Sprintf("%d", c.SessionTimeout())},
 		{"session-cache", fmt.Sprintf("%d", c.SessionCache())},
@@ -310,7 +311,16 @@ func (c *Config) Report() (rows [][]string, cols []string) {
 		{"database-conns-idle", fmt.Sprintf("%d", c.DatabaseConnsIdle())},
 		{"mariadb-bin", c.MariadbBin()},
 		{"mariadb-dump-bin", c.MariadbDumpBin()},
+	}...)
 
+	if c.DatabaseDriver() == dsn.DriverPostgres {
+		rows = append(rows, [][]string{
+			{"psql-bin", c.PsqlBin()},
+			{"pg-dump-bin", c.PgDumpBin()},
+		}...)
+	}
+
+	rows = append(rows, [][]string{
 		// File Converters.
 		{"ffmpeg-bin", c.FFmpegBin()},
 		{"ffmpeg-encoder", c.FFmpegEncoder().String()},

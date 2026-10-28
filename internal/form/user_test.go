@@ -1,7 +1,10 @@
 package form
 
 import (
+	"flag"
 	"testing"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/photoprism/photoprism/pkg/authn"
 
@@ -99,4 +102,77 @@ func TestUser_Scope(t *testing.T) {
 		form := &User{UserScope: " Photos:VIEW   "}
 		assert.Equal(t, "photos:view", form.Scope())
 	})
+}
+
+func TestNewUserFromCli(t *testing.T) {
+	newContext := func(t *testing.T, args ...string) *cli.Context {
+		flags := flag.NewFlagSet("test", flag.ContinueOnError)
+		flags.String("email", "", "Usage")
+		flags.String("role", "", "Usage")
+		if err := flags.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		return cli.NewContext(cli.NewApp(), flags, nil)
+	}
+
+	t.Run("TrimsUsername", func(t *testing.T) {
+		frm := NewUserFromCli(newContext(t, "--email=Jane@Example.com", "--role=admin", "  Jane.Doe  "))
+		assert.Equal(t, "Jane.Doe", frm.UserName)
+		assert.Equal(t, "jane.doe", frm.Username())
+		assert.Equal(t, "jane@example.com", frm.UserEmail)
+		assert.Equal(t, "admin", frm.UserRole)
+	})
+	t.Run("KeepsInput", func(t *testing.T) {
+		frm := NewUserFromCli(newContext(t, "\u212Aate"))
+		assert.Equal(t, "\u212Aate", frm.UserName)
+		assert.Equal(t, "kate", frm.Username())
+	})
+	t.Run("Empty", func(t *testing.T) {
+		frm := NewUserFromCli(newContext(t))
+		assert.Equal(t, "", frm.UserName)
+	})
+}
+
+func TestUser_MCPSetting(t *testing.T) {
+	for in, out := range map[int]int{-9: -1, -1: -1, 0: 0, 1: 1, 2: 1} {
+		f := &User{MCP: in}
+		assert.Equal(t, out, f.MCPSetting(), in)
+	}
+}
+
+func TestNewUserFromCli_MCP(t *testing.T) {
+	newContext := func(t *testing.T, args ...string) *cli.Context {
+		set := flag.NewFlagSet("users add", flag.ContinueOnError)
+		_ = set.Bool("mcp", false, "")
+		if err := set.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		return cli.NewContext(cli.NewApp(), set, nil)
+	}
+
+	t.Run("NotSet", func(t *testing.T) {
+		assert.Equal(t, 0, NewUserFromCli(newContext(t, "alice")).MCP)
+	})
+	t.Run("True", func(t *testing.T) {
+		assert.Equal(t, 1, NewUserFromCli(newContext(t, "--mcp", "alice")).MCP)
+	})
+	t.Run("False", func(t *testing.T) {
+		assert.Equal(t, -1, NewUserFromCli(newContext(t, "--mcp=false", "alice")).MCP)
+	})
+}
+
+func TestCliSetting(t *testing.T) {
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	_ = set.Bool("on", false, "")
+	_ = set.Bool("off", true, "")
+	_ = set.Bool("unset", true, "")
+	if err := set.Parse([]string{"--on", "--off=false"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := cli.NewContext(cli.NewApp(), set, nil)
+
+	assert.Equal(t, 1, cliSetting(ctx, "on"))
+	assert.Equal(t, -1, cliSetting(ctx, "off"))
+	assert.Equal(t, 0, cliSetting(ctx, "unset"))
+	assert.Equal(t, 0, cliSetting(ctx, "missing"))
 }

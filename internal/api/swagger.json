@@ -37,6 +37,102 @@
             },
             "type": "object"
         },
+        "api.OAuthConsentAccount": {
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "api.OAuthConsentClient": {
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "origin": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "api.OAuthConsentRedirect": {
+            "properties": {
+                "redirectUri": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "api.OAuthConsentResponse": {
+            "properties": {
+                "account": {
+                    "$ref": "#/definitions/api.OAuthConsentAccount"
+                },
+                "available": {
+                    "type": "boolean"
+                },
+                "client": {
+                    "$ref": "#/definitions/api.OAuthConsentClient"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "items": {
+                        "$ref": "#/definitions/api.OAuthConsentScope"
+                    },
+                    "type": "array"
+                },
+                "siteUrl": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "api.OAuthConsentScope": {
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "api.UserGrant": {
+            "properties": {
+                "ClientID": {
+                    "type": "string"
+                },
+                "ClientName": {
+                    "type": "string"
+                },
+                "CreatedAt": {
+                    "type": "string"
+                },
+                "Origin": {
+                    "type": "string"
+                },
+                "Scope": {
+                    "type": "string"
+                },
+                "UID": {
+                    "type": "string"
+                },
+                "UsedAt": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "authn.GrantType": {
             "enum": [
                 "",
@@ -451,6 +547,10 @@
                 },
                 "Host": {
                     "type": "string"
+                },
+                "Incomplete": {
+                    "description": "Incomplete reports a database that exists but could not be fully provisioned yet; a later rotation completes it.",
+                    "type": "boolean"
                 },
                 "Name": {
                     "type": "string"
@@ -945,6 +1045,9 @@
                     "type": "boolean"
                 },
                 "estimates": {
+                    "type": "boolean"
+                },
+                "export": {
                     "type": "boolean"
                 },
                 "favorites": {
@@ -1764,9 +1867,6 @@
                 "UID": {
                     "type": "string"
                 },
-                "VerifyPassword": {
-                    "type": "boolean"
-                },
                 "Views": {
                     "type": "integer"
                 }
@@ -2424,6 +2524,9 @@
                 "LoginAt": {
                     "type": "string"
                 },
+                "MCP": {
+                    "type": "integer"
+                },
                 "Name": {
                     "type": "string"
                 },
@@ -2877,9 +2980,6 @@
                 "MaxViews": {
                     "type": "integer"
                 },
-                "Password": {
-                    "type": "string"
-                },
                 "Slug": {
                     "type": "string"
                 },
@@ -2950,6 +3050,23 @@
                     "type": "number"
                 }
             },
+            "type": "object"
+        },
+        "form.OAuthConsent": {
+            "properties": {
+                "request": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "request"
+            ],
             "type": "object"
         },
         "form.OAuthCreateToken": {
@@ -3206,6 +3323,7 @@
         "form.Service": {
             "properties": {
                 "AccError": {
+                    "description": "Read only, except that an empty value clears it.",
                     "type": "string"
                 },
                 "AccKey": {
@@ -3368,6 +3486,9 @@
                 },
                 "Email": {
                     "type": "string"
+                },
+                "MCP": {
+                    "type": "integer"
                 },
                 "Name": {
                     "type": "string"
@@ -5568,19 +5689,87 @@
                         "enum": [
                             "favorites",
                             "name",
-                            "title",
+                            "name_reverse",
                             "added",
-                            "edited"
+                            "edited",
+                            "newest",
+                            "oldest",
+                            "moment",
+                            "count",
+                            "place",
+                            "path",
+                            "category",
+                            "slug"
                         ],
                         "in": "query",
                         "name": "order",
                         "type": "string"
                     },
                     {
-                        "description": "search query",
+                        "description": "reverses the sort order",
+                        "in": "query",
+                        "name": "reverse",
+                        "type": "boolean"
+                    },
+                    {
+                        "description": "search query, matches album titles and locations",
                         "in": "query",
                         "name": "q",
                         "type": "string"
+                    },
+                    {
+                        "description": "album uids (separate with |)",
+                        "in": "query",
+                        "name": "uid",
+                        "type": "string"
+                    },
+                    {
+                        "description": "album types: album, folder, moment, month, state (separate with |)",
+                        "in": "query",
+                        "name": "type",
+                        "type": "string"
+                    },
+                    {
+                        "description": "album categories (separate with |)",
+                        "in": "query",
+                        "name": "category",
+                        "type": "string"
+                    },
+                    {
+                        "description": "album locations (separate with |)",
+                        "in": "query",
+                        "name": "location",
+                        "type": "string"
+                    },
+                    {
+                        "description": "years (separate with |)",
+                        "in": "query",
+                        "name": "year",
+                        "type": "string"
+                    },
+                    {
+                        "description": "months, 1-12 (separate with |)",
+                        "in": "query",
+                        "name": "month",
+                        "type": "string"
+                    },
+                    {
+                        "description": "days of the month, 1-31 (separate with |)",
+                        "in": "query",
+                        "name": "day",
+                        "type": "string"
+                    },
+                    {
+                        "description": "favorites only",
+                        "in": "query",
+                        "name": "favorite",
+                        "type": "boolean"
+                    },
+                    {
+                        "description": "excludes private albums",
+                        "in": "query",
+                        "name": "public",
+                        "type": "boolean"
                     }
                 ],
                 "produces": [
@@ -6209,7 +6398,7 @@
                         "type": "string"
                     },
                     {
-                        "description": "link properties (currently supported: slug, expires)",
+                        "description": "link settings: slug, expires (seconds, 0 = never), and max views (0 = unlimited)",
                         "in": "body",
                         "name": "link",
                         "required": true,
@@ -6271,7 +6460,7 @@
                         }
                     }
                 },
-                "summary": "adds a new album share link and return it as JSON",
+                "summary": "adds a new album share link and returns it as JSON",
                 "tags": [
                     "Links",
                     "Albums"
@@ -6286,7 +6475,7 @@
                 "operationId": "DeleteAlbumLink",
                 "parameters": [
                     {
-                        "description": "album",
+                        "description": "album uid",
                         "in": "path",
                         "name": "uid",
                         "required": true,
@@ -6318,6 +6507,12 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
@@ -6362,7 +6557,7 @@
                         "type": "string"
                     },
                     {
-                        "description": "properties to be updated (currently supported: slug, expires, token)",
+                        "description": "link settings: slug, expires, and max views are replaced as sent, an empty token keeps the current one",
                         "in": "body",
                         "name": "link",
                         "required": true,
@@ -6399,6 +6594,12 @@
                             "$ref": "#/definitions/i18n.Response"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
                         "schema": {
@@ -6416,15 +6617,9 @@
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/i18n.Response"
-                        }
                     }
                 },
-                "summary": "updates an album share link and return it as JSON",
+                "summary": "updates an album share link and returns it as JSON",
                 "tags": [
                     "Links",
                     "Albums"
@@ -7614,6 +7809,12 @@
                             "$ref": "#/definitions/i18n.Response"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
                         "schema": {
@@ -7628,6 +7829,18 @@
                     },
                     "429": {
                         "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
@@ -8071,10 +8284,29 @@
                         "name": "file",
                         "required": true,
                         "type": "string"
+                    },
+                    {
+                        "description": "download token",
+                        "in": "query",
+                        "name": "t",
+                        "type": "string"
+                    },
+                    {
+                        "description": "attachment name type (file, share, original)",
+                        "in": "query",
+                        "name": "name",
+                        "type": "string"
+                    },
+                    {
+                        "description": "avc returns an MPEG-4 AVC rendition of a video, live photo, or animated image",
+                        "in": "query",
+                        "name": "format",
+                        "type": "string"
                     }
                 ],
                 "produces": [
-                    "application/octet-stream"
+                    "application/octet-stream",
+                    "video/mp4"
                 ],
                 "responses": {
                     "200": {
@@ -8097,6 +8329,12 @@
                     },
                     "429": {
                         "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "507": {
+                        "description": "Insufficient Storage",
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
@@ -9941,18 +10179,89 @@
         "/api/v1/oauth/authorize": {
             "get": {
                 "operationId": "OAuthAuthorize",
+                "parameters": [
+                    {
+                        "description": "must be code",
+                        "in": "query",
+                        "name": "response_type",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "app client ID or client metadata document URL",
+                        "in": "query",
+                        "name": "client_id",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "registered redirect URI",
+                        "in": "query",
+                        "name": "redirect_uri",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "PKCE code challenge",
+                        "in": "query",
+                        "name": "code_challenge",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "must be S256",
+                        "in": "query",
+                        "name": "code_challenge_method",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "opaque value returned to the client",
+                        "in": "query",
+                        "name": "state",
+                        "type": "string"
+                    },
+                    {
+                        "description": "space-separated scopes, mcp is always included",
+                        "in": "query",
+                        "name": "scope",
+                        "type": "string"
+                    },
+                    {
+                        "description": "MCP endpoint URL (RFC 8707)",
+                        "in": "query",
+                        "name": "resource",
+                        "type": "string"
+                    }
+                ],
                 "produces": [
-                    "application/json"
+                    "application/json",
+                    "text/html"
                 ],
                 "responses": {
                     "302": {
-                        "description": "redirect to the client redirect_uri with an authorization code",
+                        "description": "redirect to the consent page, or to the client redirect_uri with an error",
                         "schema": {
                             "type": "string"
                         }
                     },
+                    "400": {
+                        "description": "OAuth error and error_description (HTML page for browsers)",
+                        "schema": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "type": "object"
+                        }
+                    },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
@@ -9962,9 +10271,246 @@
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
+                    },
+                    "429": {
+                        "description": "OAuth error and error_description (HTML page for browsers)",
+                        "schema": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "type": "object"
+                        }
                     }
                 },
-                "summary": "OAuth2/OIDC authorization endpoint",
+                "summary": "OAuth2 authorization endpoint for apps (authorization code flow with PKCE)",
+                "tags": [
+                    "Authentication"
+                ]
+            }
+        },
+        "/api/v1/oauth/consent": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "operationId": "OAuthConsent",
+                "parameters": [
+                    {
+                        "description": "pending request ID",
+                        "in": "body",
+                        "name": "request",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/form.OAuthConsent"
+                        }
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.OAuthConsentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "returns a pending OAuth authorization request for the consent page",
+                "tags": [
+                    "Authentication"
+                ]
+            }
+        },
+        "/api/v1/oauth/consent/approve": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "operationId": "OAuthConsentApprove",
+                "parameters": [
+                    {
+                        "description": "pending request ID and approved scopes",
+                        "in": "body",
+                        "name": "request",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/form.OAuthConsent"
+                        }
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.OAuthConsentRedirect"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "approves a pending OAuth authorization request",
+                "tags": [
+                    "Authentication"
+                ]
+            }
+        },
+        "/api/v1/oauth/consent/deny": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "operationId": "OAuthConsentDeny",
+                "parameters": [
+                    {
+                        "description": "pending request ID",
+                        "in": "body",
+                        "name": "request",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/form.OAuthConsent"
+                        }
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.OAuthConsentRedirect"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "denies a pending OAuth authorization request",
                 "tags": [
                     "Authentication"
                 ]
@@ -10096,6 +10642,12 @@
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
                     }
                 },
                 "summary": "revoke an OAuth2 access token or session",
@@ -10114,7 +10666,7 @@
                 "operationId": "OAuthToken",
                 "parameters": [
                     {
-                        "description": "token request (supports client_credentials, password, or session grant)",
+                        "description": "token request (supports client_credentials, password, session, authorization_code, or refresh_token grant)",
                         "in": "body",
                         "name": "request",
                         "required": true,
@@ -10159,6 +10711,12 @@
                     },
                     "429": {
                         "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/i18n.Response"
                         }
@@ -12348,6 +12906,7 @@
                         "description": "session id or ref id",
                         "in": "path",
                         "name": "id",
+                        "required": true,
                         "type": "string"
                     }
                 ],
@@ -12397,6 +12956,7 @@
                         "description": "session id",
                         "in": "path",
                         "name": "id",
+                        "required": true,
                         "type": "string"
                     }
                 ],
@@ -12505,6 +13065,7 @@
                         "description": "session id or ref id",
                         "in": "path",
                         "name": "id",
+                        "required": true,
                         "type": "string"
                     }
                 ],
@@ -12554,6 +13115,7 @@
                         "description": "session id",
                         "in": "path",
                         "name": "id",
+                        "required": true,
                         "type": "string"
                     }
                 ],
@@ -13183,6 +13745,18 @@
                         "name": "size",
                         "required": true,
                         "type": "string"
+                    },
+                    {
+                        "description": "returns the thumbnail as an attachment named \u003cstem\u003e_\u003csize\u003e with the extension of the thumbnail, or after the crop size for a cropped thumbnail; placeholders then use 400, 404, or 500",
+                        "in": "query",
+                        "name": "download",
+                        "type": "string"
+                    },
+                    {
+                        "description": "attachment name type (file, share, original)",
+                        "in": "query",
+                        "name": "name",
+                        "type": "string"
                     }
                 ],
                 "produces": [
@@ -13196,8 +13770,26 @@
                             "type": "file"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "file"
                         }
@@ -13366,6 +13958,136 @@
                 "summary": "upload a new avatar image for a user",
                 "tags": [
                     "Users"
+                ]
+            }
+        },
+        "/api/v1/users/{uid}/grants": {
+            "get": {
+                "operationId": "FindUserGrants",
+                "parameters": [
+                    {
+                        "description": "user uid",
+                        "in": "path",
+                        "name": "uid",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "items": {
+                                "$ref": "#/definitions/api.UserGrant"
+                            },
+                            "type": "array"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "list the apps connected to a user account",
+                "tags": [
+                    "Users",
+                    "Authentication"
+                ]
+            }
+        },
+        "/api/v1/users/{uid}/grants/{grant}": {
+            "delete": {
+                "operationId": "DeleteUserGrant",
+                "parameters": [
+                    {
+                        "description": "user uid",
+                        "in": "path",
+                        "name": "uid",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "description": "grant uid",
+                        "in": "path",
+                        "name": "grant",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.UserGrant"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "disconnect an app from a user account",
+                "tags": [
+                    "Users",
+                    "Authentication"
                 ]
             }
         },

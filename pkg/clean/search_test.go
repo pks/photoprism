@@ -98,3 +98,77 @@ func TestSearchTerms(t *testing.T) {
 		assert.Equal(t, "", SearchTerms(""))
 	})
 }
+
+func TestSearchFilter(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		for _, s := range []string{"", "cat", "2020/Holiday", "20*", "a|b", "Grüße 日本"} {
+			value, ok := SearchFilter(s)
+			assert.True(t, ok, s)
+			assert.Equal(t, s, value)
+		}
+	})
+	t.Run("Cleaned", func(t *testing.T) {
+		value, ok := SearchFilter("cat\xff\x00")
+		assert.True(t, ok)
+		assert.Equal(t, "cat", value)
+	})
+	t.Run("NothingLeft", func(t *testing.T) {
+		for _, s := range []string{"\xff", "\x00", "\x00\xfe\xff", "\xc3"} {
+			value, ok := SearchFilter(s)
+			assert.False(t, ok, "%q", s)
+			assert.Equal(t, "", value)
+		}
+	})
+	t.Run("OnlySyntaxLeft", func(t *testing.T) {
+		for _, s := range []string{"\x00 ", "\xff|", "\xff*", "%\xff%", "\xff\t", "\"\xff\"", "\xff&+", "\xff/", "\xff!", "\xff/*"} {
+			_, ok := SearchFilter(s)
+			assert.False(t, ok, "%q", s)
+		}
+	})
+	t.Run("SyntaxWithoutRemovedBytes", func(t *testing.T) {
+		for _, s := range []string{" ", "|", "*", "%"} {
+			value, ok := SearchFilter(s)
+			assert.True(t, ok, "%q", s)
+			assert.Equal(t, s, value)
+		}
+	})
+}
+
+func TestSearchUsable(t *testing.T) {
+	t.Run("Usable", func(t *testing.T) {
+		for _, s := range []string{"cat", "*cat*", "a|b", "/a", "-", "1", "\U0001F600", "\uFFFD"} {
+			assert.True(t, SearchUsable(s), "%q", s)
+		}
+	})
+	t.Run("NotUsable", func(t *testing.T) {
+		for _, s := range []string{"", " ", "|", "*", "% ", "\t\n", "\x01", "${}", ":", "\"'", "+&", "<>\\", "/", "!", "/*"} {
+			assert.False(t, SearchUsable(s), "%q", s)
+		}
+	})
+}
+
+func TestSearchBindable(t *testing.T) {
+	t.Run("Unchanged", func(t *testing.T) {
+		for _, s := range []string{"", "cat", "Grüße 日本 👩\u200D👩\u200D👧", "a\tb\x01c"} {
+			assert.Equal(t, s, SearchBindable(s))
+		}
+		assert.Zero(t, testing.AllocsPerRun(10, func() { _ = SearchBindable("cat dog") }))
+	})
+	t.Run("Removed", func(t *testing.T) {
+		assert.Equal(t, "", SearchBindable("\x00"))
+		assert.Equal(t, "catdog", SearchBindable("cat\x00dog"))
+		assert.Equal(t, "catdog", SearchBindable("cat\xffdog"))
+		assert.Equal(t, "ab", SearchBindable("a\x00\xc3b"))
+	})
+}
+
+func TestSearchNul(t *testing.T) {
+	for name, fn := range map[string]func(string) string{"SearchString": SearchString, "SearchQuery": SearchQuery, "SearchTerms": SearchTerms} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, "", fn("\x00"))
+			assert.Equal(t, "catdog", fn("cat\x00dog"))
+			assert.Equal(t, "catdog", fn("cat\xffdog"))
+			assert.Equal(t, "cat dog", fn("cat dog"))
+		})
+	}
+}
