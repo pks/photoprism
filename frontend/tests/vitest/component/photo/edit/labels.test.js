@@ -15,6 +15,8 @@ function mountPhotoLabels({ modelOverrides = {}, routerOverrides = {}, utilOverr
       removeLabel: vi.fn(() => Promise.resolve()),
       addLabel: vi.fn(() => Promise.resolve()),
       activateLabel: vi.fn(),
+      // The template renders the photo thumbnail in the header, so the mock model must expose the helper.
+      thumbnailUrl: vi.fn(() => "/thumb.jpg"),
       ...modelOverrides,
     }
     : null;
@@ -536,6 +538,49 @@ describe("component/photo/edit/labels", () => {
 
       expect(fromPhotosSpy).not.toHaveBeenCalled();
       expect(lightbox.openModels).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("label model tooltip", () => {
+    const labelRows = [
+      { LabelID: "label-1", LabelSrc: "ollama", Uncertainty: 20, Label: { LabelID: "label-1", Name: "dog" } },
+      { LabelID: "label-2", LabelSrc: "manual", Uncertainty: 0, Label: { LabelID: "label-2", Name: "friend" } },
+    ];
+
+    it("shows the model tooltip on model-generated labels", () => {
+      const { wrapper } = mountPhotoLabels({
+        modelOverrides: {
+          Labels: labelRows,
+          Details: { CaptionModel: "", LabelModel: "llava:13b" },
+        },
+      });
+
+      expect(wrapper.html()).toContain("Generated with model: llava:13b");
+    });
+
+    it("leaves the tooltip empty for manual labels", () => {
+      const { wrapper } = mountPhotoLabels({
+        modelOverrides: {
+          Labels: labelRows,
+          Details: { CaptionModel: "", LabelModel: "llava:13b" },
+        },
+      });
+
+      const titles = wrapper.findAll("tbody span[title]").map((span) => span.attributes("title"));
+
+      expect(titles).toContain("Generated with model: llava:13b");
+      expect(titles.filter((title) => title === "").length).toBe(1);
+    });
+
+    it("shows no tooltip when no label model is recorded", () => {
+      const { wrapper } = mountPhotoLabels({
+        modelOverrides: {
+          Labels: labelRows,
+          Details: { CaptionModel: "", LabelModel: "" },
+        },
+      });
+
+      expect(wrapper.html()).not.toContain("Generated with model");
     });
   });
 });

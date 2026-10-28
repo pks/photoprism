@@ -11,7 +11,7 @@ import (
 var captionFunc = captionInternal
 
 // SetCaptionFunc overrides the caption generator. Intended for tests.
-func SetCaptionFunc(fn func(Files, media.Src) (*CaptionResult, *Model, error)) {
+func SetCaptionFunc(fn func(Files, media.Src, string) (*CaptionResult, *Model, error)) {
 	if fn == nil {
 		captionFunc = captionInternal
 		return
@@ -21,11 +21,12 @@ func SetCaptionFunc(fn func(Files, media.Src) (*CaptionResult, *Model, error)) {
 }
 
 // GenerateCaption returns generated captions for the specified images.
-func GenerateCaption(images Files, mediaSrc media.Src) (*CaptionResult, *Model, error) {
-	return captionFunc(images, mediaSrc)
+// metadata may hold data-only file context (date, place, camera) appended to the model prompt.
+func GenerateCaption(images Files, mediaSrc media.Src, metadata string) (*CaptionResult, *Model, error) {
+	return captionFunc(images, mediaSrc, metadata)
 }
 
-func captionInternal(images Files, mediaSrc media.Src) (result *CaptionResult, model *Model, err error) {
+func captionInternal(images Files, mediaSrc media.Src, metadata string) (result *CaptionResult, model *Model, err error) {
 	// Return if there is no configuration or no image classification models are configured.
 	if Config == nil {
 		return result, model, errors.New("vision service is not configured")
@@ -55,7 +56,7 @@ func captionInternal(images Files, mediaSrc media.Src) (result *CaptionResult, m
 			model.ApplyService(apiRequest)
 
 			apiRequest.System = model.GetSystemPrompt()
-			apiRequest.Prompt = model.GetPrompt()
+			apiRequest.Prompt = PromptWithMetadata(model.GetPrompt(), metadata)
 
 			if apiRequest.Options == nil {
 				apiRequest.Options = model.GetOptions()
@@ -87,6 +88,7 @@ func captionInternal(images Files, mediaSrc media.Src) (result *CaptionResult, m
 			}
 
 			result = apiResponse.Result.Caption
+			result.Model = apiRequest.Model
 		} else {
 			return result, model, errors.New("invalid caption model configuration")
 		}

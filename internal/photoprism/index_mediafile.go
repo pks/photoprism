@@ -979,7 +979,9 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 
 		// Classify images if the run enables automatic labels.
 		if o.GenerateLabels {
-			labels = m.GenerateLabels(entity.SrcAuto)
+			var labelModel string
+			labels, labelModel = m.GenerateLabels(entity.SrcAuto, VisionPhotoPart(&photo, photo.PhotoFaces, nil))
+			photo.SetLabelModel(labelModel)
 
 			// Append labels from other sources such as face detection.
 			if len(extraLabels) > 0 {

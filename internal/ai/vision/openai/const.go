@@ -26,11 +26,11 @@ const (
 	// DefaultResolution is the default thumbnail size submitted to the OpenAI.
 	DefaultResolution = 720
 	// CaptionSystem defines the default system prompt for caption models.
-	CaptionSystem = "You are a PhotoPrism vision model. Return concise, user-friendly captions that describe the main subjects accurately."
+	CaptionSystem = "You are a PhotoPrism vision model. Return concise, user-friendly captions that describe the main subjects accurately. Use the provided file context when it helps, but the image itself is authoritative."
 	// CaptionPrompt instructs caption models to respond with a single sentence.
 	CaptionPrompt = "Provide exactly one sentence describing the key subject and action in the image. Avoid filler words and technical jargon."
 	// LabelSystem defines the system prompt for label generation.
-	LabelSystem = "You are a PhotoPrism vision model. Emit JSON that matches the provided schema and keep label names short, singular nouns."
+	LabelSystem = "You are a PhotoPrism vision model. Emit JSON that matches the provided schema and keep label names short, singular nouns. Use the provided file context when it helps, but the image itself is authoritative."
 	// LabelPromptDefault requests general-purpose labels.
 	LabelPromptDefault = "Analyze the image and return label objects with name, confidence (0-1), and topicality (0-1)."
 	// LabelPromptNSFW requests labels including NSFW metadata when required.

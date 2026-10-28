@@ -16,7 +16,7 @@ import (
 var labelsFunc = labelsInternal
 
 // SetLabelsFunc overrides the labels generator. Intended for tests.
-func SetLabelsFunc(fn func(Files, media.Src, entity.Src) (classify.Labels, error)) {
+func SetLabelsFunc(fn func(Files, media.Src, entity.Src, string) (classify.Labels, error)) {
 	if fn == nil {
 		labelsFunc = labelsInternal
 		return
@@ -28,11 +28,12 @@ func SetLabelsFunc(fn func(Files, media.Src, entity.Src) (classify.Labels, error
 // GenerateLabels finds matching labels for the specified image.
 // Caller must pass the appropriate metadata source string (e.g., entity.SrcOllama, entity.SrcOpenAI)
 // so that downstream indexing can record where the labels originated.
-func GenerateLabels(images Files, mediaSrc media.Src, labelSrc entity.Src) (classify.Labels, error) {
-	return labelsFunc(images, mediaSrc, labelSrc)
+// metadata may hold data-only file context (date, place, camera) appended to the model prompt.
+func GenerateLabels(images Files, mediaSrc media.Src, labelSrc entity.Src, metadata string) (classify.Labels, error) {
+	return labelsFunc(images, mediaSrc, labelSrc, metadata)
 }
 
-func labelsInternal(images Files, mediaSrc media.Src, labelSrc entity.Src) (result classify.Labels, err error) {
+func labelsInternal(images Files, mediaSrc media.Src, labelSrc entity.Src, metadata string) (result classify.Labels, err error) {
 	// Return if no thumbnail filenames were given.
 	if len(images) == 0 {
 		return result, errors.New("at least one image required")
@@ -94,7 +95,7 @@ func labelsInternal(images Files, mediaSrc media.Src, labelSrc entity.Src) (resu
 				}
 			}
 
-			if prompt != "" {
+			if prompt = PromptWithMetadata(prompt, metadata); prompt != "" {
 				apiRequest.Prompt = prompt
 			}
 

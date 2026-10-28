@@ -53,7 +53,7 @@
                           <!--                  </v-dialog>-->
                         </td>
                         <td class="text-start">
-                          {{ sourceName(label.LabelSrc) }}
+                          <span :title="labelModelHint(label)">{{ sourceName(label.LabelSrc) }}</span>
                         </td>
                         <td class="text-center">{{ 100 - label.Uncertainty }}%</td>
                         <td class="text-center">
@@ -272,6 +272,16 @@ export default {
   },
   methods: {
     refresh() {},
+    // labelModelHint returns a tooltip naming the model behind a model-generated label, if known.
+    labelModelHint(label) {
+      const model = this.view.model.Details && this.view.model.Details.LabelModel ? this.view.model.Details.LabelModel : "";
+
+      if (!model || !["image", "ollama", "openai"].includes(label.LabelSrc)) {
+        return "";
+      }
+
+      return `${this.$gettext("Generated with model")}: ${model}`;
+    },
     sourceName(s) {
       return this.$util.sourceName(s);
     },

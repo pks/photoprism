@@ -129,6 +129,8 @@ export class Photo extends RestModel {
         LicenseSrc: "",
         Software: "",
         SoftwareSrc: "",
+        CaptionModel: "",
+        LabelModel: "",
       },
       Files: [],
       Labels: [],

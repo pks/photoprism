@@ -41,24 +41,24 @@ func TestIndexCaptionSource(t *testing.T) {
 	vision.Config = &vision.ConfigValues{Models: vision.Models{captionModel}}
 
 	t.Run("AutoUsesModelSource", func(t *testing.T) {
-		vision.SetCaptionFunc(func(files vision.Files, mediaSrc media.Src) (*vision.CaptionResult, *vision.Model, error) {
+		vision.SetCaptionFunc(func(files vision.Files, mediaSrc media.Src, _ string) (*vision.CaptionResult, *vision.Model, error) {
 			return &vision.CaptionResult{Text: "stub", Source: captionModel.GetSource()}, captionModel, nil
 		})
 		t.Cleanup(func() { vision.SetCaptionFunc(nil) })
 
-		caption, captionErr := mediaFile.GenerateCaption(entity.SrcAuto)
+		caption, captionErr := mediaFile.GenerateCaption(entity.SrcAuto, "")
 		require.NoError(t, captionErr)
 		require.NotNil(t, caption)
 		assert.Equal(t, captionModel.GetSource(), caption.Source)
 	})
 	t.Run("CustomSource", func(t *testing.T) {
 		originalSource := captionModel.GetSource()
-		vision.SetCaptionFunc(func(files vision.Files, mediaSrc media.Src) (*vision.CaptionResult, *vision.Model, error) {
+		vision.SetCaptionFunc(func(files vision.Files, mediaSrc media.Src, _ string) (*vision.CaptionResult, *vision.Model, error) {
 			return &vision.CaptionResult{Text: "stub", Source: originalSource}, captionModel, nil
 		})
 		t.Cleanup(func() { vision.SetCaptionFunc(nil) })
 
-		caption, captionErr := mediaFile.GenerateCaption(entity.SrcManual)
+		caption, captionErr := mediaFile.GenerateCaption(entity.SrcManual, "")
 		require.NoError(t, captionErr)
 		require.NotNil(t, caption)
 		assert.Equal(t, entity.SrcManual, caption.Source)
@@ -114,7 +114,7 @@ func TestIndex_UserMediaFile_LabelsNSFW(t *testing.T) {
 	labelModel := &vision.Model{Type: vision.ModelTypeLabels, Engine: vision.ApiFormatOllama, Run: vision.RunOnIndex}
 	labelModel.ApplyEngineDefaults()
 	vision.Config = &vision.ConfigValues{Models: vision.Models{labelModel, vision.NsfwModel.Clone()}}
-	vision.SetLabelsFunc(func(vision.Files, media.Src, entity.Src) (classify.Labels, error) {
+	vision.SetLabelsFunc(func(vision.Files, media.Src, entity.Src, string) (classify.Labels, error) {
 		return classify.Labels{{Name: labelName, NSFW: true, NSFWConfidence: 90}}, nil
 	})
 
@@ -200,25 +200,25 @@ func TestIndexLabelsSource(t *testing.T) {
 
 	t.Run("AutoUsesModelSource", func(t *testing.T) {
 		var captured string
-		vision.SetLabelsFunc(func(files vision.Files, mediaSrc media.Src, src entity.Src) (classify.Labels, error) {
+		vision.SetLabelsFunc(func(files vision.Files, mediaSrc media.Src, src entity.Src, _ string) (classify.Labels, error) {
 			captured = src
 			return classify.Labels{{Name: "stub", Source: src, Uncertainty: 0}}, nil
 		})
 		t.Cleanup(func() { vision.SetLabelsFunc(nil) })
 
-		labels := mediaFile.GenerateLabels(entity.SrcAuto)
+		labels, _ := mediaFile.GenerateLabels(entity.SrcAuto, "")
 		assert.NotEmpty(t, labels)
 		assert.Equal(t, labelModel.GetSource(), captured)
 	})
 	t.Run("CustomSource", func(t *testing.T) {
 		var captured string
-		vision.SetLabelsFunc(func(files vision.Files, mediaSrc media.Src, src entity.Src) (classify.Labels, error) {
+		vision.SetLabelsFunc(func(files vision.Files, mediaSrc media.Src, src entity.Src, _ string) (classify.Labels, error) {
 			captured = src
 			return classify.Labels{{Name: "stub", Source: src, Uncertainty: 0}}, nil
 		})
 		t.Cleanup(func() { vision.SetLabelsFunc(nil) })
 
-		labels := mediaFile.GenerateLabels(entity.SrcManual)
+		labels, _ := mediaFile.GenerateLabels(entity.SrcManual, "")
 		assert.NotEmpty(t, labels)
 		assert.Equal(t, entity.SrcManual, captured)
 	})

@@ -67,6 +67,18 @@
           @click.stop="edit"
         ></v-btn>
         <v-btn
+          v-if="canManage && context !== contexts.Archive && context !== contexts.Hidden"
+          key="action-captions"
+          :title="$gettext('Generate captions')"
+          icon="mdi-auto-fix"
+          color="edit"
+          variant="elevated"
+          density="comfortable"
+          :disabled="selection.length === 0 || busy"
+          class="action-captions"
+          @click.stop="batchCaptions"
+        ></v-btn>
+        <v-btn
           v-if="canTogglePrivate && context !== contexts.Archive && context !== contexts.Hidden"
           key="action-private"
           :title="$gettext('Change private flag')"
@@ -319,6 +331,24 @@ export default {
       $notify.success(this.$gettext("Selection restored"));
       this.selection.forEach((uid) => Photo.evictCache(uid));
       this.clearClipboard();
+    },
+    // batchCaptions queues AI caption generation for the current selection.
+    batchCaptions() {
+      if (!this.canManage || this.busy || this.selection.length === 0) {
+        return;
+      }
+
+      this.busy = true;
+
+      $api
+        .post("batch/photos/caption", { photos: this.selection, force: false })
+        .then(() => {
+          $notify.info(this.$gettext("Caption generation started"));
+        })
+        .catch(() => {})
+        .finally(() => {
+          this.busy = false;
+        });
     },
     addToAlbum(ppidOrList) {
       if (!ppidOrList || !this.canManage) {

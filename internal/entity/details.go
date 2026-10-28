@@ -34,6 +34,8 @@ type Details struct {
 	LicenseSrc   string    `gorm:"type:bytes;size:8;" json:"LicenseSrc" yaml:"LicenseSrc,omitempty"`
 	Software     string    `gorm:"size:1024;" json:"Software" yaml:"Software,omitempty"`
 	SoftwareSrc  string    `gorm:"type:bytes;size:8;" json:"SoftwareSrc" yaml:"SoftwareSrc,omitempty"`
+	CaptionModel string    `gorm:"size:100;" json:"CaptionModel" yaml:"CaptionModel,omitempty"`
+	LabelModel   string    `gorm:"size:100;" json:"LabelModel" yaml:"LabelModel,omitempty"`
 	CreatedAt    time.Time `json:"CreatedAt" yaml:"-"`
 	UpdatedAt    time.Time `json:"UpdatedAt" yaml:"-"`
 }

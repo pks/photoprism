@@ -59,7 +59,7 @@ func PostVisionCaption(router *gin.RouterGroup) {
 		}
 
 		// Run inference to generate a caption.
-		result, model, err := vision.GenerateCaption(request.Images, media.SrcRemote)
+		result, model, err := vision.GenerateCaption(request.Images, media.SrcRemote, "")
 
 		switch {
 		case err != nil:

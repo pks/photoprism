@@ -986,6 +986,26 @@ func (m *Photo) SaveDetails() error {
 	return fmt.Errorf("%w: %w", ErrDetailsNotSaved, err)
 }
 
+// SetCaptionModel records the vision model that generated the current caption, if any.
+// The value is stored with the photo details and persisted by the next save.
+func (m *Photo) SetCaptionModel(model string) {
+	if model == "" {
+		return
+	}
+
+	m.GetDetails().CaptionModel = model
+}
+
+// SetLabelModel records the vision model that generated the most recent automatic labels, if any.
+// The value is stored with the photo details and persisted by the next save.
+func (m *Photo) SetLabelModel(model string) {
+	if model == "" {
+		return
+	}
+
+	m.GetDetails().LabelModel = model
+}
+
 // ShouldGenerateLabels reports whether automatic vision labels should be generated for the photo.
 // It allows regeneration when forced, when no labels exist, or when only manual/high-uncertainty
 // labels are present so low-confidence results do not block improved predictions.

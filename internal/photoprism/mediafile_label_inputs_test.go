@@ -120,11 +120,11 @@ func TestMediaFilePreparedLabels(t *testing.T) {
 				}
 				return classify.Labels{{Name: "test", Source: src}}, nil
 			})
-			vision.SetLabelsFunc(func(vision.Files, media.Src, entity.Src) (classify.Labels, error) {
+			vision.SetLabelsFunc(func(vision.Files, media.Src, entity.Src, string) (classify.Labels, error) {
 				t.Fatal("unexpected native path")
 				return nil, nil
 			})
-			labels := m.GenerateLabels(entity.SrcManual)
+			labels, _ := m.GenerateLabels(entity.SrcManual, "")
 			require.Len(t, labels, 1)
 			assert.Equal(t, 1, calls)
 			assert.Equal(t, entity.SrcManual, labels[0].Source)
@@ -215,13 +215,14 @@ func TestMediaFileNativeLabelModels(t *testing.T) {
 				return nil, nil
 			})
 			calls := 0
-			vision.SetLabelsFunc(func(files vision.Files, source media.Src, labelSource entity.Src) (classify.Labels, error) {
+			vision.SetLabelsFunc(func(files vision.Files, source media.Src, labelSource entity.Src, _ string) (classify.Labels, error) {
 				calls++
 				assert.Len(t, files, tc.count)
 				assert.Equal(t, media.SrcLocal, source)
 				return classify.Labels{{Name: "native", Source: labelSource}}, nil
 			})
-			require.Len(t, m.GenerateLabels(entity.SrcImage), 1)
+			labels, _ := m.GenerateLabels(entity.SrcImage, "")
+			require.Len(t, labels, 1)
 			assert.Equal(t, 1, calls)
 		})
 	}

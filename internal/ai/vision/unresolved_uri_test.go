@@ -24,11 +24,11 @@ func TestUnresolvedServiceUri(t *testing.T) {
 		err   string
 	}{
 		{"LabelsTensorFlowName", &Model{Type: ModelTypeLabels, Name: "nasnet", Service: Service{Uri: "${VISION_TEST_MISSING_URI}"}}, func() error {
-			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage)
+			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage, "")
 			return err
 		}, "service uri of labels model nasnet does not resolve"},
 		{"LabelsEngine", &Model{Type: ModelTypeLabels, Name: "gemma3:4b", Engine: ollama.EngineName, Service: Service{Uri: "${VISION_TEST_MISSING_URI}"}}, func() error {
-			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage)
+			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage, "")
 			return err
 		}, "service uri of labels model gemma3:4b does not resolve"},
 		{"NsfwEngine", &Model{Type: ModelTypeNsfw, Name: "qwen3-vl:4b", Engine: ollama.EngineName, Service: Service{Uri: "${VISION_TEST_MISSING_URI}"}}, func() error {
@@ -36,7 +36,7 @@ func TestUnresolvedServiceUri(t *testing.T) {
 			return err
 		}, "service uri of nsfw model qwen3-vl:4b does not resolve"},
 		{"CaptionEngine", &Model{Type: ModelTypeCaption, Name: "gemma3:4b", Engine: ollama.EngineName, Service: Service{Uri: "${VISION_TEST_MISSING_URI}"}}, func() error {
-			_, _, err := captionInternal(images, media.SrcLocal)
+			_, _, err := captionInternal(images, media.SrcLocal, "")
 			return err
 		}, "service uri of caption model gemma3:4b does not resolve"},
 	} {

@@ -49,7 +49,7 @@ func TestModel_WarnOnFirstRun(t *testing.T) {
 		require.Len(t, warnMessages(hook.AllEntries()), 1)
 
 		for i := 0; i < 3; i++ {
-			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage)
+			_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage, "")
 			require.Error(t, err)
 		}
 
@@ -73,7 +73,7 @@ func TestModel_WarnOnFirstRun(t *testing.T) {
 		require.Len(t, warnMessages(hook.AllEntries()), 2)
 
 		for i := 0; i < 2; i++ {
-			_, _, err := captionInternal(images, media.SrcLocal)
+			_, _, err := captionInternal(images, media.SrcLocal, "")
 			require.Error(t, err)
 		}
 
@@ -120,7 +120,7 @@ func TestModel_WarnOnFirstRunServiceModel(t *testing.T) {
 			model.GetModel()
 
 			for i := 0; i < 3; i++ {
-				_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage)
+				_, err := labelsInternal(images, media.SrcLocal, entity.SrcImage, "")
 				require.Error(t, err)
 			}
 

@@ -28,7 +28,7 @@ func TestGenerateLabels(t *testing.T) {
 	}
 
 	t.Run("Success", func(t *testing.T) {
-		result, err := GenerateLabels(Files{samplesPath + "/dog_orange.jpg"}, media.SrcLocal, entity.SrcAuto)
+		result, err := GenerateLabels(Files{samplesPath + "/dog_orange.jpg"}, media.SrcLocal, entity.SrcAuto, "")
 
 		require.NoError(t, err)
 		assert.IsType(t, classify.Labels{}, result)
@@ -39,14 +39,14 @@ func TestGenerateLabels(t *testing.T) {
 		assert.Equal(t, "dog", result[0].Name)
 	})
 	t.Run("Chameleon", func(t *testing.T) {
-		result, err := GenerateLabels(Files{samplesPath + "/chameleon_lime.jpg"}, media.SrcLocal, entity.SrcAuto)
+		result, err := GenerateLabels(Files{samplesPath + "/chameleon_lime.jpg"}, media.SrcLocal, entity.SrcAuto, "")
 
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.Equal(t, "chameleon", result[0].Name)
 	})
 	t.Run("Cat224", func(t *testing.T) {
-		result, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		result, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 
 		require.NoError(t, err)
 		assert.IsType(t, classify.Labels{}, result)
@@ -59,7 +59,7 @@ func TestGenerateLabels(t *testing.T) {
 		assert.InDelta(t, float32(0.79), result[0].Confidence(), 0.1)
 	})
 	t.Run("Cat720", func(t *testing.T) {
-		result, err := GenerateLabels(Files{samplesPath + "/cat_720.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		result, err := GenerateLabels(Files{samplesPath + "/cat_720.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 
 		require.NoError(t, err)
 		assert.IsType(t, classify.Labels{}, result)
@@ -72,7 +72,7 @@ func TestGenerateLabels(t *testing.T) {
 		assert.InDelta(t, float32(0.8), result[0].Confidence(), 0.1)
 	})
 	t.Run("CustomSourceLocal", func(t *testing.T) {
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcManual)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcManual, "")
 		if err != nil {
 			t.Fatalf("GenerateLabels error: %v", err)
 		}
@@ -83,7 +83,7 @@ func TestGenerateLabels(t *testing.T) {
 		}
 	})
 	t.Run("InvalidFile", func(t *testing.T) {
-		_, err := GenerateLabels(Files{samplesPath + "/notexisting.jpg"}, media.SrcLocal, entity.SrcAuto)
+		_, err := GenerateLabels(Files{samplesPath + "/notexisting.jpg"}, media.SrcLocal, entity.SrcAuto, "")
 		assert.Error(t, err)
 	})
 }
@@ -145,7 +145,7 @@ func TestGenerateLabelsRequestShapingForStructuredOutput(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 		require.Len(t, labels, 1)
 		assert.Equal(t, "Cat", labels[0].Name)
@@ -228,7 +228,7 @@ func TestGenerateLabelsRequestShapingForStructuredOutput(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 		require.Len(t, labels, 1)
 		assert.Equal(t, "Cat", labels[0].Name)
@@ -288,7 +288,7 @@ func TestLabelsRetryWithoutThinking(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 		require.Len(t, labels, 1)
 		assert.Equal(t, "Cat", labels[0].Name)
@@ -325,7 +325,7 @@ func TestLabelsRetryWithoutThinking(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 		assert.Empty(t, labels, "expected no labels when response is empty and Think is not set")
 		assert.Equal(t, 1, requestCount, "expected only one request when Think is not set")
@@ -376,7 +376,7 @@ func TestGenerateLabelsNormalizeMode(t *testing.T) {
 
 		Config = &ConfigValues{Models: Models{model}, Thresholds: DefaultThresholds}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 
 		return labels
@@ -421,7 +421,7 @@ func TestGenerateLabelsRefused(t *testing.T) {
 		Uri: server.URL, Method: http.MethodPost, RequestFormat: ApiFormatVision, ResponseFormat: ApiFormatVision, FileScheme: scheme.Data,
 	}}}, Thresholds: DefaultThresholds}
 
-	labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+	labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 	assert.EqualError(t, err, "vision service request failed (status 403)")
 	assert.Empty(t, labels)
 }
@@ -486,7 +486,7 @@ func TestGenerateLabelsServiceKey(t *testing.T) {
 
 		Config = &ConfigValues{Models: Models{model}, Thresholds: DefaultThresholds}
 
-		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto)
+		labels, err := GenerateLabels(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, entity.SrcAuto, "")
 		require.NoError(t, err)
 		require.Len(t, labels, 1)
 		assert.True(t, strings.EqualFold("cat", labels[0].Name), labels[0].Name)
@@ -536,7 +536,7 @@ func TestGenerateLabelsMissingConcurrent(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			for range 8 {
-				_, err := GenerateLabels(Files{"missing.jpg"}, media.SrcLocal, entity.SrcAuto)
+				_, err := GenerateLabels(Files{"missing.jpg"}, media.SrcLocal, entity.SrcAuto, "")
 				assert.Error(t, err)
 			}
 		}()

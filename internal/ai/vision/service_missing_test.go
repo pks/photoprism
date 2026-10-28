@@ -70,12 +70,12 @@ func TestModel_EndpointUriMissing(t *testing.T) {
 		assert.True(t, model.hasService())
 
 		for i := 0; i < 2; i++ {
-			_, _, err := captionInternal(images, media.SrcLocal)
+			_, _, err := captionInternal(images, media.SrcLocal, "")
 			assert.EqualError(t, err, "caption model gpt-5-mini needs a service uri or an engine for the openai request format")
 		}
 
 		for _, run := range []func() error{
-			func() error { _, err := labelsInternal(images, media.SrcLocal, entity.SrcImage); return err },
+			func() error { _, err := labelsInternal(images, media.SrcLocal, entity.SrcImage, ""); return err },
 			func() error { _, err := nsfwInternalContext(images, media.SrcLocal, nsfwThresholdIndex); return err },
 		} {
 			Config.Models = Models{&Model{Type: ModelTypeLabels, Name: "x", Service: Service{RequestFormat: ApiFormatOllama}},

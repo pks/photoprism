@@ -133,6 +133,20 @@
             },
             "type": "object"
         },
+        "api.batchPhotosCaptionRequest": {
+            "properties": {
+                "force": {
+                    "type": "boolean"
+                },
+                "photos": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "authn.GrantType": {
             "enum": [
                 "",
@@ -1430,6 +1444,9 @@
                 "ArtistSrc": {
                     "type": "string"
                 },
+                "CaptionModel": {
+                    "type": "string"
+                },
                 "Copyright": {
                     "type": "string"
                 },
@@ -1443,6 +1460,9 @@
                     "type": "string"
                 },
                 "KeywordsSrc": {
+                    "type": "string"
+                },
+                "LabelModel": {
                     "type": "string"
                 },
                 "License": {
@@ -5266,6 +5286,9 @@
                 "confidence": {
                     "type": "number"
                 },
+                "model": {
+                    "type": "string"
+                },
                 "source": {
                     "type": "string"
                 },
@@ -5516,6 +5539,10 @@
                         "type": "string"
                     },
                     "type": "array"
+                },
+                "structured_output": {
+                    "description": "Ollama: send schema as format object for constrained generation",
+                    "type": "boolean"
                 },
                 "temperature": {
                     "description": "Ollama, OpenAI",
@@ -7120,6 +7147,85 @@
                     }
                 },
                 "summary": "moves multiple photos to the archive",
+                "tags": [
+                    "Photos"
+                ]
+            }
+        },
+        "/api/v1/batch/photos/caption": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "operationId": "BatchPhotosCaption",
+                "parameters": [
+                    {
+                        "description": "photo UIDs and force flag",
+                        "in": "body",
+                        "name": "Request",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.batchPhotosCaptionRequest"
+                        }
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "confirmation message",
+                        "schema": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/i18n.Response"
+                        }
+                    }
+                },
+                "summary": "queues AI caption generation for a set of photos",
                 "tags": [
                     "Photos"
                 ]

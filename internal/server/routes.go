@@ -209,6 +209,7 @@ func registerRoutes(router *gin.Engine, conf *config.Config) {
 	api.BatchPhotosRestore(APIv1)
 	api.BatchPhotosPrivate(APIv1)
 	api.BatchPhotosDelete(APIv1)
+	api.BatchPhotosCaption(APIv1)
 
 	// Cluster Operations.
 	api.ClusterGetTheme(APIv1)

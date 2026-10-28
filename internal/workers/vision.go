@@ -270,14 +270,19 @@ func (w *Vision) Start(filter string, count int, models []string, customSrc stri
 			}
 		}
 
+		// Photo-level context (people, known labels, albums) for the vision prompts.
+		names := m.SubjectNames()
+		extra := photoprism.VisionPhotoPart(&m, m.PhotoFaces, names)
+
 		// Generate labels.
 		if generateLabels {
-			if labels := file.GenerateLabels(customSrc); len(labels) > 0 {
+			if labels, labelModel := file.GenerateLabels(customSrc, extra); len(labels) > 0 {
 				if flag, write := labelsPrivateFlag(w.conf, m.PhotoPrivate, labels); write {
 					m.PhotoPrivate = flag
 					log.Infof("vision: changed private flag of %s to %t (labels)", logName, m.PhotoPrivate)
 				}
 				m.AddLabels(labels)
+				m.SetLabelModel(labelModel)
 				changed = true
 			}
 		}
@@ -297,7 +302,7 @@ func (w *Vision) Start(filter string, count int, models []string, customSrc stri
 
 		// Generate a caption if none exists or the force flag is used.
 		if generateCaptions {
-			if caption, captionErr := file.GenerateCaption(customSrc); captionErr != nil {
+			if caption, captionErr := file.GenerateCaption(customSrc, extra); captionErr != nil {
 				log.Warnf("vision: %s in %s (generate caption)", clean.Error(captionErr), logName)
 			} else if text := strings.TrimSpace(caption.Text); text != "" {
 				if force {
@@ -305,6 +310,7 @@ func (w *Vision) Start(filter string, count int, models []string, customSrc stri
 				} else {
 					m.SetCaption(text, caption.Source)
 				}
+				m.SetCaptionModel(caption.Model)
 				if updateErr := m.UpdateCaptionLabels(); updateErr != nil {
 					log.Warnf("vision: %s in %s (update caption labels)", clean.Error(updateErr), logName)
 				}

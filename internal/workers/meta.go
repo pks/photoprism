@@ -173,24 +173,29 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 							}
 						}
 
+						// Photo-level context (people, known labels, albums) for the vision prompts.
+						extra := photoprism.VisionPhotoPart(photo, photo.PhotoFaces, photo.SubjectNames())
+
 						// Generate photo labels if needed.
 						if generateLabels {
-							if labels := mediaFile.GenerateLabels(entity.SrcAuto); len(labels) > 0 {
+							if labels, labelModel := mediaFile.GenerateLabels(entity.SrcAuto, extra); len(labels) > 0 {
 								if flag, write := labelsPrivateFlag(w.conf, photo.PhotoPrivate, labels); write {
 									photo.PhotoPrivate = flag
 									log.Infof("vision: changed private flag of %s to %t (labels)", logName, photo.PhotoPrivate)
 								}
 								photo.AddLabels(labels)
+								photo.SetLabelModel(labelModel)
 								changed = true
 							}
 						}
 
 						// Generate photo caption if needed.
 						if generateCaption {
-							if caption, captionErr := mediaFile.GenerateCaption(entity.SrcAuto); captionErr != nil {
+							if caption, captionErr := mediaFile.GenerateCaption(entity.SrcAuto, extra); captionErr != nil {
 								log.Debugf("index: failed to generate caption for %s (%s)", logName, clean.Error(captionErr))
 							} else if text := strings.TrimSpace(caption.Text); text != "" {
 								photo.SetCaption(text, caption.Source)
+								photo.SetCaptionModel(caption.Model)
 								if updateErr := photo.UpdateCaptionLabels(); updateErr != nil {
 									log.Warnf("index: failed to update caption labels for %s (%s)", logName, clean.Error(updateErr))
 								}

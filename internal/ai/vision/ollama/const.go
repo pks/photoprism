@@ -36,9 +36,9 @@ const (
 	// LabelConfidenceDefault is used when the model omits the confidence field.
 	LabelConfidenceDefault = 0.5
 	// LabelSystem defines the system prompt shared by Ollama label models. It aims to ensure that single-word nouns are returned.
-	LabelSystem = "You are a PhotoPrism vision model. Output concise JSON that matches the schema. Each label name MUST be a single-word noun in its canonical singular form. Avoid spaces, punctuation, emoji, or descriptive phrases."
+	LabelSystem = "You are a PhotoPrism vision model. Output concise JSON that matches the schema. Each label name MUST be a single-word noun in its canonical singular form. Avoid spaces, punctuation, emoji, or descriptive phrases. Use the provided file context when it helps, but the image itself is authoritative."
 	// LabelSystemSimple defines a simple system prompt for Ollama label models that does not strictly require names to be single-word nouns.
-	LabelSystemSimple = "You are a PhotoPrism vision model. Output concise JSON that matches the schema."
+	LabelSystemSimple = "You are a PhotoPrism vision model. Output concise JSON that matches the schema. Use the provided file context when it helps, but the image itself is authoritative."
 	// LabelPromptDefault defines a simple user prompt for Ollama label models.
 	LabelPromptDefault = "Analyze the image and return label objects with name, confidence (0-1), and topicality (0-1)."
 	// LabelPromptStrict asks the model to return scored labels for the provided image. It aims to ensure that single-word nouns are returned.

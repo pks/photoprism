@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { shallowMount, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
+import $api from "common/api";
+import $notify from "common/notify";
 import PTabPhotoDetails from "component/photo/edit/details.vue";
 import { Photo } from "model/photo";
 import { Mock } from "../../../fixtures";
@@ -121,6 +123,7 @@ const makeWrapper = (overrides = {}) => {
             cameras: [{ ID: 1, Name: "Canon EOS R5" }],
             lenses: [{ ID: 1, Name: "Canon RF 24-70mm" }],
           },
+          ...(overrides.config || {}),
         },
         $view: {
           getData: () => ({ model: mockModel }),
@@ -827,6 +830,87 @@ describe("component/photo/edit/details", () => {
       wrapper.vm.time = "25:99:00";
       expect(wrapper.vm.updateModel()).toBe(false);
       expect(wrapper.vm.invalidDate).toBe(true);
+    });
+  });
+
+  describe("caption model", () => {
+    it("returns the recorded LLM caption model", () => {
+      wrapper = makeWrapper({
+        model: { CaptionSrc: "ollama", Details: { CaptionModel: "llava:13b" } },
+      });
+
+      expect(wrapper.vm.captionModel).toBe("llava:13b");
+    });
+
+    it("returns an empty string when no caption model is recorded", () => {
+      wrapper = makeWrapper({
+        model: { CaptionSrc: "ollama", Details: { CaptionModel: "" } },
+      });
+
+      expect(wrapper.vm.captionModel).toBe("");
+    });
+
+    it("returns an empty string for manual captions", () => {
+      wrapper = makeWrapper({
+        model: { CaptionSrc: "manual", Details: { CaptionModel: "llava:13b" } },
+      });
+
+      expect(wrapper.vm.captionModel).toBe("");
+    });
+  });
+
+  describe("caption generation", () => {
+    it("queues caption generation with force when a caption exists", async () => {
+      wrapper = makeWrapper({
+        model: { UID: "p123", Caption: "old caption", CaptionSrc: "ollama" },
+      });
+
+      const postSpy = vi.spyOn($api, "post").mockResolvedValue({});
+      const infoSpy = vi.spyOn($notify, "info").mockImplementation(() => {});
+
+      wrapper.vm.generateCaption();
+      await Promise.resolve();
+
+      expect(postSpy).toHaveBeenCalledWith("batch/photos/caption", { photos: ["p123"], force: true });
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      postSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it("queues caption generation without force when no caption exists", async () => {
+      wrapper = makeWrapper({
+        model: { UID: "p123", Caption: "" },
+      });
+
+      const postSpy = vi.spyOn($api, "post").mockResolvedValue({});
+      const infoSpy = vi.spyOn($notify, "info").mockImplementation(() => {});
+
+      wrapper.vm.generateCaption();
+      await Promise.resolve();
+
+      expect(postSpy).toHaveBeenCalledWith("batch/photos/caption", { photos: ["p123"], force: false });
+      postSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it("keeps the wand available in read-only mode", () => {
+      wrapper = makeWrapper({
+        config: {
+          get: vi.fn().mockImplementation((k) => (k === "readonly" ? true : "")),
+        },
+      });
+
+      expect(wrapper.vm.canGenerateCaption).toBe(true);
+    });
+
+    it("hides the wand when the edit feature is disabled", () => {
+      wrapper = makeWrapper({
+        config: {
+          feature: vi.fn().mockReturnValue(false),
+        },
+      });
+
+      expect(wrapper.vm.canGenerateCaption).toBe(false);
     });
   });
 });

@@ -33,7 +33,22 @@
                 :rows="1"
                 density="comfortable"
                 class="input-caption"
-              ></v-textarea>
+              >
+                <template v-if="captionModel || canGenerateCaption" #append-inner>
+                  <v-tooltip v-if="captionModel" location="top">
+                    <template #activator="{ props }">
+                      <v-icon v-bind="props" size="small">mdi-robot</v-icon>
+                    </template>
+                    <span>{{ $gettext("Caption model") }}: {{ captionModel }}</span>
+                  </v-tooltip>
+                  <v-tooltip v-if="canGenerateCaption" location="top">
+                    <template #activator="{ props }">
+                      <v-icon v-bind="props" size="small" class="ml-1 caption-generate" @click.stop.prevent="generateCaption">mdi-auto-fix</v-icon>
+                    </template>
+                    <span>{{ view.model.Caption ? $gettext("Regenerate caption") : $gettext("Generate caption") }}</span>
+                  </v-tooltip>
+                </template>
+              </v-textarea>
             </v-col>
           </v-row>
           <v-row density="compact">
@@ -409,6 +424,8 @@
 </template>
 
 <script>
+import $api from "common/api";
+import $notify from "common/notify";
 import Thumb from "model/thumb";
 import { MaxLength as PhotoMaxLength } from "model/photo";
 import * as options from "options/options";
@@ -456,6 +473,20 @@ export default {
     };
   },
   computed: {
+    // captionModel returns the model that generated the LLM caption for display; empty for manual captions,
+    // which keep the manual checkmark instead of attributing a stale model.
+    captionModel() {
+      if (this.view.model.CaptionSrc === "manual") {
+        return "";
+      }
+      return this.view.model.Details && this.view.model.Details.CaptionModel ? this.view.model.Details.CaptionModel : "";
+    },
+    // canGenerateCaption reports whether the user may queue AI caption generation for this photo.
+    // Read-only mode does not hide it: the LLM caption pipeline runs regardless, so triggering the
+    // same worker on demand stays available even when manual metadata edits are locked.
+    canGenerateCaption() {
+      return !this.disabled;
+    },
     cameraOptions() {
       return this.config.cameras;
     },
@@ -494,6 +525,15 @@ export default {
     this.$refs.form?.validate?.();
   },
   methods: {
+    // generateCaption queues AI caption generation for this photo, replacing an existing caption.
+    generateCaption() {
+      $api
+        .post("batch/photos/caption", { photos: [this.view.model.UID], force: !!this.view.model.Caption })
+        .then(() => {
+          $notify.info(this.$gettext("Caption generation started"));
+        })
+        .catch(() => {});
+    },
     // setDay applies a manual date selection.
     setDay(v) {
       this.dateChanged = true;

@@ -165,3 +165,39 @@ func TestPhoto_SaveDetails(t *testing.T) {
 		assert.Equal(t, "changed", storedKeywords(t, m.ID))
 	})
 }
+
+// modelDetails returns the stored details of a photo.
+func modelDetails(t *testing.T, photoID uint) Details {
+	t.Helper()
+
+	var found Details
+	require.NoError(t, UnscopedDb().Where("photo_id = ?", photoID).First(&found).Error)
+
+	return found
+}
+
+func TestPhoto_SetCaptionModel(t *testing.T) {
+	m := &Photo{PhotoUID: rnd.GenerateUID(PhotoUID)}
+	createShapePhoto(t, m)
+	t.Cleanup(func() { _, _ = m.DeletePermanently() })
+
+	m.SetCaptionModel("")
+	assert.Empty(t, m.GetDetails().CaptionModel)
+
+	m.SetCaptionModel("llava:13b")
+	require.NoError(t, m.Save())
+	assert.Equal(t, "llava:13b", modelDetails(t, m.ID).CaptionModel)
+}
+
+func TestPhoto_SetLabelModel(t *testing.T) {
+	m := &Photo{PhotoUID: rnd.GenerateUID(PhotoUID)}
+	createShapePhoto(t, m)
+	t.Cleanup(func() { _, _ = m.DeletePermanently() })
+
+	m.SetLabelModel("")
+	assert.Empty(t, m.GetDetails().LabelModel)
+
+	m.SetLabelModel("yolos-v8")
+	require.NoError(t, m.Save())
+	assert.Equal(t, "yolos-v8", modelDetails(t, m.ID).LabelModel)
+}

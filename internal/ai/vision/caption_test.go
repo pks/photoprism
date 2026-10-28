@@ -28,7 +28,7 @@ func TestGenerateCaption(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		expectedText := "An image of sound waves"
 
-		result, model, err := GenerateCaption(Files{"https://dl.photoprism.app/img/artwork/colorwaves-400.jpg"}, media.SrcRemote)
+		result, model, err := GenerateCaption(Files{"https://dl.photoprism.app/img/artwork/colorwaves-400.jpg"}, media.SrcRemote, "")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, model)
@@ -40,7 +40,7 @@ func TestGenerateCaption(t *testing.T) {
 		assert.Equal(t, expectedText, result.Text)
 	})
 	t.Run("Invalid", func(t *testing.T) {
-		result, model, err := GenerateCaption(nil, media.SrcLocal)
+		result, model, err := GenerateCaption(nil, media.SrcLocal, "")
 
 		assert.Error(t, err)
 		assert.Nil(t, model)
@@ -102,7 +102,7 @@ func TestCaptionRetryWithoutThinking(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		caption, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal)
+		caption, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, "")
 		require.NoError(t, err)
 		require.NotNil(t, caption)
 		assert.Equal(t, "A tabby cat rests on a sun-lit windowsill.", caption.Text)
@@ -139,7 +139,7 @@ func TestCaptionRetryWithoutThinking(t *testing.T) {
 			Thresholds: DefaultThresholds,
 		}
 
-		_, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal)
+		_, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, "")
 		assert.Error(t, err, "expected error when caption is nil and no retry possible")
 		assert.Equal(t, 1, requestCount, "expected only one request when Think is not set")
 	})
@@ -166,7 +166,7 @@ func TestGenerateCaptionServiceError(t *testing.T) {
 
 	logHook, systemHook := captureLogs(t)
 
-	result, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal)
+	result, _, err := GenerateCaption(Files{samplesPath + "/cat_224.jpeg"}, media.SrcLocal, "")
 	assert.Nil(t, result)
 	assert.EqualError(t, err, "openai service request failed (status 400)")
 

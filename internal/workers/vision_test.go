@@ -97,6 +97,7 @@ func TestVision_Start(t *testing.T) {
 			refreshed := entity.FindPhoto(entity.Photo{PhotoUID: uid})
 			require.NotNil(t, refreshed)
 			assert.Equal(t, "A generated caption", refreshed.PhotoCaption)
+			assert.Equal(t, "stub-caption-model", refreshed.GetDetails().CaptionModel)
 		}
 	})
 	t.Run("PublishesWhenCanceled", func(t *testing.T) {
@@ -151,11 +152,11 @@ func stubVisionCaption(t *testing.T, before func()) {
 	captionModel := &vision.Model{Type: vision.ModelTypeCaption, Engine: vision.ApiFormatOllama, Run: vision.RunManual}
 	captionModel.ApplyEngineDefaults()
 	vision.Config = &vision.ConfigValues{Models: vision.Models{captionModel}}
-	vision.SetCaptionFunc(func(vision.Files, media.Src) (*vision.CaptionResult, *vision.Model, error) {
+	vision.SetCaptionFunc(func(vision.Files, media.Src, string) (*vision.CaptionResult, *vision.Model, error) {
 		if before != nil {
 			before()
 		}
-		return &vision.CaptionResult{Text: "A generated caption", Source: captionModel.GetSource()}, captionModel, nil
+		return &vision.CaptionResult{Text: "A generated caption", Source: captionModel.GetSource(), Model: "stub-caption-model"}, captionModel, nil
 	})
 }
 

@@ -257,4 +257,24 @@ describe("component/photo/clipboard", () => {
       warnSpy.mockRestore();
     });
   });
+
+  describe("batchCaptions()", () => {
+    it("queues caption generation for the selection", async () => {
+      const { wrapper } = mountClipboard();
+      const postSpy = vi.spyOn($api, "post").mockResolvedValue({});
+      const infoSpy = vi.spyOn($notify, "info").mockImplementation(() => {});
+
+      wrapper.vm.batchCaptions();
+      await flushPromises();
+
+      expect(postSpy).toHaveBeenCalledWith("batch/photos/caption", {
+        photos: ["pt5y3865st5p3k5l", "pt5y3863oyip9a2d"],
+        force: false,
+      });
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(wrapper.vm.busy).toBe(false);
+      postSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+  });
 });
