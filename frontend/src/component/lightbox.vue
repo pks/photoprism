@@ -2093,6 +2093,20 @@ export default {
             if (typeof values.Caption === "string") {
               model.Caption = values.Caption;
             }
+            // Mirror the caption source and the generating model too, so
+            // caption-bound UI (the generate/regenerate button and the robot
+            // icon showing the caption model) follows captions replaced by AI
+            // generation, including forced regenerations queued from the edit
+            // dialog or the batch clipboard.
+            if (typeof values.CaptionSrc === "string") {
+              model.CaptionSrc = values.CaptionSrc;
+            }
+            if (values.Details && typeof values.Details.CaptionModel === "string") {
+              if (!model.Details) {
+                model.Details = {};
+              }
+              model.Details.CaptionModel = values.Details.CaptionModel;
+            }
             if (idx === this.index) {
               this.captionPlugin?.refreshCurrentCaption();
             }

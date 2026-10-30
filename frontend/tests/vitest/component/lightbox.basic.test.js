@@ -1466,6 +1466,36 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
     });
   });
 
+  // onPhotosUpdated wiring: captions replaced by AI generation (queued from
+  // the edit dialog's generate/regenerate button or the batch clipboard) arrive
+  // via photos.updated and must land on the slide model so caption-bound UI,
+  // like the robot icon and its tooltip in the details tab, follows the
+  // regenerated caption source and generating model.
+  describe("onPhotosUpdated wiring", () => {
+    it("mirrors the regenerated caption source and model onto the slide model", async () => {
+      const wrapper = mountLightbox();
+      const found = new Photo({ UID: "p123", Caption: "A regenerated AI caption", CaptionSrc: "ollama", Details: { CaptionModel: "llava:13b" } });
+      const findSpy = vi.spyOn(Rest.prototype, "find").mockResolvedValue(found);
+      const ctx = {
+        ...wrapper.vm,
+        visible: true,
+        lightbox: {},
+        models: [new Photo({ UID: "p123" })],
+        index: 0,
+        $config: allowAllConfig,
+      };
+
+      wrapper.vm.$options.methods.onPhotosUpdated.call(ctx, { type: "photos.updated" }, { entities: ["p123"] });
+      await flushPromises();
+
+      expect(findSpy).toHaveBeenCalledWith("p123");
+      expect(ctx.models[0].Caption).toBe("A regenerated AI caption");
+      expect(ctx.models[0].CaptionSrc).toBe("ollama");
+      expect(ctx.models[0].Details.CaptionModel).toBe("llava:13b");
+      findSpy.mockRestore();
+    });
+  });
+
   // getItemData dispatch: equirectangular media must route to the sphere viewer,
   // while a regular photo with no projection must stay on the flat lightbox path.
   describe("getItemData sphere dispatch", () => {

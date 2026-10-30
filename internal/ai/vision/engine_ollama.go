@@ -191,6 +191,31 @@ func (ollamaBuilder) Build(ctx context.Context, model *Model, files Files, media
 // ollamaInvalidLabels holds the models whose invalid labels were logged until labels parse again.
 var ollamaInvalidLabels sync.Map
 
+// captionFromStructuredJSON converts an Ollama structured caption payload into the bilingual caption text format.
+func captionFromStructuredJSON(raw string) string {
+	cleaned := clean.JSON(raw)
+	if cleaned == "" || !strings.HasPrefix(cleaned, "{") {
+		return ""
+	}
+
+	var payload struct {
+		English string `json:"english"`
+		German  string `json:"german"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &payload); err != nil {
+		return ""
+	}
+
+	var parts []string
+	if english := strings.TrimSpace(payload.English); english != "" {
+		parts = append(parts, "English: "+english)
+	}
+	if german := strings.TrimSpace(payload.German); german != "" {
+		parts = append(parts, "German: "+german)
+	}
+	return strings.Join(parts, "\n")
+}
+
 // Parse processes the Ollama service response.
 func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, status int) (*ApiResponse, error) {
 	// Return an error for a failed request, as its response text is not a result.
@@ -272,6 +297,11 @@ func (ollamaParser) Parse(ctx context.Context, req *ApiRequest, raw []byte, stat
 			filtered = append(filtered, response.Result.Labels[i])
 		}
 		response.Result.Labels = filtered
+	} else if captionText := captionFromStructuredJSON(fallbackCaption); captionText != "" {
+		response.Result.Caption = &CaptionResult{
+			Text:   captionText,
+			Source: entity.SrcOllama,
+		}
 	} else if fallbackCaption != "" {
 		response.Result.Caption = &CaptionResult{
 			Text:   fallbackCaption,

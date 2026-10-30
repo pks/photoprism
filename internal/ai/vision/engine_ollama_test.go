@@ -210,6 +210,20 @@ func TestOllamaDefaultConfidenceApplied(t *testing.T) {
 	}
 }
 
+func TestCaptionFromStructuredJSON(t *testing.T) {
+	t.Run("ConvertsEnglishAndGermanToBilingualCaption", func(t *testing.T) {
+		got := captionFromStructuredJSON(`{"english":"A cat.","german":"Eine Katze."}`)
+		if got != "English: A cat.\nGerman: Eine Katze." {
+			t.Fatalf("expected bilingual caption, got %q", got)
+		}
+	})
+	t.Run("ReturnsEmptyForPlainText", func(t *testing.T) {
+		if got := captionFromStructuredJSON("A cat."); got != "" {
+			t.Fatalf("expected empty caption for plain text, got %q", got)
+		}
+	})
+}
+
 func TestOllamaParserFallbacks(t *testing.T) {
 	t.Run("ThinkingFieldJSON", func(t *testing.T) {
 		req := &ApiRequest{Format: FormatJSON}
@@ -319,6 +333,30 @@ func TestOllamaParserFallbacks(t *testing.T) {
 		}
 		if resp.Result.Caption.Text != "A tabby cat rests on a sun-lit windowsill." {
 			t.Fatalf("expected stripped caption, got %q", resp.Result.Caption.Text)
+		}
+	})
+	t.Run("StructuredCaptionJSONConvertsToBilingualCaption", func(t *testing.T) {
+		req := &ApiRequest{}
+		payload := ollama.Response{
+			Response: `{"english":"A tabby cat stares upward.","german":"Eine Tabby Katze schaut nach oben."}`,
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+
+		parser := ollamaParser{}
+		resp, err := parser.Parse(context.Background(), req, raw, 200)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+
+		if resp.Result.Caption == nil {
+			t.Fatal("expected caption result")
+		}
+		expected := "English: A tabby cat stares upward.\nGerman: Eine Tabby Katze schaut nach oben."
+		if resp.Result.Caption.Text != expected {
+			t.Fatalf("expected bilingual caption, got %q", resp.Result.Caption.Text)
 		}
 	})
 	t.Run("StripsLeadingReasoningBlock", func(t *testing.T) {

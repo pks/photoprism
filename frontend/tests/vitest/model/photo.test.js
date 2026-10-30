@@ -120,6 +120,37 @@ describe("model/photo", () => {
       expect(photo.wasChanged()).toBe(false);
     });
 
+    it("merges the caption model from a server response that regenerated the caption", () => {
+      const photo = new Photo({
+        UID: "ps6sg6be2lvl0yh7",
+        Caption: "Typed caption",
+        CaptionSrc: "manual",
+        Details: { CaptionModel: "" },
+      });
+
+      photo.mergeUnchanged({ Caption: "Server caption", CaptionSrc: "ollama", Details: { CaptionModel: "llava:13b" } });
+
+      expect(photo.Caption).toBe("Server caption");
+      expect(photo.CaptionSrc).toBe("ollama");
+      expect(photo.Details.CaptionModel).toBe("llava:13b");
+      expect(photo.wasChanged()).toBe(false);
+    });
+
+    it("merges a new caption model for a forced regeneration while the caption source is already AI", () => {
+      const photo = new Photo({
+        UID: "ps6sg6be2lvl0yh7",
+        Caption: "AI caption",
+        CaptionSrc: "ollama",
+        Details: { CaptionModel: "llava:13b" },
+      });
+
+      photo.mergeUnchanged({ Caption: "New AI caption", CaptionSrc: "ollama", Details: { CaptionModel: "gpt-4o" } });
+
+      expect(photo.Caption).toBe("New AI caption");
+      expect(photo.CaptionSrc).toBe("ollama");
+      expect(photo.Details.CaptionModel).toBe("gpt-4o");
+    });
+
     it("keeps unsaved edits of top-level and Details fields", () => {
       const photo = saved();
       photo.Caption = "Typed caption";

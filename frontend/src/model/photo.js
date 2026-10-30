@@ -1447,6 +1447,13 @@ export class Photo extends RestModel {
         }
       }
     }
+
+    // Mirror the AI caption model as well, so forced caption regenerations
+    // (queued from the edit dialog or the batch clipboard) reach caption-bound
+    // UI like the robot icon and its tooltip in the details tab.
+    if (details.CaptionModel === saved.CaptionModel && values.Details.CaptionModel !== undefined) {
+      details.CaptionModel = saved.CaptionModel = values.Details.CaptionModel;
+    }
   }
 
   update() {
