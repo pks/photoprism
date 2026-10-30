@@ -45,12 +45,12 @@
     "command": {
       "type": "array",
       "title": "Command",
-      "description": "Overrides the container entrypoint. Leave empty to use the image default."
+      "description": "Overrides the container entrypoint. Defaults to the PhotoPrism binary; set to an empty list to use the image entrypoint, which requires a less restrictive securityContext."
     },
     "args": {
       "type": "array",
       "title": "Args",
-      "description": "Overrides the container arguments. Leave empty to use the image default."
+      "description": "Overrides the container arguments. Defaults to start; set to an empty list together with command to use the image default."
     },
     "securityContext": {
       "type": "object",
@@ -822,13 +822,13 @@
           "type": "string",
           "default": "5000",
           "title": "Maximum Original Size (MB)",
-          "description": "Largest allowed original file size."
+          "description": "Largest single original file in MB (-1 to disable)."
         },
         "PHOTOPRISM_UPLOAD_LIMIT": {
           "type": "string",
           "default": "5000",
           "title": "Maximum Upload Size (MB)",
-          "description": "Largest allowed upload size."
+          "description": "Largest total size of one upload in MB, including the contents of uploaded ZIP archives (-1 to disable)."
         },
         "PHOTOPRISM_UPLOAD_ALLOW": {
           "type": "string",

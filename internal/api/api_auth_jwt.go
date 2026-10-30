@@ -18,6 +18,7 @@ import (
 	"github.com/photoprism/photoprism/internal/service/cluster"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/http/header"
+	"github.com/photoprism/photoprism/pkg/list"
 )
 
 // authAnyJWT attempts to authenticate a Portal-issued JWT when an instance or service
@@ -95,7 +96,15 @@ func authAnyJWT(c *gin.Context, clientIP, authToken string, resource acl.Resourc
 		return nil
 	}
 
-	claims.Scope = tokenScopes.String()
+	// The session keeps only the token scopes the instance allow-list admits, so later scope checks use both.
+	if sessionScope, ok := jwtSessionScope(tokenScopes, allowedScopes); !ok {
+		if log.IsLevelEnabled(logrus.DebugLevel) {
+			log.Debugf("auth: portal jwt scope has no resource the instance allow-list admits (resource=%s)", resource)
+		}
+		return nil
+	} else {
+		claims.Scope = sessionScope
+	}
 
 	var issuedAt, notBefore, expiresAt *time.Time
 	if claims.IssuedAt != nil {
@@ -122,6 +131,18 @@ func authAnyJWT(c *gin.Context, clientIP, authToken string, resource acl.Resourc
 		NotBefore: notBefore,
 		ExpiresAt: expiresAt,
 	})
+}
+
+// jwtSessionScope returns the scope a cluster JWT session keeps: the token scopes the allow-list admits. It reports
+// false if none remain or the stored string would not parse back to the same entries.
+func jwtSessionScope(token, allowed list.Attr) (string, bool) {
+	result := acl.ScopeAttrWithin(token, allowed)
+
+	if scope := result.String(); scope != "" && len(acl.ScopeAttr(scope)) == len(result) {
+		return scope, true
+	}
+
+	return "", false
 }
 
 // shouldAttemptJWT reports whether JWT verification should run for the supplied
