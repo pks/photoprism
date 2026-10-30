@@ -1867,6 +1867,7 @@
                     "type": "integer"
                 },
                 "MaxViews": {
+                    "description": "Reserved, should be 0.",
                     "type": "integer"
                 },
                 "ModifiedAt": {
@@ -1888,6 +1889,7 @@
                     "type": "string"
                 },
                 "Views": {
+                    "description": "Counts the redemptions of the link.",
                     "type": "integer"
                 }
             },
@@ -2998,6 +3000,7 @@
                     "type": "integer"
                 },
                 "MaxViews": {
+                    "description": "Reserved, should be 0.",
                     "type": "integer"
                 },
                 "Slug": {
@@ -5685,7 +5688,7 @@
     "host": "demo.photoprism.app",
     "info": {
         "contact": {},
-        "description": "API request bodies and responses are usually JSON-encoded, except for binary data and some of the OAuth2 endpoints. Note that the `Content-Type` header must be set to `application/json` for this, as the request may otherwise fail with error 400.\nWhen clients have a valid access token, e.g. obtained through the `POST /api/v1/session` or `POST /api/v1/oauth/token` endpoint, they can use a standard Bearer Authorization header to authenticate their requests. Submitting the access token with a custom `X-Auth-Token` header is supported as well.",
+        "description": "API request bodies and responses are usually JSON-encoded, except for binary data and some of the OAuth2 endpoints. Note that the `Content-Type` header must be set to `application/json` for this, as the request may otherwise fail with error 400.\nWhen clients have a valid access token, e.g. obtained through the `POST /api/v1/session` or `POST /api/v1/oauth/token` endpoint, they can use a standard Bearer Authorization header to authenticate their requests. Submitting the access token with a custom `X-Auth-Token` header is supported as well.\nThis reference is generated from source code under continuous development. It may list fields, parameters, and endpoints that are not part of a release or are reserved for planned features. Only functionality described in the User Guide or the release notes is supported.",
         "title": "PhotoPrism API",
         "version": "v1"
     },
@@ -6425,7 +6428,7 @@
                         "type": "string"
                     },
                     {
-                        "description": "link settings: slug, expires (seconds, 0 = never), and max views (0 = unlimited)",
+                        "description": "link settings: slug and expires (seconds, 0 = never); max views is reserved and should be 0",
                         "in": "body",
                         "name": "link",
                         "required": true,
@@ -6584,7 +6587,7 @@
                         "type": "string"
                     },
                     {
-                        "description": "link settings: slug, expires, and max views are replaced as sent, an empty token keeps the current one",
+                        "description": "link settings: slug, expires, and max views are replaced as sent, an empty token keeps the current one; max views is reserved and should be 0",
                         "in": "body",
                         "name": "link",
                         "required": true,
