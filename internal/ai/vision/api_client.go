@@ -137,6 +137,27 @@ func PerformApiRequest(apiRequest *ApiRequest, uri, method, key string) (apiResp
 	return apiResponse, nil
 }
 
+// performVisionRequest performs a Vision API request, retrying once with thinking disabled when thinking was enabled and the response carries no usable payload.
+func performVisionRequest(apiRequest *ApiRequest, subject string, perform func(*ApiRequest) (*ApiResponse, error), hasPayload func(*ApiResponse) bool) (*ApiResponse, error) {
+	apiResponse, err := perform(apiRequest)
+	if err != nil {
+		return apiResponse, err
+	}
+
+	if apiResponse != nil && hasPayload(apiResponse) {
+		return apiResponse, nil
+	}
+
+	if apiRequest.Think == "" || strings.EqualFold(apiRequest.Think, "false") {
+		return apiResponse, nil
+	}
+
+	log.Warnf("vision: retrying %s request without thinking (empty response)", subject)
+	apiRequest.Think = "false"
+
+	return perform(apiRequest)
+}
+
 // serviceName returns the sanitized service name for the specified response format.
 func serviceName(format ApiFormat) string {
 	if name := clean.TypeLowerUnderscore(format); name != "" {
