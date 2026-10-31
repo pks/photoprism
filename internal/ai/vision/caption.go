@@ -3,7 +3,6 @@ package vision
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/photoprism/photoprism/pkg/media"
 )
@@ -64,22 +63,15 @@ func captionInternal(images Files, mediaSrc media.Src, metadata string) (result 
 
 			apiRequest.WriteLog()
 
-			if apiResponse, err = PerformApiRequest(apiRequest, uri, method, model.EndpointKey()); err != nil {
+			perform := func(a *ApiRequest) (*ApiResponse, error) {
+				return PerformApiRequest(a, uri, method, model.EndpointKey())
+			}
+			apiResponse, err = performVisionRequest(apiRequest, "caption", perform, func(r *ApiResponse) bool { return r.Result.Caption != nil })
+			if err != nil {
 				return result, model, err
-			} else if apiResponse.Result.Caption == nil {
-				// If thinking was enabled, the model may have exhausted the token
-				// budget on reasoning. Retry once with think:false as a fallback.
-				if t := apiRequest.Think; t != "" && !strings.EqualFold(t, "false") {
-					log.Warnf("vision: retrying caption request without thinking (empty response)")
-					apiRequest.Think = "false"
-					if apiResponse, err = PerformApiRequest(apiRequest, uri, method, model.EndpointKey()); err != nil {
-						return result, model, err
-					} else if apiResponse.Result.Caption == nil {
-						return result, model, errors.New("invalid caption model response")
-					}
-				} else {
-					return result, model, errors.New("invalid caption model response")
-				}
+			}
+			if apiResponse.Result.Caption == nil {
+				return result, model, errors.New("invalid caption model response")
 			}
 
 			// Set image as the default caption source.

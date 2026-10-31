@@ -932,3 +932,59 @@ func TestTransportErrorQuery(t *testing.T) {
 	assert.Contains(t, systemHook.LastEntry().Message, "fn.example.net/api?***")
 	assert.NotContains(t, systemHook.LastEntry().Message, "abc123")
 }
+
+// TestPerformVisionRequest checks the retry-without-thinking behavior for Vision API requests.
+func TestPerformVisionRequest(t *testing.T) {
+	t.Run("RetriesWhenThinkingEnabledAndPayloadMissing", func(t *testing.T) {
+		apiRequest := &ApiRequest{Think: "true"}
+		calls := 0
+		perform := func(a *ApiRequest) (*ApiResponse, error) {
+			calls++
+			if calls == 1 {
+				return &ApiResponse{}, nil
+			}
+			return &ApiResponse{Result: ApiResult{Caption: &CaptionResult{Text: "A cat."}}}, nil
+		}
+		hasPayload := func(r *ApiResponse) bool { return r.Result.Caption != nil }
+
+		response, err := performVisionRequest(apiRequest, "caption", perform, hasPayload)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, calls)
+		assert.Equal(t, "false", apiRequest.Think)
+		assert.NotNil(t, response)
+		assert.NotNil(t, response.Result.Caption)
+		assert.Equal(t, "A cat.", response.Result.Caption.Text)
+	})
+	t.Run("SkipsRetryWhenPayloadPresent", func(t *testing.T) {
+		apiRequest := &ApiRequest{Think: "true"}
+		calls := 0
+		perform := func(a *ApiRequest) (*ApiResponse, error) {
+			calls++
+			return &ApiResponse{Result: ApiResult{Caption: &CaptionResult{Text: "A cat."}}}, nil
+		}
+		hasPayload := func(r *ApiResponse) bool { return r.Result.Caption != nil }
+
+		response, err := performVisionRequest(apiRequest, "caption", perform, hasPayload)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, calls)
+		assert.Equal(t, "true", apiRequest.Think)
+		assert.NotNil(t, response)
+		assert.NotNil(t, response.Result.Caption)
+	})
+	t.Run("SkipsRetryWhenThinkingDisabled", func(t *testing.T) {
+		apiRequest := &ApiRequest{Think: "false"}
+		calls := 0
+		perform := func(a *ApiRequest) (*ApiResponse, error) {
+			calls++
+			return &ApiResponse{}, nil
+		}
+		hasPayload := func(r *ApiResponse) bool { return r.Result.Caption != nil }
+
+		response, err := performVisionRequest(apiRequest, "caption", perform, hasPayload)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, calls)
+		assert.Equal(t, "false", apiRequest.Think)
+		assert.NotNil(t, response)
+		assert.Nil(t, response.Result.Caption)
+	})
+}
