@@ -25,6 +25,10 @@ const (
 	DefaultModel = "gpt-6-luna"
 	// DefaultResolution is the default thumbnail size submitted to the OpenAI.
 	DefaultResolution = 720
+	// DefaultReasoningEffort is the reasoning effort applied to OpenAI reasoning models.
+	DefaultReasoningEffort = "low"
+	// ReasoningOff disables reasoning for OpenAI requests.
+	ReasoningOff = "false"
 	// CaptionSystem defines the default system prompt for caption models.
 	CaptionSystem = "You are a PhotoPrism vision model. Return concise, user-friendly captions that describe the main subjects accurately."
 	// CaptionPrompt instructs caption models to respond with a single sentence.

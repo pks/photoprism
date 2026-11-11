@@ -27,7 +27,7 @@ This package contains PhotoPrism’s adapter for the OpenAI Responses API. It en
 
 ### Prompt, Model, & Schema Guidance
 
-- **Models:** The adapter targets OpenAI's GPT-6 and GPT-5 vision models (e.g. `gpt-6-luna`, the default, or `gpt-6.1-terra`). These models support image inputs and structured outputs, and take a reasoning effort instead of sampling settings. Set `Name` or `Model` to the exact provider identifier so defaults are applied correctly. Caption models share the same configuration surface and run through the same adapter.
+- **Models:** The adapter targets OpenAI's GPT-6 and GPT-5 vision models (e.g. `gpt-6-luna`, the default, or `gpt-6.1-terra`). These models support image inputs and structured outputs, and take a reasoning effort instead of sampling settings. Set `Name` or `Model` to the exact provider identifier so defaults are applied correctly. Caption models share the same configuration surface and run through the same adapter. The optional `Options.Reasoning` setting overrides the automatic reasoning effort for these models (`"false"` disables reasoning; `"low"`, `"medium"`, or `"high"` set it).
 - **Prompts:** Defaults live in `defaults.go`. Captions use a single-sentence instruction; labels use `LabelPromptDefault` (or `LabelPromptNSFW` when the package-level `vision.DetectNSFWLabels` global is true, which requires `PHOTOPRISM_DETECT_NSFW=true` and `PHOTOPRISM_NSFW_MODEL=labels`). Custom prompts should retain schema reminders so structured outputs stay valid.
 - **Schemas:** Labels use the JSON schema returned by `schema.LabelsJsonSchema(nsfw)`; the response format name is derived via `schema.JsonSchemaName` (e.g. `photoprism_vision_labels_v1`). Captions omit schemas unless operators explicitly request a structured format.
 - **Label names:** OpenAI's own models (`gpt-*`, `o1`/`o3`/`o4`) default to `Normalize: phrase`, so a compound name such as `ferris wheel` is stored whole instead of collapsing to `Ferris` — those tiers return a compound only when the subject has one. The default applies with `Engine: openai` and is keyed on the model identifier, so an OpenAI-compatible endpoint serving an open-weight model locally keeps `single-word`. Either can be overridden per model.
@@ -38,7 +38,7 @@ Budget-conscious operators can experiment with lighter prompts or lower-resoluti
 #### Performance & Cost Estimates
 
 - **Token budgets:** Captions request up to 512 output tokens; labels request up to 1024. Input tokens are typically ≤700 for a single 720 px thumbnail plus prompts.
-- **Latency:** Vision calls typically complete within a few seconds, depending on the model and OpenAI region. The adapter requests `reasoning.effort=low` for GPT-5 and GPT-6 models to keep reasoning tokens to a minimum.
+- **Latency:** Vision calls typically complete within a few seconds, depending on the model and OpenAI region. The adapter requests `reasoning.effort=low` for GPT-5 and GPT-6 models to keep reasoning tokens to a minimum; override via `Options.Reasoning`.
 - **Costs:** Consult OpenAI’s pricing for the selected model. Multiply input/output tokens by the published rate. PhotoPrism currently sends one image per request to keep costs linear with photo count.
 
 ### Configuration
@@ -91,8 +91,8 @@ Only the last enabled labels entry is used, so remove or disable other labels en
 
 - File scheme: `data:` URLs (base64) for all OpenAI models.
 - Resolution: 720 px thumbnails (`vision.Thumb(ModelTypeCaption|Labels)`).
-- Options: `MaxOutputTokens` raised to 512 (caption) / 1024 (labels); `ForceJson=false` for captions, `true` for labels; `reasoning.effort="low"` for GPT-5 and GPT-6 models.
-- Sampling: `Temperature` and `TopP` set to `0` for GPT-5 and GPT-6 models (`openai.IsReasoningModel`), so the request omits them; configured values remain for other models. `openaiBuilder.Build` checks the model the request is sent for, whether it comes from `Service.Model`, `Model`, `Name`, or the engine default.
+- Options: `MaxOutputTokens` raised to 512 (caption) / 1024 (labels); `ForceJson=false` for captions, `true` for labels; `Reasoning` defaults to the automatic `reasoning.effort` (low) for GPT-5 and GPT-6 models, or `"false"` to disable reasoning.
+- Sampling: `Temperature` and `TopP` set to `0` for GPT-5 and GPT-6 models (`openai.IsReasoningModel`) while reasoning is enabled, so the request omits them; configured values remain for other models and when reasoning is disabled via `Options.Reasoning: "false"`. `openaiBuilder.Build` checks the model the request is sent for, whether it comes from `Service.Model`, `Model`, `Name`, or the engine default.
 - Schema naming: Automatically derived via `schema.JsonSchemaName`, so operators may omit `SchemaVersion`.
 
 ### Documentation
@@ -106,8 +106,8 @@ Only the last enabled labels entry is used, so remove or disable other labels en
 #### Core Concepts
 
 - **Structured outputs:** PhotoPrism leverages OpenAI’s structured output capability as documented at <https://platform.openai.com/docs/guides/structured-outputs>. When a JSON schema is supplied, the adapter emits `text.format` with `type: "json_schema"` and a schema name derived from the content. The parser then prefers `output_json`, but also attempts to decode `output_text` payloads that contain JSON objects.
-- **Deterministic sampling:** GPT‑5 models are run with `temperature=0` and `top_p=0` to minimise variance, while still allowing developers to override values in `vision.yml` if needed.
-- **Reasoning metadata:** Requests include `reasoning.effort="low"` so OpenAI returns structured reasoning usage counters, helping operators track token consumption.
+- **Deterministic sampling:** GPT‑5 models are run with `temperature=0` and `top_p=0` to minimise variance, while still allowing developers to override values in `vision.yml` if needed. Reasoning models only get this treatment while reasoning is enabled via `Options.Reasoning`; disabling reasoning keeps configured sampling values.
+- **Reasoning metadata:** Requests include `reasoning.effort="low"` so OpenAI returns structured reasoning usage counters, helping operators track token consumption; set `Options.Reasoning` to send another effort or omit the field to disable reasoning.
 - **Worker summaries:** The vision worker now logs either “updated …” or “processed … (no metadata changes detected)”, making reruns easy to audit.
 
 #### Rate Limiting

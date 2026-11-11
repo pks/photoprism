@@ -23,6 +23,7 @@ type ModelOptions struct {
 	NumPredict       int      `yaml:"NumPredict,omitempty" json:"num_predict,omitempty"`             // Ollama
 	MaxOutputTokens  int      `yaml:"MaxOutputTokens,omitempty" json:"max_output_tokens,omitempty"`  // Ollama, OpenAI
 	ForceJson        bool     `yaml:"ForceJson,omitempty" json:"force_json,omitempty"`               // Ollama, OpenAI
+	Reasoning        string   `yaml:"Reasoning,omitempty" json:"reasoning,omitempty"`                // OpenAI reasoning effort (e.g. "low"); empty for automatic, "false" to disable.
 	SchemaVersion    string   `yaml:"SchemaVersion,omitempty" json:"schema_version,omitempty"`       // Ollama, OpenAI
 	CombineOutputs   string   `yaml:"CombineOutputs,omitempty" json:"combine_outputs,omitempty"`     // OpenAI
 	Detail           string   `yaml:"Detail,omitempty" json:"detail,omitempty"`                      // OpenAI

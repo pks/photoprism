@@ -80,6 +80,74 @@ func TestOpenAIBuilderBuildSampling(t *testing.T) {
 	})
 }
 
+func TestOpenAIBuilderBuildReasoning(t *testing.T) {
+	build := func(t *testing.T, model *Model, options *ModelOptions) *ModelOptions {
+		t.Helper()
+		model.Options = options
+		model.ApplyEngineDefaults()
+		request, err := openaiBuilder{}.Build(context.Background(), model, Files{samplesPath + "/chameleon_lime.jpg"}, media.SrcLocal)
+		require.NoError(t, err)
+		require.NotNil(t, request.Options)
+		return request.Options
+	}
+
+	t.Run("ReasoningModelDefaultsToLow", func(t *testing.T) {
+		opts := build(t, &Model{Type: ModelTypeCaption, Name: "gpt-5.6-terra", Engine: openai.EngineName}, &ModelOptions{})
+		assert.Zero(t, opts.Temperature)
+		assert.Zero(t, opts.TopP)
+	})
+	t.Run("ReasoningDisabled", func(t *testing.T) {
+		opts := build(t, &Model{Type: ModelTypeCaption, Name: "gpt-5.6-terra", Engine: openai.EngineName}, &ModelOptions{Temperature: 0.2, TopP: 0.8, Reasoning: openai.ReasoningOff})
+		assert.InDelta(t, 0.2, opts.Temperature, 1e-6)
+		assert.InDelta(t, 0.8, opts.TopP, 1e-6)
+	})
+	t.Run("ReasoningDisabledForNonReasoningModel", func(t *testing.T) {
+		opts := build(t, &Model{Type: ModelTypeCaption, Name: "gpt-4.1-mini", Engine: openai.EngineName}, &ModelOptions{Temperature: 0.2, TopP: 0.8, Reasoning: openai.ReasoningOff})
+		assert.InDelta(t, 0.2, opts.Temperature, 1e-6)
+		assert.InDelta(t, 0.8, opts.TopP, 1e-6)
+	})
+}
+
+func TestApiRequestJSONForOpenAIReasoning(t *testing.T) {
+	newReq := func(options *ModelOptions) *ApiRequest {
+		return &ApiRequest{
+			Model:          "gpt-5-mini",
+			Images:         []string{"data:image/jpeg;base64,AA=="},
+			ResponseFormat: ApiFormatOpenAI,
+			Options:        options,
+			Schema:         json.RawMessage(`{"type":"object"}`),
+		}
+	}
+
+	var decoded struct {
+		Reasoning struct {
+			Effort string `json:"effort"`
+		} `json:"reasoning"`
+	}
+
+	t.Run("EnabledByDefault", func(t *testing.T) {
+		payload, err := newReq(&ModelOptions{}).JSON()
+		require.NoError(t, err)
+
+		require.NoError(t, json.Unmarshal(payload, &decoded))
+		assert.Equal(t, "low", decoded.Reasoning.Effort)
+	})
+	t.Run("Disabled", func(t *testing.T) {
+		payload, err := newReq(&ModelOptions{Reasoning: openai.ReasoningOff}).JSON()
+		require.NoError(t, err)
+
+		require.NoError(t, json.Unmarshal(payload, &decoded))
+		assert.Empty(t, decoded.Reasoning.Effort)
+	})
+	t.Run("ExplicitEffort", func(t *testing.T) {
+		payload, err := newReq(&ModelOptions{Reasoning: "high"}).JSON()
+		require.NoError(t, err)
+
+		require.NoError(t, json.Unmarshal(payload, &decoded))
+		assert.Equal(t, "high", decoded.Reasoning.Effort)
+	})
+}
+
 func TestApiRequestJSONForOpenAI(t *testing.T) {
 	req := &ApiRequest{
 		Model:          "gpt-5-mini",

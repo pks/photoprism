@@ -176,8 +176,10 @@ func (openaiBuilder) Build(ctx context.Context, model *Model, files Files, media
 		}
 
 		if openai.IsReasoningModel(modelName) {
-			req.Options.Temperature = 0
-			req.Options.TopP = 0
+			if _, enabled := openAIReasoning(modelName, req.Options); enabled {
+				req.Options.Temperature = 0
+				req.Options.TopP = 0
+			}
 		}
 	}
 

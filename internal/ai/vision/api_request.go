@@ -381,6 +381,27 @@ func normalizeThinkValue(value string) (any, bool) {
 	}
 }
 
+// openAIReasoning resolves the reasoning effort for an OpenAI request, applying the
+// configured Reasoning option when set and falling back to the automatic default for
+// reasoning models. It reports false when reasoning is disabled.
+func openAIReasoning(model string, opts *ModelOptions) (effort string, enabled bool) {
+	if opts != nil {
+		if value := strings.TrimSpace(opts.Reasoning); value != "" {
+			if strings.EqualFold(value, openai.ReasoningOff) {
+				return "", false
+			}
+
+			return strings.ToLower(value), true
+		}
+	}
+
+	if openai.IsReasoningModel(strings.TrimSpace(model)) {
+		return openai.DefaultReasoningEffort, true
+	}
+
+	return "", false
+}
+
 // openAIJSON converts the request data into an OpenAI Responses API payload.
 func (r *ApiRequest) openAIJSON() ([]byte, error) {
 	detail := openai.DefaultDetail
@@ -446,8 +467,8 @@ func (r *ApiRequest) openAIJSON() ([]byte, error) {
 		payload.Model = openaiDefaultModel()
 	}
 
-	if openai.IsReasoningModel(payload.Model) {
-		payload.Reasoning = &openai.Reasoning{Effort: "low"}
+	if effort, enabled := openAIReasoning(payload.Model, r.Options); enabled {
+		payload.Reasoning = &openai.Reasoning{Effort: effort}
 	}
 
 	if opts := r.Options; opts != nil {
